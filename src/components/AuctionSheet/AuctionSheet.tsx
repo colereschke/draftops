@@ -2,19 +2,8 @@
 
 import { useState, useMemo } from 'react';
 import type { Player, Position } from '@/types';
+import { POS_COLORS } from '@/lib/posColors';
 import { players } from '@/data/players';
-
-const POS_COLORS: Record<
-  Position,
-  { bg: string; accent: string; badge: string; badgeText: string }
-> = {
-  QB: { bg: '#1a2744', accent: '#4f83e8', badge: '#e8f0fe', badgeText: '#1a2744' },
-  RB: { bg: '#1a2e1a', accent: '#4caf6e', badge: '#e6f4ea', badgeText: '#1a3a22' },
-  WR: { bg: '#2a1f0e', accent: '#e8a030', badge: '#fef3e2', badgeText: '#3a2008' },
-  TE: { bg: '#2a1a2a', accent: '#c060d0', badge: '#f5e6f8', badgeText: '#3a0a3a' },
-  PICK: { bg: '#1a2a2a', accent: '#40b0b0', badge: '#e0f5f5', badgeText: '#0a3030' },
-  PKG: { bg: '#2a2010', accent: '#f0c040', badge: '#fdf5d0', badgeText: '#3a2a00' },
-};
 
 const POSITIONS: Array<'ALL' | Position> = ['ALL', 'QB', 'RB', 'WR', 'TE', 'PICK', 'PKG'];
 
@@ -45,8 +34,7 @@ export default function AuctionSheet() {
     if (search) {
       const q = search.toLowerCase();
       data = data.filter(
-        (p) =>
-          p.player.toLowerCase().includes(q) || p.team.toLowerCase().includes(q),
+        (p) => p.player.toLowerCase().includes(q) || p.team.toLowerCase().includes(q),
       );
     }
     data.sort((a, b) => {
@@ -76,9 +64,7 @@ export default function AuctionSheet() {
     sortBy !== col ? (
       <span style={{ color: '#444', marginLeft: 3 }}>↕</span>
     ) : (
-      <span style={{ color: '#e8a030', marginLeft: 3 }}>
-        {sortDir === 'asc' ? '↑' : '↓'}
-      </span>
+      <span style={{ color: '#e8a030', marginLeft: 3 }}>{sortDir === 'asc' ? '↑' : '↓'}</span>
     );
 
   const posStats = useMemo(() => {
@@ -135,8 +121,8 @@ export default function AuctionSheet() {
         </h1>
         <div style={{ fontSize: 11, color: '#4a5168' }}>
           2QB rankings scaled 5× · TE PPR+1 / 1st Down+0.25 applied ·{' '}
-          {players.filter((p) => !(['PKG', 'PICK'] as Position[]).includes(p.pos)).length}{' '}
-          players + pick assets
+          {players.filter((p) => !(['PKG', 'PICK'] as Position[]).includes(p.pos)).length} players +
+          pick assets
         </div>
 
         {/* Budget tracker */}
@@ -411,8 +397,7 @@ export default function AuctionSheet() {
           🔺 <b style={{ color: '#8892a4' }}>Ceiling</b> = hard stop
         </span>
         <span style={{ borderLeft: '1px solid #1e2434', paddingLeft: 18 }}>
-          Age:{' '}
-          <span style={{ color: '#4caf6e' }}>≤24</span>{' '}
+          Age: <span style={{ color: '#4caf6e' }}>≤24</span>{' '}
           <span style={{ color: '#e8eaf0' }}>25–27</span>{' '}
           <span style={{ color: '#e8a030' }}>28–30</span>{' '}
           <span style={{ color: '#e05050' }}>31+</span>
@@ -496,8 +481,7 @@ export default function AuctionSheet() {
                     (e.currentTarget.style.background = '#141824')
                   }
                   onMouseLeave={(e: React.MouseEvent<HTMLTableRowElement>) =>
-                    (e.currentTarget.style.background =
-                      i % 2 === 0 ? 'transparent' : '#0a0c10')
+                    (e.currentTarget.style.background = i % 2 === 0 ? 'transparent' : '#0a0c10')
                   }
                 >
                   <td
@@ -664,8 +648,8 @@ export default function AuctionSheet() {
         }}
       >
         <span>
-          Source: 2QB auction values (FantasyCalc CSV) scaled 5× to $1,000 budget · TE premium
-          ~18% applied
+          Source: 2QB auction values (FantasyCalc CSV) scaled 5× to $1,000 budget · TE premium ~18%
+          applied
         </span>
         <span style={{ marginLeft: 'auto' }}>
           PKG target for 2027 kicker = $109 (1st+2nd+3rd bundled w/ SF speculative premium)

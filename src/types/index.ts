@@ -21,8 +21,8 @@ export interface TeamStats {
   remaining: number;
   rosterCount: number;
   rosterRemaining: number;
-  // Classic auction math: remaining budget minus one dollar per remaining spot
   buyingPower: number;
+  pkgCount: number;
 }
 
 export interface AuctionResultEntry {
@@ -35,4 +35,19 @@ export interface AuctionResultEntry {
   teamId: number;
   teamHandle: string;
   createdAt: Date;
+}
+
+export interface RosterEntry {
+  id: number;
+  player: string;
+  position: string;
+  nflTeam: string;
+  price: number;
+  sfRank: number | null;
+  teamId: number;
+  teamHandle: string;
+}
+
+export interface TeamWithRoster extends TeamStats {
+  results: RosterEntry[];
 }

@@ -55,6 +55,7 @@ existing_project_docs/      # Original reference files — do not delete
 Two models. `Team` tracks 12 managers and their $1,000 budgets. `AuctionResult` logs each completed bid.
 
 Remaining budget and roster count are **derived at query time** (not stored):
+
 - `spent = SUM(results.price)` for a team
 - `remaining = budget - spent`
 - `rosterCount = COUNT(results)` for a team
@@ -87,6 +88,7 @@ Signature design element: 3px left border on each player row in their position a
 Values come from `src/data/players.ts`. All processing is done at build time — the exported `players` array is ready to use.
 
 Key logic:
+
 - Source: `2QBAuction` column from the FantasyCalc CSV (Superflex format, $200 budget)
 - Scale: `× 5` to convert to $1,000 budget
 - TE premium: `× 1.18` on all TE values (extra PPR + first down scoring)
@@ -104,6 +106,7 @@ Key logic:
 ## Prisma v7 Notes
 
 Prisma 7 changed how SQLite connections are configured:
+
 - `datasource` block in `schema.prisma` no longer takes a `url` field
 - Connection config lives in `prisma.config.ts` (root-level)
 - Requires the `@prisma/adapter-better-sqlite3` adapter in the PrismaClient constructor
@@ -122,12 +125,25 @@ After pulling changes with new migrations: `pnpm prisma migrate dev` (applies pe
 ## What's Built vs. What's Next
 
 **Built:**
+
 - Value sheet with full player list, filters, search, sort, budget tracker
 
 **Planned (not yet built):**
+
 - Team roster tracker (who each team has won, spend per team, roster count)
 - Live auction log (log a completed bid → auto-updates team budgets)
 - Budget pressure view (`remaining - remaining_spots` = buying power per team)
 - Nomination helper (who to nominate to burn rival budgets)
 
 The DB schema is already designed to support all of these via `Team` and `AuctionResult`.
+
+## Long-Term Vision
+
+DraftOps is intended to be a generalizable auction draft tool — not hardcoded to this one league. Future direction:
+
+- Create/manage multiple drafts
+- Upload custom rankings (e.g., FantasyCalc CSV) per draft
+- Configure scoring settings, league size, roster size, budget
+- Support any number of teams (not just 12)
+
+Design decisions (e.g., dropdowns over quick-pick grids for team selection) should account for this scalability.

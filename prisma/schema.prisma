@@ -1,0 +1,32 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+// One row per team in the league (12 teams total)
+model Team {
+  id          Int             @id @default(autoincrement())
+  handle      String          @unique  // e.g. "coreschke", "chappy72"
+  displayName String?
+  budget      Int             @default(1000)
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+  results     AuctionResult[]
+}
+
+// One row per completed auction bid
+model AuctionResult {
+  id        Int      @id @default(autoincrement())
+  player    String   // player name
+  position  String   // QB / RB / WR / TE / PICK / PKG
+  nflTeam   String   // NFL team abbreviation
+  price     Int      // winning bid price
+  sfRank    Int?     // superflex rank at time of bid (optional reference)
+  notes     String?
+  teamId    Int
+  team      Team     @relation(fields: [teamId], references: [id])
+  createdAt DateTime @default(now())
+}

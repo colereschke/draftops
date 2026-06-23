@@ -18,14 +18,16 @@ export default function BudgetRefresher({ intervalMs = 20000 }: BudgetRefresherP
   }, [router]);
 
   useEffect(() => {
+    let tick = 0;
     const timer = setInterval(() => {
-      setElapsed((e) => {
-        if (e + 1 >= intervalSecs) {
-          router.refresh();
-          return 0;
-        }
-        return e + 1;
-      });
+      tick += 1;
+      if (tick >= intervalSecs) {
+        router.refresh();
+        tick = 0;
+        setElapsed(0);
+      } else {
+        setElapsed(tick);
+      }
     }, 1000);
     return () => clearInterval(timer);
   }, [router, intervalSecs]);

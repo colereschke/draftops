@@ -1,17 +1,12 @@
-import { dirname } from 'path';
-import { fileURLToPath } from 'url';
-import { FlatCompat } from '@eslint/eslintrc';
-import tseslint from 'typescript-eslint';
+import nextConfig from 'eslint-config-next/core-web-vitals';
+import nextTypescript from 'eslint-config-next/typescript';
 import reactHooksPlugin from 'eslint-plugin-react-hooks';
 import prettierConfig from 'eslint-config-prettier';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
-
-const compat = new FlatCompat({ baseDirectory: __dirname });
-
-export default tseslint.config(
-  ...compat.extends('next/core-web-vitals', 'next/typescript'),
+const config = [
+  { ignores: ['existing_project_docs/**'] },
+  ...nextConfig,
+  ...nextTypescript,
   {
     plugins: { 'react-hooks': reactHooksPlugin },
     rules: {
@@ -21,4 +16,6 @@ export default tseslint.config(
     },
   },
   prettierConfig,
-);
+];
+
+export default config;

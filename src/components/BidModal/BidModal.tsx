@@ -39,8 +39,8 @@ export default function BidModal({
       setError('Enter a valid price.');
       return;
     }
-    if (!teamId) {
-      setError('Select a team.');
+    if (teams.length === 0) {
+      setError('No teams available.');
       return;
     }
     setError('');
@@ -61,6 +61,9 @@ export default function BidModal({
       }}
     >
       <div
+        role="dialog"
+        aria-modal="true"
+        aria-label={isEdit ? 'Edit Bid' : 'Log Bid'}
         onClick={(e) => e.stopPropagation()}
         style={{
           background: '#141824',

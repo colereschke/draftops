@@ -36,3 +36,18 @@ export interface AuctionResultEntry {
   teamHandle: string;
   createdAt: Date;
 }
+
+export interface ClaimedBid {
+  id: number;
+  player: string;
+  position: string;
+  price: number;
+  teamId: number;
+  teamHandle: string;
+}
+
+export interface LeagueTeam {
+  id: number;
+  handle: string;
+  displayName: string | null;
+}

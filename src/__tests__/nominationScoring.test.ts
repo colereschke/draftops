@@ -60,30 +60,30 @@ describe('computeNominationScores', () => {
     expect(scores).toHaveLength(0);
   });
 
-  it('scores PICK position as 0', () => {
+  it('excludes PICK position from results (no positional need)', () => {
     const player = makePlayer({ player: 'Some Pick', pos: 'PICK', ceiling: 80 });
     const scores = computeNominationScores([player], [makeTeamStat()], [], [], 'coreschke');
-    expect(scores[0].nominationScore).toBe(0);
+    expect(scores).toHaveLength(0);
   });
 
-  it('scores PKG position as 0', () => {
+  it('excludes PKG position from results (no positional need)', () => {
     const player = makePlayer({ player: 'Pick Package', pos: 'PKG', ceiling: 109 });
     const scores = computeNominationScores([player], [makeTeamStat()], [], [], 'coreschke');
-    expect(scores[0].nominationScore).toBe(0);
+    expect(scores).toHaveLength(0);
   });
 
-  it('excludes myHandle team from rival demand', () => {
+  it('excludes player when only rival is myHandle (zero rival demand)', () => {
     const player = makePlayer({ player: 'Target', pos: 'WR' });
     const cole = makeTeamStat({ handle: 'coreschke', buyingPower: 900 });
     const scores = computeNominationScores([player], [cole], [], [], 'coreschke');
-    expect(scores[0].nominationScore).toBe(0);
+    expect(scores).toHaveLength(0);
   });
 
-  it('excludes teams with non-positive buying power', () => {
+  it('excludes player when all rivals have non-positive buying power', () => {
     const player = makePlayer({ player: 'Target', pos: 'WR', ceiling: 50 });
     const broke = makeTeamStat({ handle: 'broke', buyingPower: 0 });
     const scores = computeNominationScores([player], [broke], [], [], 'coreschke');
-    expect(scores[0].nominationScore).toBe(0);
+    expect(scores).toHaveLength(0);
   });
 
   it('ranks higher ceiling player above lower ceiling player, all else equal', () => {
@@ -94,14 +94,14 @@ describe('computeNominationScores', () => {
     expect(scores[0].player.player).toBe('High Ceil');
   });
 
-  it('gives zero needRatio when team has met QB position target (4)', () => {
+  it('excludes player when all rivals have met position target (zero need)', () => {
     const player = makePlayer({ player: 'QB5', pos: 'QB', ceiling: 50 });
     const rival = makeTeamStat({ id: 2, handle: 'rival1' });
     const wonQBs = [1, 2, 3, 4].map((n) =>
       makeResult({ id: n, player: `QB${n}`, position: 'QB', teamId: 2 }),
     );
     const scores = computeNominationScores([player], [rival], wonQBs, [], 'coreschke');
-    expect(scores[0].nominationScore).toBe(0);
+    expect(scores).toHaveLength(0);
   });
 
   it('computes partial needRatio correctly when team has some players at position', () => {

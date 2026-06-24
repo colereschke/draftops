@@ -64,5 +64,7 @@ export function computeNominationScores(
     };
   });
 
-  return scored.sort((a, b) => b.nominationScore - a.nominationScore);
+  return scored
+    .filter((s) => s.nominationScore > 0)
+    .sort((a, b) => b.nominationScore - a.nominationScore);
 }

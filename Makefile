@@ -14,7 +14,8 @@ install: ## Install dependencies
 # ── Development ───────────────────────────────────────────────────────────────
 
 .PHONY: dev
-dev: ## Start the development server
+dev: ## Start the development server (applies pending migrations first)
+	pnpm prisma migrate deploy
 	pnpm dev
 
 .PHONY: build

@@ -27,6 +27,7 @@ export function computeTeamStats(teams: TeamWithResults[]): TeamStats[] {
         rosterCount,
         rosterRemaining,
         buyingPower,
+        pkgCount: 0,
       };
     })
     .sort((a, b) => b.buyingPower - a.buyingPower);

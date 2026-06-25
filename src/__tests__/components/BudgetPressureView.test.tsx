@@ -17,6 +17,7 @@ const makeTeam = (overrides: Partial<TeamStats>): TeamStats => ({
   rosterCount: 0,
   rosterRemaining: 30,
   buyingPower: 970,
+  pkgCount: 0,
   ...overrides,
 });
 

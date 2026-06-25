@@ -1,9 +1,21 @@
 'use client';
 
-import { useState, useMemo } from 'react';
-import type { Player, Position } from '@/types';
+import { useState, useMemo, useOptimistic, useTransition } from 'react';
+import type { Player, Position, ClaimedBid, LeagueTeam } from '@/types';
 import { POS_COLORS } from '@/lib/posColors';
 import { players } from '@/data/players';
+import { logBid, updateBid, deleteBid } from '@/lib/actions';
+import BidModal from '@/components/BidModal';
+
+type OptimisticAction =
+  | { type: 'add'; bid: ClaimedBid }
+  | { type: 'update'; bid: ClaimedBid }
+  | { type: 'delete'; id: number };
+
+interface AuctionSheetProps {
+  claimedBids: ClaimedBid[];
+  teams: LeagueTeam[];
+}
 
 const POSITIONS: Array<'ALL' | Position> = ['ALL', 'QB', 'RB', 'WR', 'TE', 'PICK', 'PKG'];
 
@@ -17,16 +29,104 @@ function ageColor(age: number | null): string {
   return '#e05050';
 }
 
-export default function AuctionSheet() {
+export default function AuctionSheet({ claimedBids, teams }: AuctionSheetProps) {
   const [posFilter, setPosFilter] = useState<'ALL' | Position>('ALL');
   const [search, setSearch] = useState<string>('');
   const [sortBy, setSortBy] = useState<SortKey>('sfRank');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
   const [showNotes, setShowNotes] = useState<boolean>(false);
   const [myBudget] = useState<number>(1000);
-  const [spent, setSpent] = useState<number>(0);
+  const [modalPlayer, setModalPlayer] = useState<(typeof players)[0] | null>(null);
+  const [modalError, setModalError] = useState<string>('');
+  const [, startTransition] = useTransition();
 
-  const remaining = myBudget - spent;
+  const [optimisticBids, dispatchOptimistic] = useOptimistic<ClaimedBid[], OptimisticAction>(
+    claimedBids,
+    (state, action) => {
+      if (action.type === 'add') return [...state, action.bid];
+      if (action.type === 'update')
+        return state.map((b) => (b.id === action.bid.id ? action.bid : b));
+      if (action.type === 'delete') return state.filter((b) => b.id !== action.id);
+      return state;
+    },
+  );
+
+  const claimMap = useMemo(
+    () => new Map(optimisticBids.map((b) => [b.player, b])),
+    [optimisticBids],
+  );
+
+  const mySpent = useMemo(() => {
+    const myTeam = teams.find((t) => t.handle === 'coreschke');
+    if (!myTeam) return 0;
+    return optimisticBids.filter((b) => b.teamId === myTeam.id).reduce((s, b) => s + b.price, 0);
+  }, [teams, optimisticBids]);
+
+  const hasClaims = optimisticBids.length > 0;
+
+  function handleModalSubmit({ price, teamId }: { price: number; teamId: number }) {
+    if (!modalPlayer) return;
+    const existingBid = claimMap.get(modalPlayer.player);
+    const team = teams.find((t) => t.id === teamId);
+    if (!team) return;
+    setModalError('');
+
+    if (existingBid) {
+      const updated: ClaimedBid = { ...existingBid, price, teamId, teamHandle: team.handle };
+      startTransition(async () => {
+        dispatchOptimistic({ type: 'update', bid: updated });
+        try {
+          await updateBid({ id: existingBid.id, price, teamId });
+          setModalPlayer(null);
+        } catch {
+          setModalError('Failed to save bid. Please try again.');
+        }
+      });
+    } else {
+      const tempBid: ClaimedBid = {
+        id: -Date.now(),
+        player: modalPlayer.player,
+        position: modalPlayer.pos,
+        price,
+        teamId,
+        teamHandle: team.handle,
+      };
+      startTransition(async () => {
+        dispatchOptimistic({ type: 'add', bid: tempBid });
+        try {
+          await logBid({
+            player: modalPlayer.player,
+            position: modalPlayer.pos,
+            nflTeam: modalPlayer.team,
+            price,
+            sfRank: modalPlayer.sfRank,
+            teamId,
+          });
+          setModalPlayer(null);
+        } catch {
+          setModalError('Failed to log bid. Please try again.');
+        }
+      });
+    }
+  }
+
+  function handleModalDelete() {
+    if (!modalPlayer) return;
+    const existingBid = claimMap.get(modalPlayer.player);
+    if (!existingBid) return;
+    setModalError('');
+    startTransition(async () => {
+      dispatchOptimistic({ type: 'delete', id: existingBid.id });
+      try {
+        await deleteBid({ id: existingBid.id });
+        setModalPlayer(null);
+      } catch {
+        setModalError('Failed to remove bid. Please try again.');
+      }
+    });
+  }
+
+  const remaining = myBudget - mySpent;
 
   const filtered = useMemo<Player[]>(() => {
     let data = [...players];
@@ -180,26 +280,16 @@ export default function AuctionSheet() {
               >
                 Spent
               </div>
-              <input
-                type="number"
-                value={spent}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
-                  if (e.target.value === '') return;
-                  const n = parseInt(e.target.value, 10);
-                  if (!isNaN(n)) setSpent(Math.max(0, n));
-                }}
+              <div
                 style={{
-                  width: 70,
                   fontSize: 18,
                   fontWeight: 700,
                   color: '#e8a030',
-                  background: 'transparent',
-                  border: 'none',
-                  outline: 'none',
-                  textAlign: 'center',
                   fontFamily: 'var(--font-mono), monospace',
                 }}
-              />
+              >
+                ${mySpent}
+              </div>
             </div>
             <div style={{ textAlign: 'center' }}>
               <div
@@ -462,6 +552,22 @@ export default function AuctionSheet() {
                   Notes
                 </th>
               )}
+              {hasClaims && (
+                <th
+                  style={{
+                    padding: '9px 10px',
+                    textAlign: 'left',
+                    fontSize: 10,
+                    fontWeight: 600,
+                    color: '#4a5168',
+                    textTransform: 'uppercase',
+                    letterSpacing: 1,
+                    fontFamily: 'var(--font-barlow), sans-serif',
+                  }}
+                >
+                  Claimed
+                </th>
+              )}
             </tr>
           </thead>
           <tbody>
@@ -472,10 +578,13 @@ export default function AuctionSheet() {
               return (
                 <tr
                   key={p.player + i}
+                  onClick={() => setModalPlayer(p)}
                   style={{
                     borderBottom: '1px solid #141824',
                     background: i % 2 === 0 ? 'transparent' : '#0a0c10',
                     borderLeft: `3px solid ${c.accent}`,
+                    cursor: 'pointer',
+                    opacity: claimMap.has(p.player) ? 0.5 : 1,
                   }}
                   onMouseEnter={(e: React.MouseEvent<HTMLTableRowElement>) =>
                     (e.currentTarget.style.background = '#141824')
@@ -629,6 +738,42 @@ export default function AuctionSheet() {
                       {p.notes || '—'}
                     </td>
                   )}
+                  {hasClaims &&
+                    (() => {
+                      const claim = claimMap.get(p.player);
+                      if (!claim) return <td key="claimed" style={{ padding: '8px 10px' }} />;
+                      const diff = claim.price - p.budget;
+                      const over = diff > 0;
+                      const under = diff < 0;
+                      return (
+                        <td
+                          key="claimed"
+                          style={{ padding: '8px 10px', textAlign: 'left', whiteSpace: 'nowrap' }}
+                        >
+                          <span style={{ fontSize: 11, color: '#8892a4' }}>{claim.teamHandle}</span>
+                          <span
+                            style={{
+                              fontSize: 11,
+                              fontFamily: 'var(--font-mono), monospace',
+                              color: '#8892a4',
+                              marginLeft: 4,
+                            }}
+                          >
+                            ${claim.price}
+                          </span>
+                          <span
+                            style={{
+                              fontSize: 10,
+                              fontFamily: 'var(--font-mono), monospace',
+                              color: over ? '#e05050' : under ? '#4caf6e' : '#4a5168',
+                              marginLeft: 4,
+                            }}
+                          >
+                            {over ? `▲$${diff}` : under ? `▼$${Math.abs(diff)}` : '='}
+                          </span>
+                        </td>
+                      );
+                    })()}
                 </tr>
               );
             })}
@@ -655,6 +800,17 @@ export default function AuctionSheet() {
           PKG target for 2027 kicker = $109 (1st+2nd+3rd bundled w/ SF speculative premium)
         </span>
       </div>
+      {modalPlayer && (
+        <BidModal
+          player={modalPlayer}
+          teams={teams}
+          existingBid={claimMap.get(modalPlayer.player)}
+          onClose={() => setModalPlayer(null)}
+          onSubmit={handleModalSubmit}
+          onDelete={claimMap.has(modalPlayer.player) ? handleModalDelete : undefined}
+          serverError={modalError}
+        />
+      )}
     </div>
   );
 }

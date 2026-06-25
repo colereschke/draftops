@@ -4,15 +4,15 @@ A dynasty fantasy football auction startup draft tool. Built for a 12-team Super
 
 ## League Context
 
-| Setting | Value |
-|---|---|
-| Platform | Sleeper |
-| Format | Dynasty (keep players year-over-year) |
-| Teams | 12 — 30-player rosters |
-| Scoring | Full PPR + TE premium |
-| QB Format | **Superflex** — QBs are premium assets |
-| Auction Budget | **$1,000 per team** |
-| Draft Style | Slow auction (OTC, 12-hour timer) |
+| Setting        | Value                                  |
+| -------------- | -------------------------------------- |
+| Platform       | Sleeper                                |
+| Format         | Dynasty (keep players year-over-year)  |
+| Teams          | 12 — 30-player rosters                 |
+| Scoring        | Full PPR + TE premium                  |
+| QB Format      | **Superflex** — QBs are premium assets |
+| Auction Budget | **$1,000 per team**                    |
+| Draft Style    | Slow auction (OTC, 12-hour timer)      |
 
 ## Getting Started
 
@@ -53,17 +53,17 @@ make help           # Show all commands
 
 ## Tech Stack
 
-| Layer | Choice |
-|---|---|
-| Framework | Next.js 16 (App Router) |
-| Language | TypeScript 5 |
-| Styling | Tailwind CSS 4 + CSS custom properties |
-| Database | SQLite via Prisma 7 |
-| Package manager | pnpm 11 |
-| Testing | Jest + React Testing Library |
-| Linting | ESLint 9 + typescript-eslint + eslint-plugin-react-hooks |
-| Formatting | Prettier |
-| Pre-commit | Husky + lint-staged |
+| Layer           | Choice                                                   |
+| --------------- | -------------------------------------------------------- |
+| Framework       | Next.js 16 (App Router)                                  |
+| Language        | TypeScript 5                                             |
+| Styling         | Tailwind CSS 4 + CSS custom properties                   |
+| Database        | SQLite via Prisma 7                                      |
+| Package manager | pnpm 11                                                  |
+| Testing         | Jest + React Testing Library                             |
+| Linting         | ESLint 9 + typescript-eslint + eslint-plugin-react-hooks |
+| Formatting      | Prettier                                                 |
+| Pre-commit      | Husky + lint-staged                                      |
 
 ## Project Structure
 

@@ -147,6 +147,7 @@ DraftOps is intended to be a generalizable auction draft tool — not hardcoded 
 - Support any number of teams (not just 12)
 
 Design decisions (e.g., dropdowns over quick-pick grids for team selection) should account for this scalability.
+
 ## Global Rules
 
 **Read before touching.** Before making any change in the repo, read the repo's `CLAUDE.md`. It contains the stack, layout, conventions, and repo-specific constraints that take precedence over general intuition.

@@ -5,8 +5,7 @@ export default function NavBar() {
     <div
       style={{
         background: 'var(--bg-surface, #141824)',
-        borderBottom: '1px solid #1e2434',
-        padding: '8px 20px',
+        padding: '6px 20px',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
@@ -16,8 +15,8 @@ export default function NavBar() {
         style={{
           fontFamily: 'var(--font-barlow), sans-serif',
           fontWeight: 700,
-          fontSize: 13,
-          letterSpacing: 2,
+          fontSize: 15,
+          letterSpacing: 1.5,
           color: '#e8eaf0',
           textTransform: 'uppercase',
         }}

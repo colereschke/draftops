@@ -22,7 +22,7 @@ describe('NavLinks', () => {
     render(<NavLinks />);
     const active = screen.getByText('Budget Pressure').closest('a');
     const inactive = screen.getByText('Value Sheet').closest('a');
-    expect(active).toHaveStyle({ color: '#e8a030' });
+    expect(active).toHaveStyle({ color: '#e8eaf0' });
     expect(inactive).toHaveStyle({ color: '#4a5168' });
   });
 
@@ -30,6 +30,6 @@ describe('NavLinks', () => {
     mockUsePathname.mockReturnValue('/');
     render(<NavLinks />);
     const active = screen.getByText('Value Sheet').closest('a');
-    expect(active).toHaveStyle({ color: '#e8a030' });
+    expect(active).toHaveStyle({ color: '#e8eaf0' });
   });
 });

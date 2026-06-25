@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import { Barlow_Condensed, Inter, JetBrains_Mono } from 'next/font/google';
+import NavBar from '@/components/NavBar';
 import './globals.css';
 
 const inter = Inter({
@@ -32,7 +33,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       lang="en"
       className={`${inter.variable} ${barlowCondensed.variable} ${jetbrainsMono.variable}`}
     >
-      <body style={{ fontFamily: 'var(--font-inter), sans-serif' }}>{children}</body>
+      <body style={{ fontFamily: 'var(--font-inter), sans-serif' }}>
+        <NavBar />
+        {children}
+      </body>
     </html>
   );
 }

@@ -12,6 +12,7 @@ export async function GET() {
     const rosterCount = team.results.length;
     const rosterRemaining = ROSTER_SIZE - rosterCount;
     const buyingPower = remaining - rosterRemaining;
+    const pkgCount = team.results.filter((r) => r.position === 'PKG').length;
     return {
       id: team.id,
       handle: team.handle,
@@ -22,6 +23,7 @@ export async function GET() {
       rosterCount,
       rosterRemaining,
       buyingPower,
+      pkgCount,
     };
   });
 

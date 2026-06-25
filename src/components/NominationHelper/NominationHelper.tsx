@@ -4,17 +4,9 @@ import { useState, useMemo, useEffect, useRef } from 'react';
 import type { Position, TeamStats, AuctionResultEntry } from '@/types';
 import { players } from '@/data/players';
 import { computeNominationScores, type ScoredPlayer } from '@/lib/nominationScoring';
+import { POS_COLORS } from '@/lib/posColors';
 
 const MY_HANDLE = 'coreschke';
-
-const POS_COLORS: Record<Position, { accent: string; badge: string; badgeText: string }> = {
-  QB: { accent: '#4f83e8', badge: '#e8f0fe', badgeText: '#1a2744' },
-  RB: { accent: '#4caf6e', badge: '#e6f4ea', badgeText: '#1a3a22' },
-  WR: { accent: '#e8a030', badge: '#fef3e2', badgeText: '#3a2008' },
-  TE: { accent: '#c060d0', badge: '#f5e6f8', badgeText: '#3a0a3a' },
-  PICK: { accent: '#40b0b0', badge: '#e0f5f5', badgeText: '#0a3030' },
-  PKG: { accent: '#f0c040', badge: '#fdf5d0', badgeText: '#3a2a00' },
-};
 
 const POSITIONS: Array<'ALL' | Position> = ['ALL', 'QB', 'RB', 'WR', 'TE', 'PICK', 'PKG'];
 

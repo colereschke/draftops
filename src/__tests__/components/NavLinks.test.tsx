@@ -13,6 +13,7 @@ describe('NavLinks', () => {
     mockUsePathname.mockReturnValue('/');
     render(<NavLinks />);
     expect(screen.getByText('Value Sheet')).toBeInTheDocument();
+    expect(screen.getByText('Team Rosters')).toBeInTheDocument();
     expect(screen.getByText('Budget Pressure')).toBeInTheDocument();
   });
 

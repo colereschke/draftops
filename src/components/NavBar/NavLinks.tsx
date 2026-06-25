@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation';
 
 const LINKS = [
   { href: '/', label: 'Value Sheet' },
+  { href: '/teams', label: 'Team Rosters' },
   { href: '/budget', label: 'Budget Pressure' },
 ];
 

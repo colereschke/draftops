@@ -45,8 +45,7 @@ export default function AuctionSheet() {
     if (search) {
       const q = search.toLowerCase();
       data = data.filter(
-        (p) =>
-          p.player.toLowerCase().includes(q) || p.team.toLowerCase().includes(q),
+        (p) => p.player.toLowerCase().includes(q) || p.team.toLowerCase().includes(q),
       );
     }
     data.sort((a, b) => {
@@ -76,9 +75,7 @@ export default function AuctionSheet() {
     sortBy !== col ? (
       <span style={{ color: '#444', marginLeft: 3 }}>↕</span>
     ) : (
-      <span style={{ color: '#e8a030', marginLeft: 3 }}>
-        {sortDir === 'asc' ? '↑' : '↓'}
-      </span>
+      <span style={{ color: '#e8a030', marginLeft: 3 }}>{sortDir === 'asc' ? '↑' : '↓'}</span>
     );
 
   const posStats = useMemo(() => {
@@ -135,8 +132,8 @@ export default function AuctionSheet() {
         </h1>
         <div style={{ fontSize: 11, color: '#4a5168' }}>
           2QB rankings scaled 5× · TE PPR+1 / 1st Down+0.25 applied ·{' '}
-          {players.filter((p) => !(['PKG', 'PICK'] as Position[]).includes(p.pos)).length}{' '}
-          players + pick assets
+          {players.filter((p) => !(['PKG', 'PICK'] as Position[]).includes(p.pos)).length} players +
+          pick assets
         </div>
 
         {/* Budget tracker */}
@@ -411,8 +408,7 @@ export default function AuctionSheet() {
           🔺 <b style={{ color: '#8892a4' }}>Ceiling</b> = hard stop
         </span>
         <span style={{ borderLeft: '1px solid #1e2434', paddingLeft: 18 }}>
-          Age:{' '}
-          <span style={{ color: '#4caf6e' }}>≤24</span>{' '}
+          Age: <span style={{ color: '#4caf6e' }}>≤24</span>{' '}
           <span style={{ color: '#e8eaf0' }}>25–27</span>{' '}
           <span style={{ color: '#e8a030' }}>28–30</span>{' '}
           <span style={{ color: '#e05050' }}>31+</span>
@@ -496,8 +492,7 @@ export default function AuctionSheet() {
                     (e.currentTarget.style.background = '#141824')
                   }
                   onMouseLeave={(e: React.MouseEvent<HTMLTableRowElement>) =>
-                    (e.currentTarget.style.background =
-                      i % 2 === 0 ? 'transparent' : '#0a0c10')
+                    (e.currentTarget.style.background = i % 2 === 0 ? 'transparent' : '#0a0c10')
                   }
                 >
                   <td
@@ -664,8 +659,8 @@ export default function AuctionSheet() {
         }}
       >
         <span>
-          Source: 2QB auction values (FantasyCalc CSV) scaled 5× to $1,000 budget · TE premium
-          ~18% applied
+          Source: 2QB auction values (FantasyCalc CSV) scaled 5× to $1,000 budget · TE premium ~18%
+          applied
         </span>
         <span style={{ marginLeft: 'auto' }}>
           PKG target for 2027 kicker = $109 (1st+2nd+3rd bundled w/ SF speculative premium)

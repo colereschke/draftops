@@ -260,16 +260,20 @@ const RAW: RawEntry[] = [
   ['Travis Kelce', 'KC', 'TE', 36.7, 239, 1, 'One last ride?'],
   ['Evan Engram', 'DEN', 'TE', 31.8, 245, 1, ''],
   ['Josh Cuevas', 'BAL', 'TE', 22.8, 252, 1, 'Rookie'],
-  // Pick Packages
-  [
-    '2027 Pick Package (Kicker bid)',
-    'NFL',
-    'PKG',
-    null,
-    59,
-    19,
-    'Nets 2027 1st+2nd+3rd. Speculative SF premium expected',
-  ],
+  // 2027 Kicker Pick Packages — one per team; winning the kicker bid nets you that manager's 2027 1st+2nd+3rd
+  ['Cameron Dicker', 'chappy72', 'PKG', null, 59, 19, "chappy72's 2027 1st+2nd+3rd"],
+  ['Tyler Loop', 'DrFunk', 'PKG', null, 60, 19, "DrFunk's 2027 1st+2nd+3rd"],
+  ['Brandon Aubrey', 'Henrizzler87', 'PKG', null, 61, 19, "Henrizzler87's 2027 1st+2nd+3rd"],
+  ['Jake Bates', 'CharlesChillFFB', 'PKG', null, 62, 19, "CharlesChillFFB's 2027 1st+2nd+3rd"],
+  ['Tyler Bass', 'moneymarkel2626', 'PKG', null, 63, 19, "moneymarkel2626's 2027 1st+2nd+3rd"],
+  ['Cam Little', 'sam4bama', 'PKG', null, 64, 19, "sam4bama's 2027 1st+2nd+3rd"],
+  ['Nick Folk', 'mattveksler', 'PKG', null, 65, 19, "mattveksler's 2027 1st+2nd+3rd"],
+  ['Matt Gay', 'coreschke', 'PKG', null, 66, 19, "coreschke's 2027 1st+2nd+3rd"],
+  ['Will Lutz', 'gaf2323', 'PKG', null, 67, 19, "gaf2323's 2027 1st+2nd+3rd"],
+  ['Harrison Butker', 'dark44', 'PKG', null, 68, 19, "dark44's 2027 1st+2nd+3rd"],
+  ['Jason Sanders', 'SlamminSam58', 'PKG', null, 69, 19, "SlamminSam58's 2027 1st+2nd+3rd"],
+  ['Chris Boswell', 'JHenny74', 'PKG', null, 70, 19, "JHenny74's 2027 1st+2nd+3rd"],
+  // 2028 pick package (not team-specific)
   ['2028 Pick Package', 'NFL', 'PKG', null, 85, 13, 'Nets 2028 1st+2nd+3rd'],
   // Individual picks for reference
   ['2027 1st Round Pick', 'NFL', 'PICK', null, 59, 15, 'Part of kicker pick package'],
@@ -284,10 +288,22 @@ const SCALE = 5;
 const TE_PREMIUM = 1.18;
 
 // PKG values are manually calibrated (not formula-derived):
-// 2027: 1st($75)+2nd($15)+3rd($5)=$95 * SF speculative premium ~1.15 ≈ $109
+// 2027 kicker packages: 1st($75)+2nd($15)+3rd($5)=$95 * SF speculative premium ~1.15 ≈ $109
 // 2028: 1st($50)+2nd($10)+3rd($5)=$65 * 1.1 ≈ $72
+// Each kicker has its own entry so values can diverge as team strength becomes known mid-draft.
 const PKG_VALUES: Record<string, { budget: number; ceiling: number; floor: number }> = {
-  '2027 Pick Package (Kicker bid)': { budget: 109, ceiling: 131, floor: 75 },
+  'Cameron Dicker': { budget: 109, ceiling: 131, floor: 75 },
+  'Tyler Loop': { budget: 109, ceiling: 131, floor: 75 },
+  'Brandon Aubrey': { budget: 109, ceiling: 131, floor: 75 },
+  'Jake Bates': { budget: 109, ceiling: 131, floor: 75 },
+  'Tyler Bass': { budget: 109, ceiling: 131, floor: 75 },
+  'Cam Little': { budget: 109, ceiling: 131, floor: 75 },
+  'Nick Folk': { budget: 109, ceiling: 131, floor: 75 },
+  'Matt Gay': { budget: 109, ceiling: 131, floor: 75 },
+  'Will Lutz': { budget: 109, ceiling: 131, floor: 75 },
+  'Harrison Butker': { budget: 109, ceiling: 131, floor: 75 },
+  'Jason Sanders': { budget: 109, ceiling: 131, floor: 75 },
+  'Chris Boswell': { budget: 109, ceiling: 131, floor: 75 },
   '2028 Pick Package': { budget: 72, ceiling: 86, floor: 50 },
 };
 

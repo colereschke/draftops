@@ -1,7 +1,7 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 
 interface BudgetRefresherProps {
   intervalMs?: number;
@@ -11,26 +11,32 @@ export default function BudgetRefresher({ intervalMs = 20000 }: BudgetRefresherP
   const router = useRouter();
   const [elapsed, setElapsed] = useState(0);
   const intervalSecs = intervalMs / 1000;
-
-  const doRefresh = useCallback(() => {
-    router.refresh();
-    setElapsed(0);
+  const tickRef = useRef(0);
+  const routerRef = useRef(router);
+  useEffect(() => {
+    routerRef.current = router;
   }, [router]);
 
+  const doRefresh = useCallback(() => {
+    routerRef.current.refresh();
+    tickRef.current = 0;
+    setElapsed(0);
+  }, []);
+
   useEffect(() => {
-    let tick = 0;
+    tickRef.current = 0;
     const timer = setInterval(() => {
-      tick += 1;
-      if (tick >= intervalSecs) {
-        router.refresh();
-        tick = 0;
+      tickRef.current += 1;
+      if (tickRef.current >= intervalSecs) {
+        routerRef.current.refresh();
+        tickRef.current = 0;
         setElapsed(0);
       } else {
-        setElapsed(tick);
+        setElapsed(tickRef.current);
       }
     }, 1000);
     return () => clearInterval(timer);
-  }, [router, intervalSecs]);
+  }, [intervalSecs]);
 
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>

@@ -1,4 +1,5 @@
 import type { TeamStats } from '@/types';
+import { ROSTER_SIZE } from '@/lib/teams';
 import BudgetRefresher from './BudgetRefresher';
 
 function buyingPowerColor(bp: number): string {
@@ -165,7 +166,7 @@ export default function BudgetPressureView({ teams }: BudgetPressureViewProps) {
                       fontFamily: 'var(--font-mono), monospace',
                     }}
                   >
-                    {team.rosterCount} / 30
+                    {team.rosterCount} / {ROSTER_SIZE}
                   </td>
                   <td style={{ padding: '10px 10px', minWidth: 180 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>

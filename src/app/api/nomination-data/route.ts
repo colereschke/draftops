@@ -41,13 +41,15 @@ export async function GET() {
     })),
   );
 
-  const watchlistEntries = await prisma.playerWatchlist.findMany({
-    orderBy: { createdAt: 'asc' },
-  });
+  const [watchlistEntries, nominatedEntries] = await Promise.all([
+    prisma.playerWatchlist.findMany({ orderBy: { createdAt: 'asc' } }),
+    prisma.nominatedPlayer.findMany({ orderBy: { createdAt: 'asc' } }),
+  ]);
 
   return NextResponse.json({
     teamStats,
     auctionResults,
     watchlist: watchlistEntries.map((e) => e.playerName),
+    nominated: nominatedEntries.map((e) => e.playerName),
   });
 }

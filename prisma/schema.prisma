@@ -37,3 +37,10 @@ model PlayerWatchlist {
   playerName String   @unique
   createdAt  DateTime @default(now())
 }
+
+// Players currently up for auction (nominated but not yet won); excluded from nomination suggestions
+model NominatedPlayer {
+  id         Int      @id @default(autoincrement())
+  playerName String   @unique
+  createdAt  DateTime @default(now())
+}

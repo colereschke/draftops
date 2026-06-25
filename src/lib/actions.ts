@@ -21,6 +21,7 @@ export async function logBid(data: {
       teamId: data.teamId,
     },
   });
+  await prisma.nominatedPlayer.deleteMany({ where: { playerName: data.player } });
   revalidatePath('/');
 }
 

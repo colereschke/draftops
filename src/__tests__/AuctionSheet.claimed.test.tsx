@@ -52,19 +52,19 @@ const mockClaim: ClaimedBid = {
 
 describe('AuctionSheet with claimed bids', () => {
   it('renders without claimed bids and does not show a Claimed column', () => {
-    render(<AuctionSheet claimedBids={[]} teams={mockTeams} />);
+    render(<AuctionSheet claimedBids={[]} teams={mockTeams} nominatedPlayers={[]} />);
 
     expect(screen.queryByText('Claimed')).not.toBeInTheDocument();
   });
 
   it('shows a Claimed column header when at least one bid exists', () => {
-    render(<AuctionSheet claimedBids={[mockClaim]} teams={mockTeams} />);
+    render(<AuctionSheet claimedBids={[mockClaim]} teams={mockTeams} nominatedPlayers={[]} />);
 
     expect(screen.getByText('Claimed')).toBeInTheDocument();
   });
 
   it('shows team handle and price in the claimed column for a claimed player', () => {
-    render(<AuctionSheet claimedBids={[mockClaim]} teams={mockTeams} />);
+    render(<AuctionSheet claimedBids={[mockClaim]} teams={mockTeams} nominatedPlayers={[]} />);
 
     expect(screen.getByText(/coreschke/)).toBeInTheDocument();
     expect(screen.getAllByText(/\$110/).length).toBeGreaterThan(0);
@@ -72,21 +72,21 @@ describe('AuctionSheet with claimed bids', () => {
 
   it('shows EV diff with ▼ and green color when bought under target', () => {
     // mockClaim.price = 110, player.budget = 120, diff = -10 → ▼$10
-    render(<AuctionSheet claimedBids={[mockClaim]} teams={mockTeams} />);
+    render(<AuctionSheet claimedBids={[mockClaim]} teams={mockTeams} nominatedPlayers={[]} />);
 
     expect(screen.getByText(/▼\$10/)).toBeInTheDocument();
   });
 
   it('shows EV diff with ▲ and red when overpaid', () => {
     const overClaim: ClaimedBid = { ...mockClaim, price: 130 };
-    render(<AuctionSheet claimedBids={[overClaim]} teams={mockTeams} />);
+    render(<AuctionSheet claimedBids={[overClaim]} teams={mockTeams} nominatedPlayers={[]} />);
 
     // price 130, budget 120, diff = +10 → ▲$10
     expect(screen.getByText(/▲\$10/)).toBeInTheDocument();
   });
 
   it('opens the modal when a claimed player row is clicked', () => {
-    render(<AuctionSheet claimedBids={[mockClaim]} teams={mockTeams} />);
+    render(<AuctionSheet claimedBids={[mockClaim]} teams={mockTeams} nominatedPlayers={[]} />);
 
     fireEvent.click(screen.getAllByText('Josh Allen')[0]);
 
@@ -95,7 +95,7 @@ describe('AuctionSheet with claimed bids', () => {
   });
 
   it('opens the modal when an unclaimed player row is clicked', () => {
-    render(<AuctionSheet claimedBids={[]} teams={mockTeams} />);
+    render(<AuctionSheet claimedBids={[]} teams={mockTeams} nominatedPlayers={[]} />);
 
     fireEvent.click(screen.getByText('Justin Jefferson'));
 

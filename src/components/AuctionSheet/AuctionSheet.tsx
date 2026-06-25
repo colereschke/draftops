@@ -15,6 +15,7 @@ type OptimisticAction =
 interface AuctionSheetProps {
   claimedBids: ClaimedBid[];
   teams: LeagueTeam[];
+  nominatedPlayers: string[];
 }
 
 const POSITIONS: Array<'ALL' | Position> = ['ALL', 'QB', 'RB', 'WR', 'TE', 'PICK', 'PKG'];
@@ -29,7 +30,7 @@ function ageColor(age: number | null): string {
   return '#e05050';
 }
 
-export default function AuctionSheet({ claimedBids, teams }: AuctionSheetProps) {
+export default function AuctionSheet({ claimedBids, teams, nominatedPlayers }: AuctionSheetProps) {
   const [posFilter, setPosFilter] = useState<'ALL' | Position>('ALL');
   const [search, setSearch] = useState<string>('');
   const [sortBy, setSortBy] = useState<SortKey>('sfRank');
@@ -55,6 +56,8 @@ export default function AuctionSheet({ claimedBids, teams }: AuctionSheetProps) 
     () => new Map(optimisticBids.map((b) => [b.player, b])),
     [optimisticBids],
   );
+
+  const nominatedSet = useMemo(() => new Set(nominatedPlayers), [nominatedPlayers]);
 
   const mySpent = useMemo(() => {
     const myTeam = teams.find((t) => t.handle === 'coreschke');
@@ -575,14 +578,16 @@ export default function AuctionSheet({ claimedBids, teams }: AuctionSheetProps) 
               const c = POS_COLORS[p.pos];
               const isRookie = p.notes.toLowerCase().includes('rookie');
               const isPkg = p.pos === 'PKG';
+              const isNominated = nominatedSet.has(p.player);
+              const rowBg = isNominated ? '#0d1f1f' : i % 2 === 0 ? 'transparent' : '#0a0c10';
               return (
                 <tr
                   key={p.player + i}
                   onClick={() => setModalPlayer(p)}
                   style={{
                     borderBottom: '1px solid #141824',
-                    background: i % 2 === 0 ? 'transparent' : '#0a0c10',
-                    borderLeft: `3px solid ${c.accent}`,
+                    background: rowBg,
+                    borderLeft: `3px solid ${isNominated ? '#40b0b0' : c.accent}`,
                     cursor: 'pointer',
                     opacity: claimMap.has(p.player) ? 0.5 : 1,
                   }}
@@ -590,7 +595,7 @@ export default function AuctionSheet({ claimedBids, teams }: AuctionSheetProps) 
                     (e.currentTarget.style.background = '#141824')
                   }
                   onMouseLeave={(e: React.MouseEvent<HTMLTableRowElement>) =>
-                    (e.currentTarget.style.background = i % 2 === 0 ? 'transparent' : '#0a0c10')
+                    (e.currentTarget.style.background = rowBg)
                   }
                 >
                   <td
@@ -646,6 +651,22 @@ export default function AuctionSheet({ claimedBids, teams }: AuctionSheetProps) 
                           }}
                         >
                           PKG
+                        </span>
+                      )}
+                      {isNominated && (
+                        <span
+                          style={{
+                            fontSize: 8,
+                            fontWeight: 700,
+                            letterSpacing: 1,
+                            background: '#0d2a2a',
+                            color: '#40b0b0',
+                            borderRadius: 3,
+                            padding: '1px 4px',
+                            textTransform: 'uppercase',
+                          }}
+                        >
+                          LIVE
                         </span>
                       )}
                     </div>

@@ -3,7 +3,7 @@ import AuctionSheet from '@/components/AuctionSheet/AuctionSheet';
 import type { ClaimedBid, LeagueTeam } from '@/types';
 
 export default async function Home() {
-  const [rawBids, teams] = await Promise.all([
+  const [rawBids, teams, nominatedEntries] = await Promise.all([
     prisma.auctionResult.findMany({
       select: {
         id: true,
@@ -18,6 +18,7 @@ export default async function Home() {
       select: { id: true, handle: true, displayName: true },
       orderBy: { handle: 'asc' },
     }),
+    prisma.nominatedPlayer.findMany({ select: { playerName: true } }),
   ]);
 
   const claimedBids: ClaimedBid[] = rawBids.map((r) => ({
@@ -30,6 +31,13 @@ export default async function Home() {
   }));
 
   const leagueTeams: LeagueTeam[] = teams;
+  const nominatedPlayers = nominatedEntries.map((e) => e.playerName);
 
-  return <AuctionSheet claimedBids={claimedBids} teams={leagueTeams} />;
+  return (
+    <AuctionSheet
+      claimedBids={claimedBids}
+      teams={leagueTeams}
+      nominatedPlayers={nominatedPlayers}
+    />
+  );
 }

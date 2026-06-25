@@ -49,3 +49,8 @@ prisma/dev.db-journal
 # Env overrides
 .env.local
 .env.*.local
+
+# Tooling / AI assistant dirs
+.claire/
+.claude/
+.superpowers/

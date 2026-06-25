@@ -13,24 +13,23 @@ const LINKS = [
 export default function NavLinks() {
   const pathname = usePathname();
   return (
-    <nav style={{ display: 'flex', gap: 4 }}>
+    <nav style={{ display: 'flex', gap: 20 }}>
       {LINKS.map(({ href, label }) => {
         const active = pathname === href;
         return (
           <Link
             key={href}
             href={href}
+            className="nav-link"
             style={{
-              padding: '3px 10px',
-              borderRadius: 5,
-              fontSize: 11,
-              fontWeight: 600,
-              letterSpacing: 0.5,
+              padding: '0 4px',
+              fontSize: 13,
+              fontWeight: 700,
+              letterSpacing: 1,
+              textTransform: 'uppercase',
               fontFamily: 'var(--font-barlow), sans-serif',
               textDecoration: 'none',
-              color: active ? '#e8a030' : '#4a5168',
-              background: active ? '#2a1f0e' : 'transparent',
-              border: `1px solid ${active ? '#e8a030' : '#2a3048'}`,
+              color: active ? '#e8eaf0' : '#4a5168',
             }}
           >
             {label}

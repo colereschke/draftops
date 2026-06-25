@@ -27,39 +27,96 @@ make db-reset    # Wipe DB and re-seed (destructive)
 
 ```
 src/
+├── __tests__/                        # Test files (Jest + React Testing Library)
 ├── app/
-│   ├── globals.css         # CSS custom properties (design tokens)
-│   ├── layout.tsx          # Font setup: Barlow Condensed, Inter, JetBrains Mono
-│   └── page.tsx            # Root page → renders <AuctionSheet />
+│   ├── api/
+│   │   ├── nomination-data/route.ts  # GET — returns teamStats, auctionResults, watchlist
+│   │   └── watchlist/route.ts        # POST/DELETE — add/remove from PlayerWatchlist
+│   ├── budget/page.tsx               # /budget — buying power view (server component)
+│   ├── nominate/page.tsx             # /nominate — nomination helper (server component)
+│   ├── teams/page.tsx                # /teams — team roster tracker (server component)
+│   ├── error.tsx                     # App-level error boundary
+│   ├── globals.css                   # CSS custom properties (design tokens)
+│   ├── layout.tsx                    # Font setup + NavBar
+│   └── page.tsx                      # / — value sheet (server component)
 ├── components/
-│   └── AuctionSheet/
-│       ├── AuctionSheet.tsx  # 'use client' — all interactive UI lives here
-│       └── index.ts
+│   ├── AuctionSheet/                 # Main player value sheet + bid logging
+│   ├── BidModal/                     # Log/edit/delete bid modal
+│   ├── BudgetPressure/               # Budget pressure table + 20s auto-refresh
+│   ├── NavBar/                       # Fixed header with nav links
+│   ├── NominationHelper/             # Nomination scorer + watchlist sidebar
+│   └── RosterTracker/                # Expandable team roster view
 ├── data/
-│   └── players.ts          # ~270 players, fully processed (budget/ceiling/floor)
+│   └── players.ts                    # ~270 players, fully processed (budget/ceiling/floor)
 ├── lib/
-│   ├── db.ts               # Prisma singleton (required for Next.js dev hot reload)
-│   └── teams.ts            # LEAGUE_TEAMS array + ROSTER_SIZE = 30
+│   ├── actions.ts                    # Server actions: logBid, updateBid, deleteBid
+│   ├── budget.ts                     # computeTeamStats for /budget page
+│   ├── computeTeamStats.ts           # computeTeamStats for /teams page (includes roster + delta)
+│   ├── db.ts                         # Prisma singleton (required for Next.js dev hot reload)
+│   ├── nominationScoring.ts          # computeNominationScores — core nomination logic
+│   ├── posColors.ts                  # POS_COLORS map (bg, accent, badge, badgeText per position)
+│   └── teams.ts                      # LEAGUE_TEAMS, ROSTER_SIZE = 30, TARGET_ROSTER
 └── types/
-    └── index.ts            # Player, Position, TeamStats, AuctionResultEntry
+    └── index.ts                      # Player, Position, TeamStats, AuctionResultEntry,
+                                      # RosterEntry, TeamWithRoster, ClaimedBid, LeagueTeam
 prisma/
-├── schema.prisma           # Team + AuctionResult models
-├── seed.ts                 # Upserts all 12 teams (idempotent)
-└── dev.db                  # Local SQLite DB (gitignored)
-prisma.config.ts            # Prisma v7 config (replaces datasource url in schema)
-existing_project_docs/      # Original reference files — do not delete
+├── schema.prisma                     # Team + AuctionResult + PlayerWatchlist models
+├── seed.ts                           # Upserts all 12 teams (idempotent)
+└── dev.db                            # Local SQLite DB (gitignored)
+prisma.config.ts                      # Prisma v7 config (replaces datasource url in schema)
+existing_project_docs/                # Original reference files — do not delete
 ```
+
+## Pages & Routes
+
+| Route       | Purpose                                                                                                |
+| ----------- | ------------------------------------------------------------------------------------------------------ |
+| `/`         | Value sheet — full player list with filters, search, sort, bid logging via modal                       |
+| `/teams`    | Team roster tracker — expandable rows showing each player a team has won, with delta vs. target budget |
+| `/budget`   | Budget pressure view — teams sorted by buying power with visual bar; auto-refreshes every 20s          |
+| `/nominate` | Nomination helper — ranks available players by rival demand score; personal watchlist sidebar          |
+
+All pages are server components that fetch from Prisma directly and pass data down to `'use client'` components.
 
 ## Database Schema
 
-Two models. `Team` tracks 12 managers and their $1,000 budgets. `AuctionResult` logs each completed bid.
+Three models:
 
-Remaining budget and roster count are **derived at query time** (not stored):
+- `Team` — 12 managers with $1,000 budgets
+- `AuctionResult` — one row per completed bid (player, position, nflTeam, price, sfRank, notes, teamId)
+- `PlayerWatchlist` — Cole's personal watchlist; players here are excluded from nomination suggestions
 
-- `spent = SUM(results.price)` for a team
+Derived values (computed at query time, not stored):
+
+- `spent = SUM(results.price)`
 - `remaining = budget - spent`
-- `rosterCount = COUNT(results)` for a team
+- `rosterCount = COUNT(results)`
 - `buyingPower = remaining - (ROSTER_SIZE - rosterCount)` — classic auction math
+- `delta = result.price - player.budget` — on each roster entry, how much over/under target
+
+## Key Library Files
+
+**`src/lib/teams.ts`**
+
+- `LEAGUE_TEAMS` — 12 teams with handles + display names
+- `ROSTER_SIZE = 30`
+- `TARGET_ROSTER = { QB: 4, RB: 9, WR: 11, TE: 3 }` — used by nomination scoring
+
+**`src/lib/nominationScoring.ts`** — core nomination intelligence
+
+- `computeNominationScores(players, teamStats, auctionResults, watchlist, myHandle)`
+- Filters out won players and watchlist items
+- For each available player, scores rival demand: `needRatio = (target - currentCount) / target` per position per team
+- Nomination score = `totalRivalDemand × player.ceiling` where demand = `sum(rival.buyingPower × needRatio)`
+- Returns `ScoredPlayer[]` with top rival contributors
+
+**`src/lib/actions.ts`** — server actions (revalidate `/` on each mutation)
+
+- `logBid({ player, position, nflTeam, price, teamId, sfRank?, notes? })`
+- `updateBid({ id, price, teamId })`
+- `deleteBid({ id })`
+
+**`src/lib/posColors.ts`** — `POS_COLORS` maps position → `{ bg, accent, badge, badgeText }`
 
 ## Design System
 
@@ -92,9 +149,10 @@ Key logic:
 - Source: `2QBAuction` column from the FantasyCalc CSV (Superflex format, $200 budget)
 - Scale: `× 5` to convert to $1,000 budget
 - TE premium: `× 1.18` on all TE values (extra PPR + first down scoring)
-- 2027 pick package: hardcoded to `budget=109, ceiling=131, floor=75` (SF speculative premium)
+- 2027 kicker pick packages: one entry per team (kicker name maps to manager handle); all hardcoded to `budget=109, ceiling=131, floor=75`
 - 2028 pick package: hardcoded to `budget=72, ceiling=86, floor=50`
 - `ceiling = round(budget × 1.15)`, `floor = max(5, round(budget × 0.87))`
+- PKG values live in a `PKG_VALUES` record keyed by player name (kicker name for 2027, `'2028 Pick Package'` for 2028)
 
 ## League-Specific Rules
 
@@ -111,6 +169,7 @@ Prisma 7 changed how SQLite connections are configured:
 - Connection config lives in `prisma.config.ts` (root-level)
 - Requires the `@prisma/adapter-better-sqlite3` adapter in the PrismaClient constructor
 - The `db.ts` singleton passes the adapter explicitly — do not instantiate PrismaClient without it
+- `postinstall` script runs `prisma generate` automatically after `pnpm install`
 
 After any schema change: `pnpm prisma migrate dev --name <description>`
 After pulling changes with new migrations: `pnpm prisma migrate dev` (applies pending)
@@ -122,20 +181,12 @@ After pulling changes with new migrations: `pnpm prisma migrate dev` (applies pe
 - Pre-commit hook runs `pnpm lint-staged` + `pnpm tsc --noEmit` — do not skip with `--no-verify`
 - CI runs typecheck + lint + format check + tests on every PR
 
-## What's Built vs. What's Next
+## What's Built
 
-**Built:**
-
-- Value sheet with full player list, filters, search, sort, budget tracker
-
-**Planned (not yet built):**
-
-- Team roster tracker (who each team has won, spend per team, roster count)
-- Live auction log (log a completed bid → auto-updates team budgets)
-- Budget pressure view (`remaining - remaining_spots` = buying power per team)
-- Nomination helper (who to nominate to burn rival budgets)
-
-The DB schema is already designed to support all of these via `Team` and `AuctionResult`.
+- `/` — Value sheet with full player list, filters, search, sort, bid logging modal, budget tracker
+- `/teams` — Team roster tracker with expandable rows, spend/remaining/buying power per team, delta vs. target per player
+- `/budget` — Budget pressure view sorted by buying power with auto-refresh
+- `/nominate` — Nomination helper that ranks available players by rival demand; personal watchlist persisted to DB excludes players Cole wants
 
 ## Long-Term Vision
 
@@ -152,7 +203,7 @@ Design decisions (e.g., dropdowns over quick-pick grids for team selection) shou
 
 **Read before touching.** Before making any change in the repo, read the repo's `CLAUDE.md`. It contains the stack, layout, conventions, and repo-specific constraints that take precedence over general intuition.
 
-**Don't commit trivial superpowers docs.** Design specs and implementation plans generated during a superpowers workflow should only be committed when the work is non-trivial enough that future-you would want to understand why a design decision was made. For simple, self-evident work, clean up generated spec/plan files at the end of the workflow ΓÇö don't commit them.
+**Don't commit trivial superpowers docs.** Design specs and implementation plans generated during a superpowers workflow should only be committed when the work is non-trivial enough that future-you would want to understand why a design decision was made. For simple, self-evident work, clean up generated spec/plan files at the end of the workflow — don't commit them.
 
 **Keep PRs clean.** Don't let extraneous files (scratch notes, generated docs, debug artifacts, unrelated changes) into PRs. This can be overridden if explicitly requested, but the default is a clean diff that contains only what the PR describes.
 

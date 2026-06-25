@@ -23,6 +23,7 @@ const makeTeam = (overrides: Partial<TeamWithRoster> = {}): TeamWithRoster => ({
       sfRank: 1,
       teamId: 1,
       teamHandle: 'coreschke',
+      delta: null,
     },
     {
       id: 2,
@@ -33,6 +34,7 @@ const makeTeam = (overrides: Partial<TeamWithRoster> = {}): TeamWithRoster => ({
       sfRank: null,
       teamId: 1,
       teamHandle: 'coreschke',
+      delta: null,
     },
   ],
   ...overrides,
@@ -94,6 +96,7 @@ describe('RosterTracker', () => {
           sfRank: 5,
           teamId: 2,
           teamHandle: 'chappy72',
+          delta: null,
         },
       ],
     });

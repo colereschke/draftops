@@ -46,6 +46,7 @@ export interface RosterEntry {
   sfRank: number | null;
   teamId: number;
   teamHandle: string;
+  delta: number | null;
 }
 
 export interface TeamWithRoster extends TeamStats {

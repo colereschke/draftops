@@ -1,5 +1,6 @@
 import type { TeamWithRoster, RosterEntry } from '@/types';
 import { ROSTER_SIZE } from '@/lib/teams';
+import { players } from '@/data/players';
 
 interface TeamInput {
   id: number;
@@ -26,16 +27,21 @@ export function computeTeamStats(teams: TeamInput[]): TeamWithRoster[] {
     const buyingPower = remaining - rosterRemaining;
     const pkgCount = team.results.filter((r) => r.position === 'PKG').length;
 
-    const results: RosterEntry[] = team.results.map((r) => ({
-      id: r.id,
-      player: r.player,
-      position: r.position,
-      nflTeam: r.nflTeam,
-      price: r.price,
-      sfRank: r.sfRank,
-      teamId: r.teamId,
-      teamHandle: team.handle,
-    }));
+    const results: RosterEntry[] = team.results.map((r) => {
+      const target = players.find((p) => p.player === r.player);
+      const delta = target != null ? r.price - target.budget : null;
+      return {
+        id: r.id,
+        player: r.player,
+        position: r.position,
+        nflTeam: r.nflTeam,
+        price: r.price,
+        sfRank: r.sfRank,
+        teamId: r.teamId,
+        teamHandle: team.handle,
+        delta,
+      };
+    });
 
     return {
       id: team.id,

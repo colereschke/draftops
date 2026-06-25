@@ -47,8 +47,8 @@ export default function AuctionSheet({ claimedBids, teams }: AuctionSheetProps) 
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
   const [showNotes, setShowNotes] = useState<boolean>(false);
   const [myBudget] = useState<number>(1000);
-  const [spent, setSpent] = useState<number>(0);
   const [modalPlayer, setModalPlayer] = useState<(typeof players)[0] | null>(null);
+  const [modalError, setModalError] = useState<string>('');
   const [, startTransition] = useTransition();
 
   const [optimisticBids, dispatchOptimistic] = useOptimistic<ClaimedBid[], OptimisticAction>(
@@ -67,6 +67,12 @@ export default function AuctionSheet({ claimedBids, teams }: AuctionSheetProps) 
     [optimisticBids],
   );
 
+  const mySpent = useMemo(() => {
+    const myTeam = teams.find((t) => t.handle === 'coreschke');
+    if (!myTeam) return 0;
+    return optimisticBids.filter((b) => b.teamId === myTeam.id).reduce((s, b) => s + b.price, 0);
+  }, [teams, optimisticBids]);
+
   const hasClaims = optimisticBids.length > 0;
 
   function handleModalSubmit({ price, teamId }: { price: number; teamId: number }) {
@@ -74,12 +80,18 @@ export default function AuctionSheet({ claimedBids, teams }: AuctionSheetProps) 
     const existingBid = claimMap.get(modalPlayer.player);
     const team = teams.find((t) => t.id === teamId);
     if (!team) return;
+    setModalError('');
 
     if (existingBid) {
       const updated: ClaimedBid = { ...existingBid, price, teamId, teamHandle: team.handle };
       startTransition(async () => {
         dispatchOptimistic({ type: 'update', bid: updated });
-        await updateBid({ id: existingBid.id, price, teamId });
+        try {
+          await updateBid({ id: existingBid.id, price, teamId });
+          setModalPlayer(null);
+        } catch {
+          setModalError('Failed to save bid. Please try again.');
+        }
       });
     } else {
       const tempBid: ClaimedBid = {
@@ -92,31 +104,40 @@ export default function AuctionSheet({ claimedBids, teams }: AuctionSheetProps) 
       };
       startTransition(async () => {
         dispatchOptimistic({ type: 'add', bid: tempBid });
-        await logBid({
-          player: modalPlayer.player,
-          position: modalPlayer.pos,
-          nflTeam: modalPlayer.team,
-          price,
-          sfRank: modalPlayer.sfRank,
-          teamId,
-        });
+        try {
+          await logBid({
+            player: modalPlayer.player,
+            position: modalPlayer.pos,
+            nflTeam: modalPlayer.team,
+            price,
+            sfRank: modalPlayer.sfRank,
+            teamId,
+          });
+          setModalPlayer(null);
+        } catch {
+          setModalError('Failed to log bid. Please try again.');
+        }
       });
     }
-    setModalPlayer(null);
   }
 
   function handleModalDelete() {
     if (!modalPlayer) return;
     const existingBid = claimMap.get(modalPlayer.player);
     if (!existingBid) return;
+    setModalError('');
     startTransition(async () => {
       dispatchOptimistic({ type: 'delete', id: existingBid.id });
-      await deleteBid({ id: existingBid.id });
+      try {
+        await deleteBid({ id: existingBid.id });
+        setModalPlayer(null);
+      } catch {
+        setModalError('Failed to remove bid. Please try again.');
+      }
     });
-    setModalPlayer(null);
   }
 
-  const remaining = myBudget - spent;
+  const remaining = myBudget - mySpent;
 
   const filtered = useMemo<Player[]>(() => {
     let data = [...players];
@@ -270,26 +291,16 @@ export default function AuctionSheet({ claimedBids, teams }: AuctionSheetProps) 
               >
                 Spent
               </div>
-              <input
-                type="number"
-                value={spent}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
-                  if (e.target.value === '') return;
-                  const n = parseInt(e.target.value, 10);
-                  if (!isNaN(n)) setSpent(Math.max(0, n));
-                }}
+              <div
                 style={{
-                  width: 70,
                   fontSize: 18,
                   fontWeight: 700,
                   color: '#e8a030',
-                  background: 'transparent',
-                  border: 'none',
-                  outline: 'none',
-                  textAlign: 'center',
                   fontFamily: 'var(--font-mono), monospace',
                 }}
-              />
+              >
+                ${mySpent}
+              </div>
             </div>
             <div style={{ textAlign: 'center' }}>
               <div
@@ -744,6 +755,7 @@ export default function AuctionSheet({ claimedBids, teams }: AuctionSheetProps) 
                       if (!claim) return <td key="claimed" style={{ padding: '8px 10px' }} />;
                       const diff = claim.price - p.budget;
                       const over = diff > 0;
+                      const under = diff < 0;
                       return (
                         <td
                           key="claimed"
@@ -764,11 +776,11 @@ export default function AuctionSheet({ claimedBids, teams }: AuctionSheetProps) 
                             style={{
                               fontSize: 10,
                               fontFamily: 'var(--font-mono), monospace',
-                              color: over ? '#e05050' : '#4caf6e',
+                              color: over ? '#e05050' : under ? '#4caf6e' : '#4a5168',
                               marginLeft: 4,
                             }}
                           >
-                            {over ? `▲$${diff}` : `▼$${Math.abs(diff)}`}
+                            {over ? `▲$${diff}` : under ? `▼$${Math.abs(diff)}` : '='}
                           </span>
                         </td>
                       );
@@ -807,6 +819,7 @@ export default function AuctionSheet({ claimedBids, teams }: AuctionSheetProps) 
           onClose={() => setModalPlayer(null)}
           onSubmit={handleModalSubmit}
           onDelete={claimMap.has(modalPlayer.player) ? handleModalDelete : undefined}
+          serverError={modalError}
         />
       )}
     </div>

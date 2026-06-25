@@ -10,6 +10,7 @@ interface BidModalProps {
   onClose: () => void;
   onSubmit: (data: { price: number; teamId: number }) => void;
   onDelete?: () => void;
+  serverError?: string;
 }
 
 export default function BidModal({
@@ -19,6 +20,7 @@ export default function BidModal({
   onClose,
   onSubmit,
   onDelete,
+  serverError,
 }: BidModalProps) {
   const isEdit = !!existingBid;
   const [price, setPrice] = useState<string>(existingBid ? String(existingBid.price) : '');
@@ -178,7 +180,9 @@ export default function BidModal({
           </select>
         </div>
 
-        {error && <div style={{ fontSize: 11, color: '#e05050' }}>{error}</div>}
+        {(error || serverError) && (
+          <div style={{ fontSize: 11, color: '#e05050' }}>{error || serverError}</div>
+        )}
 
         {/* Actions */}
         <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 4 }}>

@@ -67,7 +67,7 @@ describe('AuctionSheet with claimed bids', () => {
     render(<AuctionSheet claimedBids={[mockClaim]} teams={mockTeams} />);
 
     expect(screen.getByText(/coreschke/)).toBeInTheDocument();
-    expect(screen.getByText(/\$110/)).toBeInTheDocument();
+    expect(screen.getAllByText(/\$110/).length).toBeGreaterThan(0);
   });
 
   it('shows EV diff with ▼ and green color when bought under target', () => {

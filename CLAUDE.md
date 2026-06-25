@@ -188,16 +188,17 @@ After pulling changes with new migrations: `pnpm prisma migrate dev` (applies pe
 - `/budget` — Budget pressure view sorted by buying power with auto-refresh
 - `/nominate` — Nomination helper that ranks available players by rival demand; personal watchlist persisted to DB excludes players Cole wants
 
-## Long-Term Vision
+## What's Next
 
-DraftOps is intended to be a generalizable auction draft tool — not hardcoded to this one league. Future direction:
+**Generalize and make configurable** — DraftOps is currently hardcoded to Cole's league. The next major initiative is making it a proper multi-draft tool:
 
 - Create/manage multiple drafts
 - Upload custom rankings (e.g., FantasyCalc CSV) per draft
-- Configure scoring settings, league size, roster size, budget
+- Configure scoring settings, league size, roster size, budget per draft
 - Support any number of teams (not just 12)
+- Remove all hardcoded league assumptions (handles, `LEAGUE_TEAMS`, kicker-PKG rules, etc.)
 
-Design decisions (e.g., dropdowns over quick-pick grids for team selection) should account for this scalability.
+Design decisions (e.g., dropdowns over quick-pick grids for team selection) should already account for this — keep that in mind when touching anything.
 
 ## Global Rules
 

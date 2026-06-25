@@ -30,3 +30,10 @@ model AuctionResult {
   team      Team     @relation(fields: [teamId], references: [id])
   createdAt DateTime @default(now())
 }
+
+// Cole's personal watchlist — players he still wants to win; excluded from nomination suggestions
+model PlayerWatchlist {
+  id         Int      @id @default(autoincrement())
+  playerName String   @unique
+  createdAt  DateTime @default(now())
+}

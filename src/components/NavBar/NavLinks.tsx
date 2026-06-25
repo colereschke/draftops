@@ -7,6 +7,7 @@ const LINKS = [
   { href: '/', label: 'Value Sheet' },
   { href: '/teams', label: 'Team Rosters' },
   { href: '/budget', label: 'Budget Pressure' },
+  { href: '/nominate', label: 'Nominate' },
 ];
 
 export default function NavLinks() {

@@ -1,6 +1,8 @@
+import type { Session } from 'next-auth';
+import { signOut } from '@/auth';
 import NavLinks from './NavLinks';
 
-export default function NavBar() {
+export default function NavBar({ session }: { session: Session | null }) {
   return (
     <div
       style={{
@@ -28,7 +30,49 @@ export default function NavBar() {
       >
         DraftOps
       </span>
-      <NavLinks />
+      <div style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
+        <NavLinks />
+        {session && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <span
+              style={{
+                fontFamily: 'var(--font-barlow), sans-serif',
+                fontWeight: 700,
+                fontSize: 13,
+                letterSpacing: 1,
+                textTransform: 'uppercase',
+                color: '#4a5168',
+              }}
+            >
+              {session.user?.name}
+            </span>
+            <form
+              action={async () => {
+                'use server';
+                await signOut({ redirectTo: '/sign-in' });
+              }}
+            >
+              <button
+                type="submit"
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  cursor: 'pointer',
+                  fontFamily: 'var(--font-barlow), sans-serif',
+                  fontWeight: 700,
+                  fontSize: 13,
+                  letterSpacing: 1,
+                  textTransform: 'uppercase',
+                  color: '#4a5168',
+                  padding: 0,
+                }}
+              >
+                Sign out
+              </button>
+            </form>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

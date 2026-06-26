@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import { Barlow_Condensed, Inter, JetBrains_Mono } from 'next/font/google';
+import { auth } from '@/auth';
 import NavBar from '@/components/NavBar';
 import './globals.css';
 
@@ -27,14 +28,16 @@ export const metadata: Metadata = {
   description: '12-team Superflex dynasty auction tracker with live budget management',
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  const session = await auth();
+
   return (
     <html
       lang="en"
       className={`${inter.variable} ${barlowCondensed.variable} ${jetbrainsMono.variable}`}
     >
       <body style={{ fontFamily: 'var(--font-inter), sans-serif' }}>
-        <NavBar />
+        <NavBar session={session} />
         {children}
       </body>
     </html>

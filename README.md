@@ -29,14 +29,12 @@ That's it.
 
 ## Features
 
-- **Value sheet** — ~270 players ranked by SF position with floor / target / ceiling bid prices
-- **Position filters** — QB / RB / WR / TE / PICK / PKG tabs with search and sort
-- **Budget tracker** — manual spend entry with live remaining balance
-- **Market weight bar** — positional distribution of total auction dollars
-- **Age color coding** — ≤24 green, 25–27 white, 28–30 amber, 31+ red
-- **2027 pick packages** — kicker placeholder system (winning a kicker bid nets full 1st+2nd+3rd)
-
-**Coming next:** team roster tracker, live auction log, budget pressure view, nomination helper
+- **Value sheet** (`/`) — ~270 players ranked by SF position with floor / target / ceiling bid prices, position filters, search, sort, age color coding, and bid logging via modal
+- **Live auction log** — log, edit, and delete bids as they happen; won players dim in the sheet; nominated players show a teal "LIVE" badge
+- **Team roster tracker** (`/teams`) — expandable rows per team showing won players, spend/remaining/buying power, and delta vs. target budget per player
+- **Budget pressure view** (`/budget`) — teams sorted by buying power with a visual bar; auto-refreshes every 20 seconds
+- **Nomination helper** (`/nominate`) — ranks available players by rival demand score; personal watchlist sidebar persists to DB and excludes players from suggestions
+- **In-auction tracking** — "Nom" button marks a player as currently up for bidding; persists to DB so state survives page refreshes; auto-clears when the bid is logged
 
 ## Make Commands
 
@@ -69,17 +67,28 @@ make help           # Show all commands
 
 ```
 src/
-├── app/                    # Next.js App Router pages and layouts
-├── components/AuctionSheet # Main auction value sheet UI
-├── data/players.ts         # Full player list with scaled bid values
+├── app/                        # Next.js App Router pages and layouts
+│   ├── api/                    # API routes (nomination-data, watchlist, nominated)
+│   ├── budget/                 # /budget — buying power view
+│   ├── nominate/               # /nominate — nomination helper
+│   └── teams/                  # /teams — team roster tracker
+├── components/
+│   ├── AuctionSheet/           # Main player value sheet + bid logging
+│   ├── BidModal/               # Log/edit/delete bid modal
+│   ├── BudgetPressure/         # Budget pressure table + auto-refresh
+│   ├── NominationHelper/       # Nomination scorer + watchlist + in-auction sidebar
+│   └── RosterTracker/          # Expandable team roster view
+├── data/players.ts             # ~270 players with scaled bid values
 ├── lib/
-│   ├── db.ts               # Prisma client singleton
-│   └── teams.ts            # League team definitions
-└── types/index.ts          # Shared TypeScript types
+│   ├── actions.ts              # Server actions: logBid, updateBid, deleteBid
+│   ├── nominationScoring.ts    # Core nomination scoring logic
+│   ├── db.ts                   # Prisma client singleton
+│   └── teams.ts                # League team definitions
+└── types/index.ts              # Shared TypeScript types
 prisma/
-├── schema.prisma           # Team + AuctionResult models
-├── seed.ts                 # Seeds 12 league teams
-└── dev.db                  # Local SQLite database (gitignored)
+├── schema.prisma               # Team + AuctionResult + PlayerWatchlist + NominatedPlayer models
+├── seed.ts                     # Seeds 12 league teams
+└── dev.db                      # Local SQLite database (gitignored)
 ```
 
 ## Contributing / Feedback

@@ -91,6 +91,14 @@ prisma/
 └── dev.db                      # Local SQLite database (gitignored)
 ```
 
+## Roadmap
+
+DraftOps is being generalized from a single hardcoded league into a tool anyone can deploy and use for their own draft. See [`ROADMAP.md`](./ROADMAP.md) for the full plan (Postgres migration → auth → multi-draft → configurable settings → custom rankings upload).
+
+**Future ideas (not yet scheduled):**
+
+- **1QB / single-QB scoring support** — values currently derive from FantasyCalc's 2QB (Superflex) column, so a 1QB league would need a different source column, not just a different multiplier. Deferred until the configurable-settings work lands.
+
 ## Contributing / Feedback
 
 This tool is shared with the **Establish The Run dynasty Discord** for feedback. If you're testing it:

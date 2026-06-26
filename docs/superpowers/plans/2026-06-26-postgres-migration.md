@@ -179,7 +179,7 @@ Replace the entire `dependencies` and `devDependencies` sections. Changes:
 
 - Remove from `dependencies`: `@prisma/adapter-better-sqlite3`, `better-sqlite3`
 - Add to `dependencies`: `pg`, `@prisma/adapter-pg`
-- Add to `devDependencies`: `@types/pg`, and move `better-sqlite3` here (still needed for the migration script in Task 5)
+- Add to `devDependencies`: `@types/pg`, `@types/better-sqlite3`, `dotenv`, and move `better-sqlite3` here (still needed for the migration script in Task 5)
 
 `package.json` dependencies section becomes:
 
@@ -197,8 +197,16 @@ Replace the entire `dependencies` and `devDependencies` sections. Changes:
 `package.json` devDependencies — add these entries (keep all existing devDeps, just add the new ones):
 
 ```json
+"@types/better-sqlite3": "^7.6.13",
 "@types/pg": "^8.11.10",
 "better-sqlite3": "^12.11.1",
+"dotenv": "^16.4.7",
+```
+
+Also update the `db:seed` script so tsx picks up `.env.local`:
+
+```json
+"db:seed": "dotenv -e .env.local -- tsx prisma/seed.ts"
 ```
 
 - [ ] **Step 2: Update `prisma/schema.prisma`**
@@ -257,7 +265,13 @@ model NominatedPlayer {
 - [ ] **Step 3: Update `prisma.config.ts`**
 
 ```ts
+import { config as dotenvConfig } from 'dotenv';
 import { defineConfig } from 'prisma/config';
+
+// Prisma 7 with prisma.config.ts does NOT auto-load any .env file.
+// tsx (used by seed/scripts) also doesn't load env files.
+// Load .env.local explicitly so DATABASE_URL is available to the Prisma CLI.
+dotenvConfig({ path: '.env.local' });
 
 export default defineConfig({
   schema: 'prisma/schema.prisma',
@@ -265,12 +279,12 @@ export default defineConfig({
     path: 'prisma/migrations',
   },
   datasource: {
-    url: process.env.DATABASE_URL ?? 'postgresql://draftops:draftops@localhost/draftops',
+    url: process.env.DATABASE_URL!,
   },
 });
 ```
 
-The `??` fallback lets `prisma generate` (which runs in `postinstall`) work without `DATABASE_URL` set. At runtime the real URL from `.env.local` or Vercel env is always used.
+The `dotenvConfig` call loads `.env.local` before Prisma reads `DATABASE_URL`. On Vercel (where `.env.local` doesn't exist and `DATABASE_URL` is injected directly into the process), `dotenvConfig` silently no-ops and the env var is already set. Fail-fast with `!` so a missing URL throws immediately rather than connecting to a wrong database.
 
 - [ ] **Step 4: Update `src/lib/db.ts`**
 
@@ -300,6 +314,9 @@ if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = prisma;
 - [ ] **Step 5: Update `prisma/seed.ts`**
 
 ```ts
+import { config as dotenvConfig } from 'dotenv';
+dotenvConfig({ path: '.env.local' });
+
 import { PrismaClient } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { Pool } from 'pg';
@@ -328,6 +345,8 @@ main()
     await pool.end();
   });
 ```
+
+> **`PrismaPg` constructor — verify before coding.** After `pnpm install`, run `grep -A5 'class PrismaPg' node_modules/@prisma/adapter-pg/dist/index.d.ts` to confirm the constructor signature. If it takes a `Pool` instance (the Prisma 5.x pattern, likely still in v7), the code above is correct. If v7 changed it to take a config object (`new PrismaPg({ connectionString })`), remove the `new Pool(...)` lines, change the constructor call, and drop the `pool.end()` calls everywhere. Apply the same fix to `db.ts` and the migration script in Task 5.
 
 - [ ] **Step 6: Delete the SQLite migrations folder**
 
@@ -562,6 +581,9 @@ This script reads `prisma/dev.db.backup` via `better-sqlite3` and upserts all ro
 - [ ] **Step 1: Create `prisma/migrate-sqlite-to-postgres.ts`**
 
 ```ts
+import { config as dotenvConfig } from 'dotenv';
+dotenvConfig({ path: '.env.local' });
+
 import path from 'node:path';
 import Database from 'better-sqlite3';
 import { Pool } from 'pg';
@@ -712,17 +734,19 @@ async function main() {
   // Inserting explicit IDs does not advance the autoincrement sequence.
   // Without this, the next INSERT would collide on the primary key.
   console.log('\nResetting Postgres sequences...');
+  // setval(seq, v, false) means "next value = v" (is_called=false).
+  // COALESCE(MAX(id), 0) + 1 handles empty tables: next id = 1, not 2.
   await prisma.$executeRawUnsafe(
-    `SELECT setval(pg_get_serial_sequence('"Team"', 'id'), COALESCE(MAX(id), 1)) FROM "Team"`,
+    `SELECT setval(pg_get_serial_sequence('"Team"', 'id'), COALESCE(MAX(id), 0) + 1, false) FROM "Team"`,
   );
   await prisma.$executeRawUnsafe(
-    `SELECT setval(pg_get_serial_sequence('"AuctionResult"', 'id'), COALESCE(MAX(id), 1)) FROM "AuctionResult"`,
+    `SELECT setval(pg_get_serial_sequence('"AuctionResult"', 'id'), COALESCE(MAX(id), 0) + 1, false) FROM "AuctionResult"`,
   );
   await prisma.$executeRawUnsafe(
-    `SELECT setval(pg_get_serial_sequence('"PlayerWatchlist"', 'id'), COALESCE(MAX(id), 1)) FROM "PlayerWatchlist"`,
+    `SELECT setval(pg_get_serial_sequence('"PlayerWatchlist"', 'id'), COALESCE(MAX(id), 0) + 1, false) FROM "PlayerWatchlist"`,
   );
   await prisma.$executeRawUnsafe(
-    `SELECT setval(pg_get_serial_sequence('"NominatedPlayer"', 'id'), COALESCE(MAX(id), 1)) FROM "NominatedPlayer"`,
+    `SELECT setval(pg_get_serial_sequence('"NominatedPlayer"', 'id'), COALESCE(MAX(id), 0) + 1, false) FROM "NominatedPlayer"`,
   );
 
   // ── 7. Verify row counts ──────────────────────────────────────────────────
@@ -946,9 +970,19 @@ rm -f prisma/dev.db.backup
 
 The permanent backup remains at `~/draftops-sqlite-backup-<date>.db` outside the repo.
 
-- [ ] **Step 9: Remove `better-sqlite3` from devDependencies**
+- [ ] **Step 9: Remove migration-only devDependencies**
 
-In `package.json`, delete the line `"better-sqlite3": "^12.11.1"` from `devDependencies`.
+In `package.json`, remove these lines from `devDependencies`:
+
+- `"better-sqlite3": "^12.11.1"`
+- `"@types/better-sqlite3": "^7.6.13"`
+- `"dotenv": "^16.4.7"` (only needed for CLI env loading during migration; Next.js handles env at runtime)
+
+Also revert the `db:seed` script back to plain tsx (no longer needs dotenv wrapper since the script is gone):
+
+```json
+"db:seed": "tsx prisma/seed.ts"
+```
 
 Then:
 
@@ -956,7 +990,9 @@ Then:
 pnpm install
 ```
 
-Expected: `better-sqlite3` uninstalled, lockfile updated, no errors.
+Expected: those three packages uninstalled, lockfile updated, no errors.
+
+> **Note:** `prisma.config.ts` still imports `dotenv` — after removing it, revert `prisma.config.ts` to remove the dotenv import and load. The URL will be injected by Vercel in production, and for local dev you'll need to load it another way (e.g. `dotenv -e .env.local -- pnpm prisma migrate dev`). Alternatively, keep `dotenv` as a permanent devDep — it's tiny and solves the local Prisma CLI UX cleanly. Your call; the plan includes removing it, but keeping it is equally valid.
 
 - [ ] **Step 10: Final `make check`**
 

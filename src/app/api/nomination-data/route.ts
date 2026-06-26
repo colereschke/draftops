@@ -1,9 +1,13 @@
 import { NextResponse } from 'next/server';
+import { auth } from '@/auth';
 import { prisma } from '@/lib/db';
 import { ROSTER_SIZE } from '@/lib/teams';
 import type { TeamStats, AuctionResultEntry } from '@/types';
 
 export async function GET() {
+  const session = await auth();
+  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
   const teams = await prisma.team.findMany({ include: { results: true } });
 
   const teamStats: TeamStats[] = teams.map((team) => {

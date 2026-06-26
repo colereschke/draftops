@@ -30,7 +30,8 @@ src/
 ├── __tests__/                        # Test files (Jest + React Testing Library)
 ├── app/
 │   ├── api/
-│   │   ├── nomination-data/route.ts  # GET — returns teamStats, auctionResults, watchlist
+│   │   ├── nomination-data/route.ts  # GET — returns teamStats, auctionResults, watchlist, nominatedPlayers
+│   │   ├── nominated/route.ts        # POST/DELETE — mark/unmark a player as currently in auction
 │   │   └── watchlist/route.ts        # POST/DELETE — add/remove from PlayerWatchlist
 │   ├── budget/page.tsx               # /budget — buying power view (server component)
 │   ├── nominate/page.tsx             # /nominate — nomination helper (server component)
@@ -44,7 +45,7 @@ src/
 │   ├── BidModal/                     # Log/edit/delete bid modal
 │   ├── BudgetPressure/               # Budget pressure table + 20s auto-refresh
 │   ├── NavBar/                       # Fixed header with nav links
-│   ├── NominationHelper/             # Nomination scorer + watchlist sidebar
+│   ├── NominationHelper/             # Nomination scorer + watchlist + in-auction sidebar
 │   └── RosterTracker/                # Expandable team roster view
 ├── data/
 │   └── players.ts                    # ~270 players, fully processed (budget/ceiling/floor)
@@ -60,7 +61,7 @@ src/
     └── index.ts                      # Player, Position, TeamStats, AuctionResultEntry,
                                       # RosterEntry, TeamWithRoster, ClaimedBid, LeagueTeam
 prisma/
-├── schema.prisma                     # Team + AuctionResult + PlayerWatchlist models
+├── schema.prisma                     # Team + AuctionResult + PlayerWatchlist + NominatedPlayer models
 ├── seed.ts                           # Upserts all 12 teams (idempotent)
 └── dev.db                            # Local SQLite DB (gitignored)
 prisma.config.ts                      # Prisma v7 config (replaces datasource url in schema)
@@ -80,11 +81,12 @@ All pages are server components that fetch from Prisma directly and pass data do
 
 ## Database Schema
 
-Three models:
+Four models:
 
 - `Team` — 12 managers with $1,000 budgets
 - `AuctionResult` — one row per completed bid (player, position, nflTeam, price, sfRank, notes, teamId)
 - `PlayerWatchlist` — Cole's personal watchlist; players here are excluded from nomination suggestions
+- `NominatedPlayer` — players currently up for bidding in the live auction; excluded from nomination suggestions and shown with a teal "LIVE" badge + row tint in the value sheet; auto-removed when a bid is logged via `logBid`
 
 Derived values (computed at query time, not stored):
 
@@ -104,8 +106,8 @@ Derived values (computed at query time, not stored):
 
 **`src/lib/nominationScoring.ts`** — core nomination intelligence
 
-- `computeNominationScores(players, teamStats, auctionResults, watchlist, myHandle)`
-- Filters out won players and watchlist items
+- `computeNominationScores(players, teamStats, auctionResults, watchlist, nominatedPlayers, myHandle)`
+- Filters out won players, watchlist items, and currently nominated players
 - For each available player, scores rival demand: `needRatio = (target - currentCount) / target` per position per team
 - Nomination score = `totalRivalDemand × player.ceiling` where demand = `sum(rival.buyingPower × needRatio)`
 - Returns `ScoredPlayer[]` with top rival contributors
@@ -186,7 +188,7 @@ After pulling changes with new migrations: `pnpm prisma migrate dev` (applies pe
 - `/` — Value sheet with full player list, filters, search, sort, bid logging modal, budget tracker
 - `/teams` — Team roster tracker with expandable rows, spend/remaining/buying power per team, delta vs. target per player
 - `/budget` — Budget pressure view sorted by buying power with auto-refresh
-- `/nominate` — Nomination helper that ranks available players by rival demand; personal watchlist persisted to DB excludes players Cole wants
+- `/nominate` — Nomination helper that ranks available players by rival demand; personal watchlist persisted to DB excludes players Cole wants; "Nom" button tracks players currently in auction (persisted to DB, auto-clears on bid completion)
 
 ## What's Next
 

@@ -14,6 +14,7 @@ interface NomData {
   teamStats: TeamStats[];
   auctionResults: AuctionResultEntry[];
   watchlist: string[];
+  nominated: string[];
 }
 
 export default function NominationHelper() {
@@ -58,6 +59,8 @@ export default function NominationHelper() {
 
   const watchlistSet = useMemo(() => new Set(data?.watchlist ?? []), [data]);
 
+  const nominatedSet = useMemo(() => new Set(data?.nominated ?? []), [data]);
+
   const scored = useMemo<ScoredPlayer[]>(() => {
     if (!data) return [];
     return computeNominationScores(
@@ -65,6 +68,7 @@ export default function NominationHelper() {
       data.teamStats,
       data.auctionResults,
       data.watchlist,
+      data.nominated,
       MY_HANDLE,
     );
   }, [data]);
@@ -78,10 +82,13 @@ export default function NominationHelper() {
     if (!watchlistSearch.trim()) return [];
     const q = watchlistSearch.toLowerCase();
     return players
-      .filter((p) => !wonNames.has(p.player) && !watchlistSet.has(p.player))
+      .filter(
+        (p) =>
+          !wonNames.has(p.player) && !watchlistSet.has(p.player) && !nominatedSet.has(p.player),
+      )
       .filter((p) => p.player.toLowerCase().includes(q) || p.team.toLowerCase().includes(q))
       .slice(0, 8);
-  }, [watchlistSearch, wonNames, watchlistSet]);
+  }, [watchlistSearch, wonNames, watchlistSet, nominatedSet]);
 
   const addToWatchlist = async (playerName: string) => {
     setData((prev) => (prev ? { ...prev, watchlist: [...prev.watchlist, playerName] } : prev));
@@ -99,6 +106,26 @@ export default function NominationHelper() {
       prev ? { ...prev, watchlist: prev.watchlist.filter((n) => n !== playerName) } : prev,
     );
     await fetch('/api/watchlist', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ playerName }),
+    });
+  };
+
+  const nominatePlayer = async (playerName: string) => {
+    setData((prev) => (prev ? { ...prev, nominated: [...prev.nominated, playerName] } : prev));
+    await fetch('/api/nominated', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ playerName }),
+    });
+  };
+
+  const unNominatePlayer = async (playerName: string) => {
+    setData((prev) =>
+      prev ? { ...prev, nominated: prev.nominated.filter((n) => n !== playerName) } : prev,
+    );
+    await fetch('/api/nominated', {
       method: 'DELETE',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ playerName }),
@@ -147,6 +174,97 @@ export default function NominationHelper() {
           gap: 12,
         }}
       >
+        {/* In Auction section */}
+        <div>
+          <div
+            style={{
+              fontSize: 10,
+              letterSpacing: 2,
+              color: '#40b0b0',
+              textTransform: 'uppercase',
+              fontFamily: 'var(--font-barlow), sans-serif',
+              marginBottom: 6,
+            }}
+          >
+            In Auction
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {data.nominated.length === 0 ? (
+              <div style={{ fontSize: 11, color: '#2a3a3a', lineHeight: 1.5 }}>
+                No players currently nominated
+              </div>
+            ) : (
+              data.nominated.map((name) => {
+                const p = players.find((pl) => pl.player === name);
+                return (
+                  <div
+                    key={name}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 6,
+                      padding: '6px 8px',
+                      background: '#0d2020',
+                      borderRadius: 5,
+                      borderLeft: '3px solid #40b0b0',
+                    }}
+                  >
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div
+                        style={{
+                          fontSize: 12,
+                          fontWeight: 600,
+                          color: '#e8eaf0',
+                          whiteSpace: 'nowrap',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                        }}
+                      >
+                        {name}
+                      </div>
+                      {p && (
+                        <div
+                          style={{
+                            fontSize: 10,
+                            color: '#4a5168',
+                            fontFamily: 'var(--font-mono), monospace',
+                          }}
+                        >
+                          {p.pos} · ${p.budget}
+                        </div>
+                      )}
+                    </div>
+                    <button
+                      onClick={() => unNominatePlayer(name)}
+                      title="Remove from in auction"
+                      style={{
+                        background: 'transparent',
+                        border: 'none',
+                        color: '#2a5a5a',
+                        cursor: 'pointer',
+                        fontSize: 16,
+                        lineHeight: 1,
+                        padding: '0 2px',
+                      }}
+                      onMouseEnter={(e) => (e.currentTarget.style.color = '#40b0b0')}
+                      onMouseLeave={(e) => (e.currentTarget.style.color = '#2a5a5a')}
+                    >
+                      ×
+                    </button>
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </div>
+
+        <div
+          style={{
+            borderTop: '1px solid #1e2434',
+            marginTop: 4,
+          }}
+        />
+
         <div
           style={{
             fontSize: 10,
@@ -396,10 +514,11 @@ export default function NominationHelper() {
                       { label: 'Score', align: 'center' },
                       { label: 'Rival Demand', align: 'left' },
                       { label: '', align: 'center' },
+                      { label: '', align: 'center' },
                     ] as const
-                  ).map((col) => (
+                  ).map((col, i) => (
                     <th
-                      key={col.label}
+                      key={i}
                       style={{
                         padding: '8px 10px',
                         textAlign: col.align,
@@ -610,13 +729,36 @@ export default function NominationHelper() {
                           Watch
                         </button>
                       </td>
+
+                      {/* Nom button */}
+                      <td style={{ padding: '8px 6px', textAlign: 'center' }}>
+                        <button
+                          onClick={() => nominatePlayer(player.player)}
+                          style={{
+                            padding: '3px 10px',
+                            borderRadius: 4,
+                            border: '1px solid #2a3048',
+                            background: 'transparent',
+                            color: '#40b0b0',
+                            fontSize: 10,
+                            cursor: 'pointer',
+                            fontWeight: 600,
+                            letterSpacing: 0.5,
+                            fontFamily: 'var(--font-barlow), sans-serif',
+                          }}
+                          onMouseEnter={(e) => (e.currentTarget.style.borderColor = '#40b0b0')}
+                          onMouseLeave={(e) => (e.currentTarget.style.borderColor = '#2a3048')}
+                        >
+                          Nom
+                        </button>
+                      </td>
                     </tr>
                   );
                 })}
                 {filtered.length === 0 && (
                   <tr>
                     <td
-                      colSpan={6}
+                      colSpan={7}
                       style={{ padding: 40, textAlign: 'center', color: '#4a5168', fontSize: 12 }}
                     >
                       No nomination targets found.

@@ -3,6 +3,7 @@ import { logBid, updateBid, deleteBid } from '@/lib/actions';
 const mockCreate = jest.fn().mockResolvedValue({});
 const mockUpdate = jest.fn().mockResolvedValue({});
 const mockDelete = jest.fn().mockResolvedValue({});
+const mockDeleteMany = jest.fn().mockResolvedValue({});
 const mockRevalidatePath = jest.fn();
 
 jest.mock('@/lib/db', () => ({
@@ -11,6 +12,9 @@ jest.mock('@/lib/db', () => ({
       create: (...args: unknown[]) => mockCreate(...args),
       update: (...args: unknown[]) => mockUpdate(...args),
       delete: (...args: unknown[]) => mockDelete(...args),
+    },
+    nominatedPlayer: {
+      deleteMany: (...args: unknown[]) => mockDeleteMany(...args),
     },
   },
 }));

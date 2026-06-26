@@ -18,10 +18,12 @@ export function computeNominationScores(
   teamStats: TeamStats[],
   auctionResults: AuctionResultEntry[],
   watchlist: string[],
+  nominated: string[],
   myHandle: string,
 ): ScoredPlayer[] {
   const wonPlayerNames = new Set(auctionResults.map((r) => r.player));
   const watchlistSet = new Set(watchlist);
+  const nominatedSet = new Set(nominated);
   const rivals = teamStats.filter((t) => t.handle !== myHandle && t.buyingPower > 0);
 
   const teamPosCounts: Record<number, Partial<Record<string, number>>> = {};
@@ -32,7 +34,8 @@ export function computeNominationScores(
   }
 
   const available = players.filter(
-    (p) => !wonPlayerNames.has(p.player) && !watchlistSet.has(p.player),
+    (p) =>
+      !wonPlayerNames.has(p.player) && !watchlistSet.has(p.player) && !nominatedSet.has(p.player),
   );
 
   const scored: ScoredPlayer[] = available.map((player) => {

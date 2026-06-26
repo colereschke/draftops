@@ -516,9 +516,9 @@ export default function NominationHelper() {
                       { label: '', align: 'center' },
                       { label: '', align: 'center' },
                     ] as const
-                  ).map((col) => (
+                  ).map((col, i) => (
                     <th
-                      key={col.label}
+                      key={i}
                       style={{
                         padding: '8px 10px',
                         textAlign: col.align,

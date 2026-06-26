@@ -203,11 +203,7 @@ Replace the entire `dependencies` and `devDependencies` sections. Changes:
 "dotenv": "^16.4.7",
 ```
 
-Also update the `db:seed` script so tsx picks up `.env.local`:
-
-```json
-"db:seed": "dotenv -e .env.local -- tsx prisma/seed.ts"
-```
+The `db:seed` script stays unchanged (`tsx prisma/seed.ts`) — dotenv loading is handled inside the script itself (see Step 5).
 
 - [ ] **Step 2: Update `prisma/schema.prisma`**
 

@@ -6,6 +6,10 @@
 setup: install db-migrate db-seed ## First-time setup: install deps, run migrations, seed DB
 	@echo ""
 	@echo "✓ DraftOps is ready. Run 'make dev' to start."
+	@echo ""
+	@echo "Prerequisites (first time only):"
+	@echo "  1. Copy .env.example → .env.local and set DATABASE_URL"
+	@echo "  2. make db-start  (start local Postgres)"
 
 .PHONY: install
 install: ## Install dependencies
@@ -65,6 +69,14 @@ check: typecheck lint format-check test ## Run all checks (typecheck, lint, form
 
 # ── Database ──────────────────────────────────────────────────────────────────
 
+.PHONY: db-start
+db-start: ## Start the local PostgreSQL service (WSL2)
+	sudo service postgresql start
+
+.PHONY: db-stop
+db-stop: ## Stop the local PostgreSQL service (WSL2)
+	sudo service postgresql stop
+
 .PHONY: db-migrate
 db-migrate: ## Run pending database migrations
 	pnpm prisma migrate dev
@@ -81,6 +93,10 @@ db-reset: ## Reset DB and re-run migrations + seed (destructive!)
 .PHONY: db-studio
 db-studio: ## Open Prisma Studio (visual DB browser)
 	pnpm prisma studio
+
+.PHONY: db-migrate-data
+db-migrate-data: ## Run the one-time SQLite→PostgreSQL data migration script
+	pnpm tsx prisma/migrate-sqlite-to-postgres.ts
 
 # ── Help ──────────────────────────────────────────────────────────────────────
 

@@ -69,6 +69,19 @@ describe('computeNominationScores', () => {
     expect(scores).toHaveLength(0);
   });
 
+  it('excludes currently nominated (in-auction) players', () => {
+    const player = makePlayer({ player: 'Live Right Now' });
+    const scores = computeNominationScores(
+      [player],
+      [makeTeamStat()],
+      [],
+      [],
+      ['Live Right Now'],
+      'coreschke',
+    );
+    expect(scores).toHaveLength(0);
+  });
+
   it('excludes PICK position from results (no positional need)', () => {
     const player = makePlayer({ player: 'Some Pick', pos: 'PICK', ceiling: 80 });
     const scores = computeNominationScores([player], [makeTeamStat()], [], [], [], 'coreschke');

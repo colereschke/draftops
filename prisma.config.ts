@@ -1,5 +1,10 @@
-import path from 'node:path';
+import { config as dotenvConfig } from 'dotenv';
 import { defineConfig } from 'prisma/config';
+
+// Prisma 7 with prisma.config.ts does NOT auto-load any .env file.
+// tsx (used by seed/scripts) also doesn't load env files.
+// Load .env.local explicitly so DATABASE_URL is available to the Prisma CLI.
+dotenvConfig({ path: '.env.local' });
 
 export default defineConfig({
   schema: 'prisma/schema.prisma',
@@ -7,6 +12,6 @@ export default defineConfig({
     path: 'prisma/migrations',
   },
   datasource: {
-    url: `file:${path.join(process.cwd(), 'prisma/dev.db')}`,
+    url: process.env.DATABASE_URL!,
   },
 });

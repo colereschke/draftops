@@ -1,10 +1,13 @@
-import path from 'node:path';
+import { config as dotenvConfig } from 'dotenv';
+dotenvConfig({ path: '.env.local' });
+
 import { PrismaClient } from '@prisma/client';
-import { PrismaBetterSqlite3 } from '@prisma/adapter-better-sqlite3';
+import { PrismaPg } from '@prisma/adapter-pg';
+import { Pool } from 'pg';
 import { LEAGUE_TEAMS } from '../src/lib/teams';
 
-const dbPath = path.join(process.cwd(), 'prisma/dev.db');
-const adapter = new PrismaBetterSqlite3({ url: dbPath });
+const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+const adapter = new PrismaPg(pool);
 const prisma = new PrismaClient({ adapter });
 
 async function main() {
@@ -23,4 +26,5 @@ main()
   .catch(console.error)
   .finally(async () => {
     await prisma.$disconnect();
+    await pool.end();
   });

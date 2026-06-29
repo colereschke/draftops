@@ -20,7 +20,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       return !!auth; // require a session for all routes matched by middleware
     },
     session({ session, token }) {
-      if (token.sub) session.user.id = token.sub;
+      session.user.id = token.sub ?? '';
       return session;
     },
   },

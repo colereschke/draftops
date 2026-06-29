@@ -65,6 +65,11 @@ describe('logBid', () => {
     expect(mockRevalidatePath).toHaveBeenCalledWith('/');
   });
 
+  it('clears nomination for the player after logging a bid', async () => {
+    await logBid(BID_DATA);
+    expect(mockDeleteMany).toHaveBeenCalledWith({ where: { playerName: 'Josh Allen' } });
+  });
+
   it('throws when called without a session', async () => {
     mockAuth.mockResolvedValue(null);
     await expect(logBid(BID_DATA)).rejects.toThrow('Unauthorized');

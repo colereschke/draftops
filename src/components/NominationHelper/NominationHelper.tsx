@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useMemo, useEffect, useRef } from 'react';
+import { useRouter } from 'next/navigation';
 import type { Position, TeamStats, AuctionResultEntry } from '@/types';
 import { players } from '@/data/players';
 import { computeNominationScores, type ScoredPlayer } from '@/lib/nominationScoring';
@@ -18,6 +19,7 @@ interface NomData {
 }
 
 export default function NominationHelper() {
+  const router = useRouter();
   const [data, setData] = useState<NomData | null>(null);
   const [posFilter, setPosFilter] = useState<'ALL' | Position>('ALL');
   const [watchlistSearch, setWatchlistSearch] = useState('');
@@ -29,6 +31,10 @@ export default function NominationHelper() {
     async function fetchData() {
       try {
         const res = await fetch('/api/nomination-data');
+        if (res.status === 401) {
+          router.replace('/sign-in');
+          return;
+        }
         if (res.ok) setData(await res.json());
       } catch {
         // silent — show stale data
@@ -37,7 +43,7 @@ export default function NominationHelper() {
     void fetchData();
     const interval = setInterval(() => void fetchData(), 30_000);
     return () => clearInterval(interval);
-  }, []);
+  }, [router]);
 
   // Close dropdown on outside click
   useEffect(() => {
@@ -91,45 +97,77 @@ export default function NominationHelper() {
   }, [watchlistSearch, wonNames, watchlistSet, nominatedSet]);
 
   const addToWatchlist = async (playerName: string) => {
+    const snapshot = data;
     setData((prev) => (prev ? { ...prev, watchlist: [...prev.watchlist, playerName] } : prev));
     setWatchlistSearch('');
     setShowDropdown(false);
-    await fetch('/api/watchlist', {
+    const res = await fetch('/api/watchlist', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ playerName }),
     });
+    if (!res.ok) {
+      if (res.status === 401) {
+        router.replace('/sign-in');
+        return;
+      }
+      setData(snapshot);
+    }
   };
 
   const removeFromWatchlist = async (playerName: string) => {
+    const snapshot = data;
     setData((prev) =>
       prev ? { ...prev, watchlist: prev.watchlist.filter((n) => n !== playerName) } : prev,
     );
-    await fetch('/api/watchlist', {
+    const res = await fetch('/api/watchlist', {
       method: 'DELETE',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ playerName }),
     });
+    if (!res.ok) {
+      if (res.status === 401) {
+        router.replace('/sign-in');
+        return;
+      }
+      setData(snapshot);
+    }
   };
 
   const nominatePlayer = async (playerName: string) => {
+    const snapshot = data;
     setData((prev) => (prev ? { ...prev, nominated: [...prev.nominated, playerName] } : prev));
-    await fetch('/api/nominated', {
+    const res = await fetch('/api/nominated', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ playerName }),
     });
+    if (!res.ok) {
+      if (res.status === 401) {
+        router.replace('/sign-in');
+        return;
+      }
+      setData(snapshot);
+    }
   };
 
   const unNominatePlayer = async (playerName: string) => {
+    const snapshot = data;
     setData((prev) =>
       prev ? { ...prev, nominated: prev.nominated.filter((n) => n !== playerName) } : prev,
     );
-    await fetch('/api/nominated', {
+    const res = await fetch('/api/nominated', {
       method: 'DELETE',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ playerName }),
     });
+    if (!res.ok) {
+      if (res.status === 401) {
+        router.replace('/sign-in');
+        return;
+      }
+      setData(snapshot);
+    }
   };
 
   if (!data) {

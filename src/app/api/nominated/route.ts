@@ -28,8 +28,10 @@ export async function DELETE(request: NextRequest) {
   }
   try {
     await prisma.nominatedPlayer.delete({ where: { playerName: body.playerName } });
-  } catch {
-    // Already deleted — idempotent
+  } catch (e) {
+    if ((e as { code?: string }).code !== 'P2025') {
+      return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    }
   }
   return NextResponse.json({ ok: true });
 }

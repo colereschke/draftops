@@ -1,9 +1,16 @@
 import { auth, signIn } from '@/auth';
 import { redirect } from 'next/navigation';
 
-export default async function SignInPage() {
-  const session = await auth();
+export default async function SignInPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ callbackUrl?: string }>;
+}) {
+  const [session, params] = await Promise.all([auth(), searchParams]);
   if (session) redirect('/');
+
+  const raw = params.callbackUrl ?? '/';
+  const callbackUrl = raw.startsWith('/') ? raw : '/';
 
   return (
     <div
@@ -42,7 +49,7 @@ export default async function SignInPage() {
         <form
           action={async () => {
             'use server';
-            await signIn('discord', { redirectTo: '/' });
+            await signIn('discord', { redirectTo: callbackUrl });
           }}
         >
           <button

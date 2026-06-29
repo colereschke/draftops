@@ -76,3 +76,19 @@ export async function deleteBid(data: { id: number; draftId: number }): Promise<
   if (deleteResult.count === 0) throw new Error('Bid not found');
   revalidatePath(`/draft/${data.draftId}`);
 }
+
+export async function completeDraft(draftId: number): Promise<void> {
+  const session = await auth();
+  if (!session) throw new Error('Unauthorized');
+
+  const draft = await prisma.draft.findFirst({
+    where: { id: draftId, ownerId: session.user.id },
+  });
+  if (!draft) throw new Error('Draft not found');
+
+  await prisma.draft.update({
+    where: { id: draftId },
+    data: { status: 'COMPLETE' },
+  });
+  revalidatePath('/drafts');
+}

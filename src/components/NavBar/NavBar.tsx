@@ -4,11 +4,16 @@ export default function NavBar() {
   return (
     <div
       style={{
+        position: 'sticky',
+        top: 0,
+        zIndex: 50,
         background: 'var(--bg-surface, #141824)',
         padding: '6px 20px',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
+        flexWrap: 'wrap',
+        gap: '4px 20px',
       }}
     >
       <span

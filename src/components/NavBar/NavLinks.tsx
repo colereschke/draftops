@@ -13,7 +13,7 @@ const LINKS = [
 export default function NavLinks() {
   const pathname = usePathname();
   return (
-    <nav style={{ display: 'flex', gap: 20 }}>
+    <nav style={{ display: 'flex', gap: 20, flexWrap: 'wrap' }}>
       {LINKS.map(({ href, label }) => {
         const active = pathname === href;
         return (

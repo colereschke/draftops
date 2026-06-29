@@ -16,7 +16,11 @@ async function main() {
   let draft = await prisma.draft.findFirst({ where: { name: "Cole's Draft 2025" } });
   if (!draft) {
     draft = await prisma.draft.create({
-      data: { name: "Cole's Draft 2025", ownerId: null, ownerTeamId: null },
+      data: {
+        name: "Cole's Draft 2025",
+        ownerId: process.env.OWNER_DISCORD_ID ?? null,
+        ownerTeamId: null,
+      },
     });
   }
 

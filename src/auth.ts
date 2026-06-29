@@ -16,9 +16,6 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   providers: [Discord],
   session: { strategy: 'jwt' },
   callbacks: {
-    authorized({ auth }) {
-      return !!auth; // require a session for all routes matched by middleware
-    },
     session({ session, token }) {
       session.user.id = token.sub ?? '';
       return session;

@@ -7,8 +7,6 @@ import { players } from '@/data/players';
 import { computeNominationScores, type ScoredPlayer } from '@/lib/nominationScoring';
 import { POS_COLORS } from '@/lib/posColors';
 
-const MY_HANDLE = 'coreschke';
-
 const POSITIONS: Array<'ALL' | Position> = ['ALL', 'QB', 'RB', 'WR', 'TE', 'PICK', 'PKG'];
 
 interface NomData {
@@ -16,6 +14,7 @@ interface NomData {
   auctionResults: AuctionResultEntry[];
   watchlist: string[];
   nominated: string[];
+  ownerHandle: string | null;
 }
 
 export default function NominationHelper() {
@@ -33,6 +32,10 @@ export default function NominationHelper() {
         const res = await fetch('/api/nomination-data');
         if (res.status === 401) {
           router.replace('/sign-in');
+          return;
+        }
+        if (res.status === 404) {
+          // No draft found for this user — show stale data or wait
           return;
         }
         if (res.ok) setData(await res.json());
@@ -75,7 +78,7 @@ export default function NominationHelper() {
       data.auctionResults,
       data.watchlist,
       data.nominated,
-      MY_HANDLE,
+      data.ownerHandle ?? '',
     );
   }, [data]);
 
@@ -107,7 +110,7 @@ export default function NominationHelper() {
       body: JSON.stringify({ playerName }),
     });
     if (!res.ok) {
-      if (res.status === 401) {
+      if (res.status === 401 || res.status === 404) {
         router.replace('/sign-in');
         return;
       }
@@ -126,7 +129,7 @@ export default function NominationHelper() {
       body: JSON.stringify({ playerName }),
     });
     if (!res.ok) {
-      if (res.status === 401) {
+      if (res.status === 401 || res.status === 404) {
         router.replace('/sign-in');
         return;
       }
@@ -143,7 +146,7 @@ export default function NominationHelper() {
       body: JSON.stringify({ playerName }),
     });
     if (!res.ok) {
-      if (res.status === 401) {
+      if (res.status === 401 || res.status === 404) {
         router.replace('/sign-in');
         return;
       }
@@ -162,7 +165,7 @@ export default function NominationHelper() {
       body: JSON.stringify({ playerName }),
     });
     if (!res.ok) {
-      if (res.status === 401) {
+      if (res.status === 401 || res.status === 404) {
         router.replace('/sign-in');
         return;
       }

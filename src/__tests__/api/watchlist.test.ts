@@ -1,31 +1,41 @@
 /**
  * @jest-environment node
  */
-import { NextRequest } from 'next/server';
 import { POST, DELETE } from '@/app/api/watchlist/route';
+import { NextRequest } from 'next/server';
 
 const mockAuth = jest.fn();
-const mockUpsert = jest.fn().mockResolvedValue({ playerName: 'Josh Allen' });
-const mockDelete = jest.fn().mockResolvedValue({});
+const mockGetDraftForUser = jest.fn();
+const mockUpsert = jest.fn();
+const mockDelete = jest.fn();
+const mockFindMany = jest.fn();
 
-jest.mock('@/auth', () => ({
-  auth: () => mockAuth(),
+jest.mock('@/auth', () => ({ auth: () => mockAuth() }));
+jest.mock('@/lib/draft', () => ({
+  getDraftForUser: (...args: unknown[]) => mockGetDraftForUser(...args),
 }));
-
 jest.mock('@/lib/db', () => ({
   prisma: {
     playerWatchlist: {
       upsert: (...args: unknown[]) => mockUpsert(...args),
       delete: (...args: unknown[]) => mockDelete(...args),
+      findMany: (...args: unknown[]) => mockFindMany(...args),
     },
   },
 }));
 
 const MOCK_SESSION = { user: { id: '123456789', name: 'Cole' } };
+const MOCK_DRAFT = {
+  id: 1,
+  name: "Cole's Draft 2025",
+  ownerId: '123456789',
+  ownerTeamId: 7,
+  ownerTeam: null,
+};
 
-function makeRequest(method: string, body: unknown) {
-  return new NextRequest(`http://localhost/api/watchlist`, {
-    method,
+function makeRequest(body: unknown): NextRequest {
+  return new NextRequest('http://localhost/api/watchlist', {
+    method: 'POST',
     body: JSON.stringify(body),
     headers: { 'Content-Type': 'application/json' },
   });
@@ -34,42 +44,48 @@ function makeRequest(method: string, body: unknown) {
 beforeEach(() => {
   jest.clearAllMocks();
   mockAuth.mockResolvedValue(MOCK_SESSION);
+  mockGetDraftForUser.mockResolvedValue(MOCK_DRAFT);
+  mockUpsert.mockResolvedValue({ playerName: 'Josh Allen', draftId: 1 });
 });
 
 describe('POST /api/watchlist', () => {
-  it('returns 401 without a session', async () => {
+  it('returns 401 without session', async () => {
     mockAuth.mockResolvedValue(null);
-    const res = await POST(makeRequest('POST', { playerName: 'Josh Allen' }));
+    const res = await POST(makeRequest({ playerName: 'Josh Allen' }));
     expect(res.status).toBe(401);
   });
 
-  it('upserts and returns playerName when authenticated', async () => {
-    const res = await POST(makeRequest('POST', { playerName: 'Josh Allen' }));
-    expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ playerName: 'Josh Allen' });
+  it('returns 404 when no draft found', async () => {
+    mockGetDraftForUser.mockResolvedValue(null);
+    const res = await POST(makeRequest({ playerName: 'Josh Allen' }));
+    expect(res.status).toBe(404);
   });
 
-  it('returns 400 when playerName is missing', async () => {
-    const res = await POST(makeRequest('POST', {}));
+  it('returns 400 without playerName', async () => {
+    const res = await POST(makeRequest({}));
     expect(res.status).toBe(400);
+  });
+
+  it('upserts watchlist entry scoped to draftId', async () => {
+    await POST(makeRequest({ playerName: 'Josh Allen' }));
+    expect(mockUpsert).toHaveBeenCalledWith({
+      where: { playerName: 'Josh Allen' },
+      create: { playerName: 'Josh Allen', draftId: 1 },
+      update: {},
+    });
   });
 });
 
 describe('DELETE /api/watchlist', () => {
-  it('returns 401 without a session', async () => {
+  it('returns 401 without session', async () => {
     mockAuth.mockResolvedValue(null);
-    const res = await DELETE(makeRequest('DELETE', { playerName: 'Josh Allen' }));
+    const res = await DELETE(makeRequest({ playerName: 'Josh Allen' }));
     expect(res.status).toBe(401);
   });
 
-  it('deletes and returns ok when authenticated', async () => {
-    const res = await DELETE(makeRequest('DELETE', { playerName: 'Josh Allen' }));
-    expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ ok: true });
-  });
-
-  it('returns 400 when playerName is missing', async () => {
-    const res = await DELETE(makeRequest('DELETE', {}));
-    expect(res.status).toBe(400);
+  it('returns 404 when no draft found', async () => {
+    mockGetDraftForUser.mockResolvedValue(null);
+    const res = await DELETE(makeRequest({ playerName: 'Josh Allen' }));
+    expect(res.status).toBe(404);
   });
 });

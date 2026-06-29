@@ -6,6 +6,10 @@
 setup: install db-migrate db-seed ## First-time setup: install deps, run migrations, seed DB
 	@echo ""
 	@echo "✓ DraftOps is ready. Run 'make dev' to start."
+	@echo ""
+	@echo "Prerequisites (first time only):"
+	@echo "  1. Copy .env.example → .env.local and set DATABASE_URL"
+	@echo "  2. make db-start  (start local Postgres)"
 
 .PHONY: install
 install: ## Install dependencies
@@ -64,6 +68,14 @@ test-coverage: ## Run tests with coverage report
 check: typecheck lint format-check test ## Run all checks (typecheck, lint, format, test)
 
 # ── Database ──────────────────────────────────────────────────────────────────
+
+.PHONY: db-start
+db-start: ## Start the local PostgreSQL service (WSL2)
+	sudo service postgresql start
+
+.PHONY: db-stop
+db-stop: ## Stop the local PostgreSQL service (WSL2)
+	sudo service postgresql stop
 
 .PHONY: db-migrate
 db-migrate: ## Run pending database migrations

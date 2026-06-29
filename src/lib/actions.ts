@@ -1,6 +1,7 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
+import { redirect } from 'next/navigation';
 import { auth } from '@/auth';
 import { prisma } from '@/lib/db';
 import { getDraft } from '@/lib/draft';
@@ -75,6 +76,55 @@ export async function deleteBid(data: { id: number; draftId: number }): Promise<
   });
   if (deleteResult.count === 0) throw new Error('Bid not found');
   revalidatePath(`/draft/${data.draftId}`);
+}
+
+interface TeamInput {
+  handle: string;
+  displayName: string;
+  isMine: boolean;
+}
+
+export async function createDraft(data: {
+  name: string;
+  budgetPerTeam: number;
+  teams: TeamInput[];
+}): Promise<void> {
+  const session = await auth();
+  if (!session) throw new Error('Unauthorized');
+
+  const handles = data.teams.map((t) => t.handle.trim());
+  if (new Set(handles).size !== handles.length) throw new Error('Duplicate handles');
+  if (!data.teams.some((t) => t.isMine)) throw new Error('No team marked as mine');
+
+  const coerced = data.teams.map((t) => ({
+    handle: t.handle.trim(),
+    displayName: t.displayName.trim() || t.handle.trim(),
+    isMine: t.isMine,
+  }));
+
+  const draftId = await prisma.$transaction(async (tx) => {
+    const draft = await tx.draft.create({
+      data: { name: data.name.trim(), ownerId: session.user.id, status: 'ACTIVE' },
+    });
+
+    let ownerTeamId: number | null = null;
+    for (const team of coerced) {
+      const created = await tx.team.create({
+        data: {
+          handle: team.handle,
+          displayName: team.displayName,
+          budget: data.budgetPerTeam,
+          draftId: draft.id,
+        },
+      });
+      if (team.isMine) ownerTeamId = created.id;
+    }
+
+    await tx.draft.update({ where: { id: draft.id }, data: { ownerTeamId } });
+    return draft.id;
+  });
+
+  redirect(`/draft/${draftId}`);
 }
 
 export async function completeDraft(draftId: number): Promise<void> {

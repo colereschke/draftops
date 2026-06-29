@@ -50,6 +50,14 @@ const mockClaim: ClaimedBid = {
   teamHandle: 'coreschke',
 };
 
+beforeEach(() => {
+  global.fetch = jest.fn().mockResolvedValue({ ok: true } as Response);
+});
+
+afterEach(() => {
+  jest.restoreAllMocks();
+});
+
 describe('AuctionSheet with claimed bids', () => {
   it('renders without claimed bids and does not show a Claimed column', () => {
     render(<AuctionSheet claimedBids={[]} teams={mockTeams} nominatedPlayers={[]} />);
@@ -101,5 +109,46 @@ describe('AuctionSheet with claimed bids', () => {
 
     // Modal opens in add mode
     expect(screen.getByRole('button', { name: /log bid/i })).toBeInTheDocument();
+  });
+
+  it('shows LIVE badge for a player in the nominatedPlayers prop', () => {
+    render(<AuctionSheet claimedBids={[]} teams={mockTeams} nominatedPlayers={['Josh Allen']} />);
+    expect(screen.getByText('LIVE')).toBeInTheDocument();
+  });
+
+  it('shows Nom button in modal for an unnominated player', () => {
+    render(<AuctionSheet claimedBids={[]} teams={mockTeams} nominatedPlayers={[]} />);
+    fireEvent.click(screen.getByText('Josh Allen'));
+    expect(screen.getByRole('button', { name: /^nom$/i })).toBeInTheDocument();
+  });
+
+  it('shows In Auction in modal for an already-nominated player', () => {
+    render(<AuctionSheet claimedBids={[]} teams={mockTeams} nominatedPlayers={['Josh Allen']} />);
+    fireEvent.click(screen.getAllByText('Josh Allen')[0]);
+    expect(screen.getByText(/in auction/i)).toBeInTheDocument();
+  });
+
+  it('closes modal, shows LIVE badge, and calls /api/nominated after clicking Nom', async () => {
+    render(<AuctionSheet claimedBids={[]} teams={mockTeams} nominatedPlayers={[]} />);
+
+    fireEvent.click(screen.getByText('Josh Allen'));
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /^nom$/i }));
+
+    // Modal should close
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+
+    // LIVE badge should appear optimistically
+    expect(screen.getByText('LIVE')).toBeInTheDocument();
+
+    // API should have been called
+    expect(global.fetch).toHaveBeenCalledWith(
+      '/api/nominated',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({ playerName: 'Josh Allen' }),
+      }),
+    );
   });
 });

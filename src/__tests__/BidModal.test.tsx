@@ -145,3 +145,60 @@ describe('BidModal — edit mode', () => {
     expect(screen.getByRole('button', { name: /update bid/i })).toBeInTheDocument();
   });
 });
+
+describe('BidModal — nomination', () => {
+  it('shows a Nom button when onNominate is provided and isNominated is false', () => {
+    render(
+      <BidModal
+        player={mockPlayer}
+        teams={mockTeams}
+        onClose={jest.fn()}
+        onSubmit={jest.fn()}
+        onNominate={jest.fn()}
+        isNominated={false}
+      />,
+    );
+    expect(screen.getByRole('button', { name: /^nom$/i })).toBeInTheDocument();
+  });
+
+  it('calls onNominate and onClose when Nom is clicked', () => {
+    const onNominate = jest.fn();
+    const onClose = jest.fn();
+    render(
+      <BidModal
+        player={mockPlayer}
+        teams={mockTeams}
+        onClose={onClose}
+        onSubmit={jest.fn()}
+        onNominate={onNominate}
+        isNominated={false}
+      />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: /^nom$/i }));
+    expect(onNominate).toHaveBeenCalled();
+    expect(onClose).toHaveBeenCalled();
+  });
+
+  it('shows "In Auction" and no Nom button when isNominated is true', () => {
+    render(
+      <BidModal
+        player={mockPlayer}
+        teams={mockTeams}
+        onClose={jest.fn()}
+        onSubmit={jest.fn()}
+        onNominate={jest.fn()}
+        isNominated={true}
+      />,
+    );
+    expect(screen.queryByRole('button', { name: /^nom$/i })).not.toBeInTheDocument();
+    expect(screen.getByText(/in auction/i)).toBeInTheDocument();
+  });
+
+  it('shows neither Nom button nor In Auction label when onNominate is not provided', () => {
+    render(
+      <BidModal player={mockPlayer} teams={mockTeams} onClose={jest.fn()} onSubmit={jest.fn()} />,
+    );
+    expect(screen.queryByRole('button', { name: /^nom$/i })).not.toBeInTheDocument();
+    expect(screen.queryByText(/in auction/i)).not.toBeInTheDocument();
+  });
+});

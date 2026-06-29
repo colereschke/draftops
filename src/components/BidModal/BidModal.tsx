@@ -10,6 +10,8 @@ interface BidModalProps {
   onClose: () => void;
   onSubmit: (data: { price: number; teamId: number }) => void;
   onDelete?: () => void;
+  onNominate?: () => void;
+  isNominated?: boolean;
   serverError?: string;
 }
 
@@ -20,6 +22,8 @@ export default function BidModal({
   onClose,
   onSubmit,
   onDelete,
+  onNominate,
+  isNominated,
   serverError,
 }: BidModalProps) {
   const isEdit = !!existingBid;
@@ -185,24 +189,58 @@ export default function BidModal({
         )}
 
         {/* Actions */}
-        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 4 }}>
-          {isEdit && onDelete && (
-            <button
-              onClick={onDelete}
-              style={{
-                marginRight: 'auto',
-                padding: '7px 14px',
-                borderRadius: 6,
-                border: '1px solid #e05050',
-                background: 'transparent',
-                color: '#e05050',
-                fontSize: 12,
-                cursor: 'pointer',
-              }}
-            >
-              Remove
-            </button>
-          )}
+        <div
+          style={{
+            display: 'flex',
+            gap: 8,
+            justifyContent: 'flex-end',
+            marginTop: 4,
+            alignItems: 'center',
+          }}
+        >
+          {/* Left side: Remove (edit) and Nom / In Auction */}
+          <div style={{ display: 'flex', gap: 8, marginRight: 'auto', alignItems: 'center' }}>
+            {isEdit && onDelete && (
+              <button
+                onClick={onDelete}
+                style={{
+                  padding: '7px 14px',
+                  borderRadius: 6,
+                  border: '1px solid #e05050',
+                  background: 'transparent',
+                  color: '#e05050',
+                  fontSize: 12,
+                  cursor: 'pointer',
+                }}
+              >
+                Remove
+              </button>
+            )}
+            {onNominate && !isNominated && (
+              <button
+                onClick={() => {
+                  onNominate();
+                  onClose();
+                }}
+                style={{
+                  padding: '7px 14px',
+                  borderRadius: 6,
+                  border: '1px solid #40b0b0',
+                  background: 'transparent',
+                  color: '#40b0b0',
+                  fontSize: 12,
+                  cursor: 'pointer',
+                }}
+              >
+                Nom
+              </button>
+            )}
+            {onNominate && isNominated && (
+              <span style={{ fontSize: 12, color: '#40b0b0' }}>In Auction</span>
+            )}
+          </div>
+
+          {/* Right side: Cancel + submit */}
           <button
             onClick={onClose}
             style={{

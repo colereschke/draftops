@@ -40,6 +40,7 @@ export default function AuctionSheet({ claimedBids, teams, nominatedPlayers }: A
   const [modalPlayer, setModalPlayer] = useState<(typeof players)[0] | null>(null);
   const [modalError, setModalError] = useState<string>('');
   const [, startTransition] = useTransition();
+  const [extraNominated, setExtraNominated] = useState<string[]>([]);
 
   const [optimisticBids, dispatchOptimistic] = useOptimistic<ClaimedBid[], OptimisticAction>(
     claimedBids,
@@ -57,7 +58,10 @@ export default function AuctionSheet({ claimedBids, teams, nominatedPlayers }: A
     [optimisticBids],
   );
 
-  const nominatedSet = useMemo(() => new Set(nominatedPlayers), [nominatedPlayers]);
+  const nominatedSet = useMemo(
+    () => new Set([...nominatedPlayers, ...extraNominated]),
+    [nominatedPlayers, extraNominated],
+  );
 
   const mySpent = useMemo(() => {
     const myTeam = teams.find((t) => t.handle === 'coreschke');
@@ -138,6 +142,15 @@ export default function AuctionSheet({ claimedBids, teams, nominatedPlayers }: A
           setModalError('Failed to remove bid. Please try again.');
         }
       }
+    });
+  }
+
+  function handleNominate(playerName: string) {
+    setExtraNominated((prev) => [...prev, playerName]);
+    void fetch('/api/nominated', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ playerName }),
     });
   }
 
@@ -842,6 +855,8 @@ export default function AuctionSheet({ claimedBids, teams, nominatedPlayers }: A
           onSubmit={handleModalSubmit}
           onDelete={claimMap.has(modalPlayer.player) ? handleModalDelete : undefined}
           serverError={modalError}
+          isNominated={nominatedSet.has(modalPlayer.player)}
+          onNominate={() => handleNominate(modalPlayer.player)}
         />
       )}
     </div>

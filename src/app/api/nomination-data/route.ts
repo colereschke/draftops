@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { auth } from '@/auth';
 import { prisma } from '@/lib/db';
+import { getDraftForUser } from '@/lib/draft';
 import { ROSTER_SIZE } from '@/lib/teams';
 import type { TeamStats, AuctionResultEntry } from '@/types';
 
@@ -8,7 +9,13 @@ export async function GET() {
   const session = await auth();
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const teams = await prisma.team.findMany({ include: { results: true } });
+  const draft = await getDraftForUser(session.user.id);
+  if (!draft) return NextResponse.json({ error: 'No draft found' }, { status: 404 });
+
+  const teams = await prisma.team.findMany({
+    where: { draftId: draft.id },
+    include: { results: true },
+  });
 
   const teamStats: TeamStats[] = teams.map((team) => {
     const spent = team.results.reduce((sum: number, r) => sum + r.price, 0);
@@ -46,8 +53,14 @@ export async function GET() {
   );
 
   const [watchlistEntries, nominatedEntries] = await Promise.all([
-    prisma.playerWatchlist.findMany({ orderBy: { createdAt: 'asc' } }),
-    prisma.nominatedPlayer.findMany({ orderBy: { createdAt: 'asc' } }),
+    prisma.playerWatchlist.findMany({
+      where: { draftId: draft.id },
+      orderBy: { createdAt: 'asc' },
+    }),
+    prisma.nominatedPlayer.findMany({
+      where: { draftId: draft.id },
+      orderBy: { createdAt: 'asc' },
+    }),
   ]);
 
   return NextResponse.json({
@@ -55,5 +68,6 @@ export async function GET() {
     auctionResults,
     watchlist: watchlistEntries.map((e) => e.playerName),
     nominated: nominatedEntries.map((e) => e.playerName),
+    ownerHandle: draft.ownerTeam?.handle ?? null,
   });
 }

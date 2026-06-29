@@ -1,10 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/auth';
 import { prisma } from '@/lib/db';
+import { getDraftForUser } from '@/lib/draft';
 
 export async function POST(request: NextRequest) {
   const session = await auth();
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+  const draft = await getDraftForUser(session.user.id);
+  if (!draft) return NextResponse.json({ error: 'No draft found' }, { status: 404 });
 
   const body = (await request.json()) as { playerName?: string };
   if (!body.playerName) {
@@ -12,7 +16,7 @@ export async function POST(request: NextRequest) {
   }
   const entry = await prisma.nominatedPlayer.upsert({
     where: { playerName: body.playerName },
-    create: { playerName: body.playerName },
+    create: { playerName: body.playerName, draftId: draft.id },
     update: {},
   });
   return NextResponse.json({ playerName: entry.playerName });
@@ -21,6 +25,9 @@ export async function POST(request: NextRequest) {
 export async function DELETE(request: NextRequest) {
   const session = await auth();
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+  const draft = await getDraftForUser(session.user.id);
+  if (!draft) return NextResponse.json({ error: 'No draft found' }, { status: 404 });
 
   const body = (await request.json()) as { playerName?: string };
   if (!body.playerName) {

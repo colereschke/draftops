@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { auth } from '@/auth';
 import { prisma } from '@/lib/db';
+import { getDraftForUser } from '@/lib/draft';
 
 export async function logBid(data: {
   player: string;
@@ -15,6 +16,9 @@ export async function logBid(data: {
   const session = await auth();
   if (!session) throw new Error('Unauthorized');
 
+  const draft = await getDraftForUser(session.user.id);
+  if (!draft) throw new Error('No draft found');
+
   await prisma.auctionResult.create({
     data: {
       player: data.player,
@@ -23,9 +27,12 @@ export async function logBid(data: {
       price: data.price,
       sfRank: data.sfRank,
       teamId: data.teamId,
+      draftId: draft.id,
     },
   });
-  await prisma.nominatedPlayer.deleteMany({ where: { playerName: data.player } });
+  await prisma.nominatedPlayer.deleteMany({
+    where: { playerName: data.player, draftId: draft.id },
+  });
   revalidatePath('/');
 }
 
@@ -37,8 +44,12 @@ export async function updateBid(data: {
   const session = await auth();
   if (!session) throw new Error('Unauthorized');
 
-  await prisma.auctionResult.update({
-    where: { id: data.id },
+  const draft = await getDraftForUser(session.user.id);
+  if (!draft) throw new Error('No draft found');
+
+  // updateMany with { id, draftId } prevents editing bids from other drafts
+  await prisma.auctionResult.updateMany({
+    where: { id: data.id, draftId: draft.id },
     data: { price: data.price, teamId: data.teamId },
   });
   revalidatePath('/');
@@ -48,6 +59,10 @@ export async function deleteBid(data: { id: number }): Promise<void> {
   const session = await auth();
   if (!session) throw new Error('Unauthorized');
 
-  await prisma.auctionResult.delete({ where: { id: data.id } });
+  const draft = await getDraftForUser(session.user.id);
+  if (!draft) throw new Error('No draft found');
+
+  // deleteMany with { id, draftId } prevents deleting bids from other drafts
+  await prisma.auctionResult.deleteMany({ where: { id: data.id, draftId: draft.id } });
   revalidatePath('/');
 }

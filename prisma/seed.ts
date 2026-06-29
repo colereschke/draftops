@@ -28,7 +28,7 @@ async function main() {
   await Promise.all(
     LEAGUE_TEAMS.map((team) =>
       prisma.team.upsert({
-        where: { handle: team.handle },
+        where: { handle_draftId: { handle: team.handle, draftId: draft.id } },
         update: {},
         create: {
           handle: team.handle,

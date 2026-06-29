@@ -62,7 +62,7 @@ describe('POST /api/nominated', () => {
   it('upserts nominated entry scoped to draftId', async () => {
     await POST(makeRequest({ playerName: 'Josh Allen' }));
     expect(mockUpsert).toHaveBeenCalledWith({
-      where: { playerName: 'Josh Allen' },
+      where: { playerName_draftId: { playerName: 'Josh Allen', draftId: 1 } },
       create: { playerName: 'Josh Allen', draftId: 1 },
       update: {},
     });

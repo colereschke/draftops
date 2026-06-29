@@ -18,6 +18,31 @@ A dynasty fantasy football auction startup draft tool. Built for a 12-team Super
 
 **Prerequisites:** [Node.js](https://nodejs.org) 20+, [pnpm](https://pnpm.io) 11+
 
+### 1. Create a Discord OAuth app
+
+DraftOps uses Discord for authentication. Each developer needs their own Discord application — it's free and takes two minutes.
+
+1. Go to [discord.com/developers/applications](https://discord.com/developers/applications) and click **New Application**
+2. In your app, go to **OAuth2** and add this redirect URI:
+   ```
+   http://localhost:3000/api/auth/callback/discord
+   ```
+3. Copy your **Client ID** and generate a **Client Secret** (OAuth2 → General)
+
+### 2. Configure environment variables
+
+Create `.env.local` in the repo root:
+
+```bash
+AUTH_SECRET=        # any random string: openssl rand -base64 32
+AUTH_DISCORD_ID=    # client ID from step 1
+AUTH_DISCORD_SECRET= # client secret from step 1
+```
+
+`AUTH_SECRET` just signs JWT cookies locally — it doesn't need to match anyone else's.
+
+### 3. Install and run
+
 ```bash
 git clone <repo-url>
 cd draftops
@@ -25,7 +50,7 @@ make setup   # install deps, run migrations, seed 12 teams
 make dev     # start at http://localhost:3000
 ```
 
-That's it.
+Visit any page and you'll be redirected to the Discord sign-in screen.
 
 ## Features
 

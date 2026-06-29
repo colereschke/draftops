@@ -171,7 +171,7 @@ export default function AuctionSheet({
 
   function handleNominate(playerName: string) {
     setExtraNominated((prev) => [...prev, playerName]);
-    void fetch('/api/nominated', {
+    void fetch(`/api/draft/${draftId}/nominated`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ playerName }),

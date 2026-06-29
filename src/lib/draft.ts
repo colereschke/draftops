@@ -3,14 +3,6 @@ import type { Prisma } from '@prisma/client';
 
 export type DraftWithOwnerTeam = Prisma.DraftGetPayload<{ include: { ownerTeam: true } }>;
 
-// Kept during migration — removed in Task 4 once all call sites are updated.
-export async function getDraftForUser(userId: string): Promise<DraftWithOwnerTeam | null> {
-  return prisma.draft.findFirst({
-    where: { ownerId: userId },
-    include: { ownerTeam: true },
-  });
-}
-
 // For pages inside /draft/[draftId]/ — validates ownership.
 export async function getDraft(
   userId: string,

@@ -232,7 +232,7 @@ describe('AuctionSheet with claimed bids', () => {
 
     // API should have been called
     expect(global.fetch).toHaveBeenCalledWith(
-      '/api/nominated',
+      '/api/draft/1/nominated',
       expect.objectContaining({
         method: 'POST',
         body: JSON.stringify({ playerName: 'Josh Allen' }),

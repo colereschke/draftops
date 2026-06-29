@@ -10,7 +10,7 @@ jest.mock('@/lib/db', () => ({
   },
 }));
 
-import { getDraftForUser, getDraft, getActiveDraftsForUser } from '@/lib/draft';
+import { getDraft, getActiveDraftsForUser } from '@/lib/draft';
 
 const OWNER_TEAM = { id: 7, handle: 'coreschke', displayName: 'Cole' };
 const CLAIMED_DRAFT = {
@@ -23,23 +23,6 @@ const CLAIMED_DRAFT = {
 
 beforeEach(() => {
   jest.clearAllMocks();
-});
-
-describe('getDraftForUser', () => {
-  it('returns draft owned by the userId', async () => {
-    mockDraftFindFirst.mockResolvedValue(CLAIMED_DRAFT);
-    const result = await getDraftForUser('discord-123');
-    expect(mockDraftFindFirst).toHaveBeenCalledWith({
-      where: { ownerId: 'discord-123' },
-      include: { ownerTeam: true },
-    });
-    expect(result).toEqual(CLAIMED_DRAFT);
-  });
-  it('returns null when no draft found for userId', async () => {
-    mockDraftFindFirst.mockResolvedValue(null);
-    const result = await getDraftForUser('discord-123');
-    expect(result).toBeNull();
-  });
 });
 
 describe('getDraft', () => {

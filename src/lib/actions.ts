@@ -19,6 +19,9 @@ export async function logBid(data: {
   const draft = await getDraftForUser(session.user.id);
   if (!draft) throw new Error('No draft found');
 
+  const team = await prisma.team.findFirst({ where: { id: data.teamId, draftId: draft.id } });
+  if (!team) throw new Error('Team not found in draft');
+
   await prisma.auctionResult.create({
     data: {
       player: data.player,
@@ -46,6 +49,9 @@ export async function updateBid(data: {
 
   const draft = await getDraftForUser(session.user.id);
   if (!draft) throw new Error('No draft found');
+
+  const team = await prisma.team.findFirst({ where: { id: data.teamId, draftId: draft.id } });
+  if (!team) throw new Error('Team not found in draft');
 
   // updateMany with { id, draftId } prevents editing bids from other drafts
   await prisma.auctionResult.updateMany({

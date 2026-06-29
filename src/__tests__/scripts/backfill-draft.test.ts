@@ -4,6 +4,7 @@
 // Tests for the backfill-draft script's core logic (DB calls mocked).
 // The actual script is in prisma/scripts/backfill-draft.ts.
 
+const mockDraftFindFirst = jest.fn();
 const mockDraftCreate = jest.fn();
 const mockTeamFindFirst = jest.fn();
 const mockTeamUpdateMany = jest.fn();
@@ -13,7 +14,7 @@ const mockNominatedPlayerUpdateMany = jest.fn();
 const mockDraftUpdate = jest.fn();
 
 const mockPrisma = {
-  draft: { create: mockDraftCreate, update: mockDraftUpdate },
+  draft: { findFirst: mockDraftFindFirst, create: mockDraftCreate, update: mockDraftUpdate },
   team: { findFirst: mockTeamFindFirst, updateMany: mockTeamUpdateMany },
   auctionResult: { updateMany: mockAuctionResultUpdateMany },
   playerWatchlist: { updateMany: mockPlayerWatchlistUpdateMany },
@@ -25,6 +26,7 @@ import { runBackfill } from '../../../prisma/scripts/backfill-draft';
 
 beforeEach(() => {
   jest.clearAllMocks();
+  mockDraftFindFirst.mockResolvedValue(null);
   mockDraftCreate.mockResolvedValue({ id: 1 });
   mockTeamFindFirst.mockResolvedValue({ id: 7 }); // coreschke team id
   mockTeamUpdateMany.mockResolvedValue({ count: 12 });
@@ -94,5 +96,12 @@ describe('runBackfill', () => {
     mockTeamFindFirst.mockResolvedValue(null);
     await runBackfill(mockPrisma as never, 'coreschke', null);
     expect(mockDraftUpdate).not.toHaveBeenCalled();
+  });
+
+  it('skips backfill if a draft with the same name already exists', async () => {
+    mockDraftFindFirst.mockResolvedValue({ id: 99 });
+    await runBackfill(mockPrisma as never, 'coreschke', null);
+    expect(mockDraftCreate).not.toHaveBeenCalled();
+    expect(mockTeamUpdateMany).not.toHaveBeenCalled();
   });
 });

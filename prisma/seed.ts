@@ -18,7 +18,7 @@ async function main() {
     draft = await prisma.draft.create({
       data: {
         name: "Cole's Draft 2025",
-        ownerId: process.env.OWNER_DISCORD_ID ?? null,
+        ownerId: process.env.OWNER_DISCORD_ID || null,
         ownerTeamId: null,
       },
     });

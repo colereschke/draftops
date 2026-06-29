@@ -78,6 +78,7 @@ export default function NominationHelper() {
       data.auctionResults,
       data.watchlist,
       data.nominated,
+      // null ownerHandle → no owner team excluded from rival demand scoring (correct for unclaimed draft)
       data.ownerHandle ?? '',
     );
   }, [data]);

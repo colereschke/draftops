@@ -8,6 +8,7 @@ import { Pool } from 'pg';
 // PrismaClient type used by both the script and tests
 type PrismaLike = {
   draft: {
+    findFirst: (args: { where: { name: string } }) => Promise<{ id: number } | null>;
     create: (args: {
       data: { name: string; ownerId: string | null; ownerTeamId: null };
     }) => Promise<{ id: number }>;
@@ -48,6 +49,12 @@ export async function runBackfill(
   ownerHandle: string,
   ownerDiscordId: string | null,
 ): Promise<void> {
+  const existing = await prisma.draft.findFirst({ where: { name: "Cole's Draft 2025" } });
+  if (existing) {
+    console.log(`Draft "${existing.id}" already exists — skipping backfill.`);
+    return;
+  }
+
   const draft = await prisma.draft.create({
     data: { name: "Cole's Draft 2025", ownerId: ownerDiscordId, ownerTeamId: null },
   });
@@ -90,7 +97,7 @@ async function main() {
   // Set OWNER_DISCORD_ID in .env.local to your Discord snowflake before running.
   // Find it at https://discord.com/developers/docs/resources/user (or check server logs
   // after first sign-in — the JWT sub claim is your Discord ID).
-  const ownerDiscordId = process.env.OWNER_DISCORD_ID ?? null;
+  const ownerDiscordId = process.env.OWNER_DISCORD_ID || null;
 
   try {
     await runBackfill(prisma as never, 'coreschke', ownerDiscordId);

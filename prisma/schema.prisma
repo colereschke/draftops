@@ -10,7 +10,7 @@ datasource db {
 model Draft {
   id          Int      @id @default(autoincrement())
   name        String
-  ownerId     String?  // Auth.js userId (Discord snowflake) — nullable until claimed on first sign-in
+  ownerId     String?  @unique // Auth.js userId (Discord snowflake) — nullable until claimed on first sign-in
   ownerTeamId Int?     // which Team within this draft belongs to the owner; nullable until backfill
   createdAt   DateTime @default(now())
 

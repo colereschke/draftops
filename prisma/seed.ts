@@ -42,7 +42,9 @@ async function main() {
 
   // Set ownerTeamId if not already set
   if (!draft.ownerTeamId) {
-    const ownerTeam = await prisma.team.findFirst({ where: { handle: 'coreschke' } });
+    const ownerTeam = await prisma.team.findFirst({
+      where: { handle: 'coreschke', draftId: draft.id },
+    });
     if (ownerTeam) {
       await prisma.draft.update({ where: { id: draft.id }, data: { ownerTeamId: ownerTeam.id } });
     }

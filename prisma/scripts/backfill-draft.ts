@@ -15,7 +15,9 @@ type PrismaLike = {
     update: (args: { where: { id: number }; data: { ownerTeamId: number } }) => Promise<unknown>;
   };
   team: {
-    findFirst: (args: { where: { handle: string } }) => Promise<{ id: number } | null>;
+    findFirst: (args: {
+      where: { handle: string; draftId: number };
+    }) => Promise<{ id: number } | null>;
     updateMany: (args: {
       where: { draftId: null };
       data: { draftId: number };
@@ -79,7 +81,9 @@ export async function runBackfill(
     );
   }
 
-  const ownerTeam = await prisma.team.findFirst({ where: { handle: ownerHandle } });
+  const ownerTeam = await prisma.team.findFirst({
+    where: { handle: ownerHandle, draftId: draft.id },
+  });
   if (ownerTeam) {
     await prisma.draft.update({ where: { id: draft.id }, data: { ownerTeamId: ownerTeam.id } });
     console.log(`Set ownerTeamId=${ownerTeam.id} (handle: ${ownerHandle})`);

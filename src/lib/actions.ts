@@ -54,10 +54,11 @@ export async function updateBid(data: {
   if (!team) throw new Error('Team not found in draft');
 
   // updateMany with { id, draftId } prevents editing bids from other drafts
-  await prisma.auctionResult.updateMany({
+  const updateResult = await prisma.auctionResult.updateMany({
     where: { id: data.id, draftId: draft.id },
     data: { price: data.price, teamId: data.teamId },
   });
+  if (updateResult.count === 0) throw new Error('Bid not found');
   revalidatePath('/');
 }
 
@@ -69,6 +70,9 @@ export async function deleteBid(data: { id: number }): Promise<void> {
   if (!draft) throw new Error('No draft found');
 
   // deleteMany with { id, draftId } prevents deleting bids from other drafts
-  await prisma.auctionResult.deleteMany({ where: { id: data.id, draftId: draft.id } });
+  const deleteResult = await prisma.auctionResult.deleteMany({
+    where: { id: data.id, draftId: draft.id },
+  });
+  if (deleteResult.count === 0) throw new Error('Bid not found');
   revalidatePath('/');
 }

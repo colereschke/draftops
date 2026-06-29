@@ -85,7 +85,7 @@ describe('runBackfill', () => {
 
   it('sets ownerTeamId to the team with the given owner handle', async () => {
     await runBackfill(mockPrisma as never, 'coreschke', null);
-    expect(mockTeamFindFirst).toHaveBeenCalledWith({ where: { handle: 'coreschke' } });
+    expect(mockTeamFindFirst).toHaveBeenCalledWith({ where: { handle: 'coreschke', draftId: 1 } });
     expect(mockDraftUpdate).toHaveBeenCalledWith({
       where: { id: 1 },
       data: { ownerTeamId: 7 },

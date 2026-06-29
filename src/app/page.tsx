@@ -1,8 +1,13 @@
 import { prisma } from '@/lib/db';
 import AuctionSheet from '@/components/AuctionSheet/AuctionSheet';
 import type { ClaimedBid, LeagueTeam } from '@/types';
+import { auth } from '@/auth';
+import { redirect } from 'next/navigation';
 
 export default async function Home() {
+  const session = await auth();
+  if (!session) redirect('/sign-in');
+
   const [rawBids, teams, nominatedEntries] = await Promise.all([
     prisma.auctionResult.findMany({
       select: {

@@ -1,10 +1,15 @@
 import { prisma } from '@/lib/db';
 import { computeTeamStats } from '@/lib/computeTeamStats';
 import RosterTracker from '@/components/RosterTracker';
+import { auth } from '@/auth';
+import { redirect } from 'next/navigation';
 
 export const dynamic = 'force-dynamic';
 
 export default async function TeamsPage() {
+  const session = await auth();
+  if (!session) redirect('/sign-in');
+
   let rawTeams;
   try {
     rawTeams = await prisma.team.findMany({

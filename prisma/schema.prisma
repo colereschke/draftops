@@ -6,41 +6,61 @@ datasource db {
   provider = "postgresql"
 }
 
-// One row per team in the league (12 teams total)
+// A draft is the top-level container for a single auction. One owner, all data scoped here.
+model Draft {
+  id          Int      @id @default(autoincrement())
+  name        String
+  ownerId     String?  // Auth.js userId (Discord snowflake) — nullable until claimed on first sign-in
+  ownerTeamId Int?     // which Team within this draft belongs to the owner; nullable until backfill
+  createdAt   DateTime @default(now())
+
+  teams            Team[]            @relation("DraftTeams")
+  ownerTeam        Team?             @relation("DraftOwnerTeam", fields: [ownerTeamId], references: [id])
+  auctionResults   AuctionResult[]
+  watchlistEntries PlayerWatchlist[]
+  nominatedPlayers NominatedPlayer[]
+}
+
 model Team {
   id          Int             @id @default(autoincrement())
-  handle      String          @unique  // e.g. "coreschke", "chappy72"
+  handle      String          @unique
   displayName String?
   budget      Int             @default(1000)
   createdAt   DateTime        @default(now())
   updatedAt   DateTime        @updatedAt
+  draftId     Int?
+  draft       Draft?          @relation("DraftTeams", fields: [draftId], references: [id])
   results     AuctionResult[]
+  ownedByDraft Draft[]        @relation("DraftOwnerTeam")
 }
 
-// One row per completed auction bid
 model AuctionResult {
   id        Int      @id @default(autoincrement())
-  player    String   // player name
-  position  String   // QB / RB / WR / TE / PICK / PKG
-  nflTeam   String   // NFL team abbreviation
-  price     Int      // winning bid price
-  sfRank    Int?     // superflex rank at time of bid (optional reference)
+  player    String
+  position  String
+  nflTeam   String
+  price     Int
+  sfRank    Int?
   notes     String?
   teamId    Int
   team      Team     @relation(fields: [teamId], references: [id])
+  draftId   Int?
+  draft     Draft?   @relation(fields: [draftId], references: [id])
   createdAt DateTime @default(now())
 }
 
-// Cole's personal watchlist — players he still wants to win; excluded from nomination suggestions
 model PlayerWatchlist {
   id         Int      @id @default(autoincrement())
   playerName String   @unique
+  draftId    Int?
+  draft      Draft?   @relation(fields: [draftId], references: [id])
   createdAt  DateTime @default(now())
 }
 
-// Players currently up for auction (nominated but not yet won); excluded from nomination suggestions
 model NominatedPlayer {
   id         Int      @id @default(autoincrement())
   playerName String   @unique
+  draftId    Int?
+  draft      Draft?   @relation(fields: [draftId], references: [id])
   createdAt  DateTime @default(now())
 }

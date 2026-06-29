@@ -4,7 +4,7 @@ import reactHooksPlugin from 'eslint-plugin-react-hooks';
 import prettierConfig from 'eslint-config-prettier';
 
 const config = [
-  { ignores: ['existing_project_docs/**', '.claude/worktrees/**'] },
+  { ignores: ['existing_project_docs/**', '.claude/worktrees/**', '.claire/worktrees/**'] },
   ...nextConfig,
   ...nextTypescript,
   {

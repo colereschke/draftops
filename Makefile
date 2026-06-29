@@ -94,10 +94,6 @@ db-reset: ## Reset DB and re-run migrations + seed (destructive!)
 db-studio: ## Open Prisma Studio (visual DB browser)
 	pnpm prisma studio
 
-.PHONY: db-migrate-data
-db-migrate-data: ## Run the one-time SQLite→PostgreSQL data migration script
-	pnpm tsx prisma/migrate-sqlite-to-postgres.ts
-
 # ── Help ──────────────────────────────────────────────────────────────────────
 
 .PHONY: help

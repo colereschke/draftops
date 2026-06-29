@@ -13,13 +13,15 @@ const prisma = new PrismaClient({ adapter });
 
 async function main() {
   console.log('Seeding teams...');
-  for (const team of LEAGUE_TEAMS) {
-    await prisma.team.upsert({
-      where: { handle: team.handle },
-      update: {},
-      create: { handle: team.handle, displayName: team.displayName, budget: 1000 },
-    });
-  }
+  await Promise.all(
+    LEAGUE_TEAMS.map((team) =>
+      prisma.team.upsert({
+        where: { handle: team.handle },
+        update: {},
+        create: { handle: team.handle, displayName: team.displayName, budget: 1000 },
+      }),
+    ),
+  );
   console.log('Done.');
 }
 

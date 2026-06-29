@@ -15,7 +15,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'playerName required' }, { status: 400 });
   }
   const entry = await prisma.nominatedPlayer.upsert({
-    where: { playerName: body.playerName },
+    where: { playerName_draftId: { playerName: body.playerName, draftId: draft.id } },
     create: { playerName: body.playerName, draftId: draft.id },
     update: {},
   });
@@ -34,7 +34,9 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json({ error: 'playerName required' }, { status: 400 });
   }
   try {
-    await prisma.nominatedPlayer.delete({ where: { playerName: body.playerName } });
+    await prisma.nominatedPlayer.delete({
+      where: { playerName_draftId: { playerName: body.playerName, draftId: draft.id } },
+    });
   } catch (e) {
     if ((e as { code?: string }).code !== 'P2025') {
       return NextResponse.json({ error: 'Internal server error' }, { status: 500 });

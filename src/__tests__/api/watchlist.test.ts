@@ -33,9 +33,9 @@ const MOCK_DRAFT = {
   ownerTeam: null,
 };
 
-function makeRequest(body: unknown): NextRequest {
+function makeRequest(body: unknown, method = 'POST'): NextRequest {
   return new NextRequest('http://localhost/api/watchlist', {
-    method: 'POST',
+    method,
     body: JSON.stringify(body),
     headers: { 'Content-Type': 'application/json' },
   });
@@ -69,7 +69,7 @@ describe('POST /api/watchlist', () => {
   it('upserts watchlist entry scoped to draftId', async () => {
     await POST(makeRequest({ playerName: 'Josh Allen' }));
     expect(mockUpsert).toHaveBeenCalledWith({
-      where: { playerName: 'Josh Allen' },
+      where: { playerName_draftId: { playerName: 'Josh Allen', draftId: 1 } },
       create: { playerName: 'Josh Allen', draftId: 1 },
       update: {},
     });
@@ -79,13 +79,13 @@ describe('POST /api/watchlist', () => {
 describe('DELETE /api/watchlist', () => {
   it('returns 401 without session', async () => {
     mockAuth.mockResolvedValue(null);
-    const res = await DELETE(makeRequest({ playerName: 'Josh Allen' }));
+    const res = await DELETE(makeRequest({ playerName: 'Josh Allen' }, 'DELETE'));
     expect(res.status).toBe(401);
   });
 
   it('returns 404 when no draft found', async () => {
     mockGetDraftForUser.mockResolvedValue(null);
-    const res = await DELETE(makeRequest({ playerName: 'Josh Allen' }));
+    const res = await DELETE(makeRequest({ playerName: 'Josh Allen' }, 'DELETE'));
     expect(res.status).toBe(404);
   });
 });

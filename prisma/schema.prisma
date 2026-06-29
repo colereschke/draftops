@@ -10,7 +10,7 @@ datasource db {
 model Draft {
   id          Int      @id @default(autoincrement())
   name        String
-  ownerId     String?  // Auth.js userId (Discord snowflake) — nullable until claimed on first sign-in
+  ownerId     String?  @unique // Auth.js userId (Discord snowflake) — nullable until claimed on first sign-in
   ownerTeamId Int?     // which Team within this draft belongs to the owner; nullable until backfill
   createdAt   DateTime @default(now())
 
@@ -23,15 +23,17 @@ model Draft {
 
 model Team {
   id          Int             @id @default(autoincrement())
-  handle      String          @unique
+  handle      String
   displayName String?
   budget      Int             @default(1000)
   createdAt   DateTime        @default(now())
   updatedAt   DateTime        @updatedAt
-  draftId     Int?
-  draft       Draft?          @relation("DraftTeams", fields: [draftId], references: [id])
+  draftId     Int
+  draft       Draft           @relation("DraftTeams", fields: [draftId], references: [id])
   results     AuctionResult[]
   ownedByDraft Draft[]        @relation("DraftOwnerTeam")
+
+  @@unique([handle, draftId])
 }
 
 model AuctionResult {
@@ -44,23 +46,27 @@ model AuctionResult {
   notes     String?
   teamId    Int
   team      Team     @relation(fields: [teamId], references: [id])
-  draftId   Int?
-  draft     Draft?   @relation(fields: [draftId], references: [id])
+  draftId   Int
+  draft     Draft    @relation(fields: [draftId], references: [id])
   createdAt DateTime @default(now())
 }
 
 model PlayerWatchlist {
   id         Int      @id @default(autoincrement())
-  playerName String   @unique
-  draftId    Int?
-  draft      Draft?   @relation(fields: [draftId], references: [id])
+  playerName String
+  draftId    Int
+  draft      Draft    @relation(fields: [draftId], references: [id])
   createdAt  DateTime @default(now())
+
+  @@unique([playerName, draftId])
 }
 
 model NominatedPlayer {
   id         Int      @id @default(autoincrement())
-  playerName String   @unique
-  draftId    Int?
-  draft      Draft?   @relation(fields: [draftId], references: [id])
+  playerName String
+  draftId    Int
+  draft      Draft    @relation(fields: [draftId], references: [id])
   createdAt  DateTime @default(now())
+
+  @@unique([playerName, draftId])
 }

@@ -88,6 +88,11 @@ export default function AuctionSheet({ claimedBids, teams, nominatedPlayers }: A
         } catch (e) {
           if (e instanceof Error && e.message === 'Unauthorized') {
             window.location.href = '/sign-in';
+          } else if (
+            e instanceof Error &&
+            (e.message === 'No draft found' || e.message === 'Team not found in draft')
+          ) {
+            setModalError('Draft not configured. Please check your setup.');
           } else {
             setModalError('Failed to save bid. Please try again.');
           }
@@ -117,6 +122,11 @@ export default function AuctionSheet({ claimedBids, teams, nominatedPlayers }: A
         } catch (e) {
           if (e instanceof Error && e.message === 'Unauthorized') {
             window.location.href = '/sign-in';
+          } else if (
+            e instanceof Error &&
+            (e.message === 'No draft found' || e.message === 'Team not found in draft')
+          ) {
+            setModalError('Draft not configured. Please check your setup.');
           } else {
             setModalError('Failed to log bid. Please try again.');
           }
@@ -138,6 +148,11 @@ export default function AuctionSheet({ claimedBids, teams, nominatedPlayers }: A
       } catch (e) {
         if (e instanceof Error && e.message === 'Unauthorized') {
           window.location.href = '/sign-in';
+        } else if (
+          e instanceof Error &&
+          (e.message === 'No draft found' || e.message === 'Team not found in draft')
+        ) {
+          setModalError('Draft not configured. Please check your setup.');
         } else {
           setModalError('Failed to remove bid. Please try again.');
         }

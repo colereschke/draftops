@@ -18,7 +18,7 @@ async function main() {
     draft = await prisma.draft.create({
       data: {
         name: "Cole's Draft 2025",
-        ownerId: process.env.OWNER_DISCORD_ID ?? null,
+        ownerId: process.env.OWNER_DISCORD_ID || null,
         ownerTeamId: null,
       },
     });
@@ -28,7 +28,7 @@ async function main() {
   await Promise.all(
     LEAGUE_TEAMS.map((team) =>
       prisma.team.upsert({
-        where: { handle: team.handle },
+        where: { handle_draftId: { handle: team.handle, draftId: draft.id } },
         update: {},
         create: {
           handle: team.handle,
@@ -42,7 +42,9 @@ async function main() {
 
   // Set ownerTeamId if not already set
   if (!draft.ownerTeamId) {
-    const ownerTeam = await prisma.team.findFirst({ where: { handle: 'coreschke' } });
+    const ownerTeam = await prisma.team.findFirst({
+      where: { handle: 'coreschke', draftId: draft.id },
+    });
     if (ownerTeam) {
       await prisma.draft.update({ where: { id: draft.id }, data: { ownerTeamId: ownerTeam.id } });
     }

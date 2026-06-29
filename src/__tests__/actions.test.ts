@@ -4,6 +4,7 @@ const mockCreate = jest.fn().mockResolvedValue({});
 const mockUpdateMany = jest.fn().mockResolvedValue({ count: 1 });
 const mockDeleteMany = jest.fn().mockResolvedValue({ count: 1 });
 const mockNomDeleteMany = jest.fn().mockResolvedValue({});
+const mockTeamFindFirst = jest.fn();
 const mockRevalidatePath = jest.fn();
 const mockAuth = jest.fn();
 const mockGetDraftForUser = jest.fn();
@@ -17,6 +18,9 @@ jest.mock('@/lib/db', () => ({
     },
     nominatedPlayer: {
       deleteMany: (...args: unknown[]) => mockNomDeleteMany(...args),
+    },
+    team: {
+      findFirst: (...args: unknown[]) => mockTeamFindFirst(...args),
     },
   },
 }));
@@ -55,6 +59,7 @@ beforeEach(() => {
   jest.clearAllMocks();
   mockAuth.mockResolvedValue(MOCK_SESSION);
   mockGetDraftForUser.mockResolvedValue(MOCK_DRAFT);
+  mockTeamFindFirst.mockResolvedValue({ id: 3 });
 });
 
 describe('logBid', () => {
@@ -95,6 +100,11 @@ describe('logBid', () => {
     mockGetDraftForUser.mockResolvedValue(null);
     await expect(logBid(BID_DATA)).rejects.toThrow('No draft found');
   });
+
+  it('throws when teamId does not belong to the draft', async () => {
+    mockTeamFindFirst.mockResolvedValue(null);
+    await expect(logBid(BID_DATA)).rejects.toThrow('Team not found in draft');
+  });
 });
 
 describe('updateBid', () => {
@@ -120,6 +130,13 @@ describe('updateBid', () => {
   it('throws when no draft found for user', async () => {
     mockGetDraftForUser.mockResolvedValue(null);
     await expect(updateBid({ id: 5, price: 95, teamId: 2 })).rejects.toThrow('No draft found');
+  });
+
+  it('throws when teamId does not belong to the draft', async () => {
+    mockTeamFindFirst.mockResolvedValue(null);
+    await expect(updateBid({ id: 5, price: 95, teamId: 2 })).rejects.toThrow(
+      'Team not found in draft',
+    );
   });
 });
 

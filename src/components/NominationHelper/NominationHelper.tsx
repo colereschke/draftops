@@ -20,6 +20,7 @@ interface NomData {
 export default function NominationHelper() {
   const router = useRouter();
   const [data, setData] = useState<NomData | null>(null);
+  const [draftError, setDraftError] = useState<string | null>(null);
   const [posFilter, setPosFilter] = useState<'ALL' | Position>('ALL');
   const [watchlistSearch, setWatchlistSearch] = useState('');
   const [showDropdown, setShowDropdown] = useState(false);
@@ -35,7 +36,7 @@ export default function NominationHelper() {
           return;
         }
         if (res.status === 404) {
-          // No draft found for this user — show stale data or wait
+          setDraftError('No draft configured');
           return;
         }
         if (res.ok) setData(await res.json());
@@ -78,6 +79,7 @@ export default function NominationHelper() {
       data.auctionResults,
       data.watchlist,
       data.nominated,
+      // null ownerHandle → no owner team excluded from rival demand scoring (correct for unclaimed draft)
       data.ownerHandle ?? '',
     );
   }, [data]);
@@ -110,7 +112,7 @@ export default function NominationHelper() {
       body: JSON.stringify({ playerName }),
     });
     if (!res.ok) {
-      if (res.status === 401 || res.status === 404) {
+      if (res.status === 401) {
         router.replace('/sign-in');
         return;
       }
@@ -129,7 +131,7 @@ export default function NominationHelper() {
       body: JSON.stringify({ playerName }),
     });
     if (!res.ok) {
-      if (res.status === 401 || res.status === 404) {
+      if (res.status === 401) {
         router.replace('/sign-in');
         return;
       }
@@ -146,7 +148,7 @@ export default function NominationHelper() {
       body: JSON.stringify({ playerName }),
     });
     if (!res.ok) {
-      if (res.status === 401 || res.status === 404) {
+      if (res.status === 401) {
         router.replace('/sign-in');
         return;
       }
@@ -165,7 +167,7 @@ export default function NominationHelper() {
       body: JSON.stringify({ playerName }),
     });
     if (!res.ok) {
-      if (res.status === 401 || res.status === 404) {
+      if (res.status === 401) {
         router.replace('/sign-in');
         return;
       }
@@ -185,7 +187,7 @@ export default function NominationHelper() {
           fontFamily: 'var(--font-inter), sans-serif',
         }}
       >
-        Loading nomination data...
+        {draftError ?? 'Loading nomination data...'}
       </div>
     );
   }

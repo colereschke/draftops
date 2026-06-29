@@ -6,8 +6,6 @@ import { defineConfig } from 'prisma/config';
 // Load .env.local explicitly so DATABASE_URL is available to the Prisma CLI.
 dotenvConfig({ path: '.env.local' });
 
-if (!process.env.DATABASE_URL) throw new Error('DATABASE_URL is not set');
-
 export default defineConfig({
   schema: 'prisma/schema.prisma',
   migrations: {

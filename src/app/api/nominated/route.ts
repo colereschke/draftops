@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { auth } from '@/auth';
 import { prisma } from '@/lib/db';
 
 export async function POST(request: NextRequest) {
+  const session = await auth();
+  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
   const body = (await request.json()) as { playerName?: string };
   if (!body.playerName) {
     return NextResponse.json({ error: 'playerName required' }, { status: 400 });
@@ -15,14 +19,19 @@ export async function POST(request: NextRequest) {
 }
 
 export async function DELETE(request: NextRequest) {
+  const session = await auth();
+  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
   const body = (await request.json()) as { playerName?: string };
   if (!body.playerName) {
     return NextResponse.json({ error: 'playerName required' }, { status: 400 });
   }
   try {
     await prisma.nominatedPlayer.delete({ where: { playerName: body.playerName } });
-  } catch {
-    // Already deleted — idempotent
+  } catch (e) {
+    if ((e as { code?: string }).code !== 'P2025') {
+      return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    }
   }
   return NextResponse.json({ ok: true });
 }

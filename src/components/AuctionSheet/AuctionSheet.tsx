@@ -81,8 +81,12 @@ export default function AuctionSheet({ claimedBids, teams, nominatedPlayers }: A
         try {
           await updateBid({ id: existingBid.id, price, teamId });
           setModalPlayer(null);
-        } catch {
-          setModalError('Failed to save bid. Please try again.');
+        } catch (e) {
+          if (e instanceof Error && e.message === 'Unauthorized') {
+            window.location.href = '/sign-in';
+          } else {
+            setModalError('Failed to save bid. Please try again.');
+          }
         }
       });
     } else {
@@ -106,8 +110,12 @@ export default function AuctionSheet({ claimedBids, teams, nominatedPlayers }: A
             teamId,
           });
           setModalPlayer(null);
-        } catch {
-          setModalError('Failed to log bid. Please try again.');
+        } catch (e) {
+          if (e instanceof Error && e.message === 'Unauthorized') {
+            window.location.href = '/sign-in';
+          } else {
+            setModalError('Failed to log bid. Please try again.');
+          }
         }
       });
     }
@@ -123,8 +131,12 @@ export default function AuctionSheet({ claimedBids, teams, nominatedPlayers }: A
       try {
         await deleteBid({ id: existingBid.id });
         setModalPlayer(null);
-      } catch {
-        setModalError('Failed to remove bid. Please try again.');
+      } catch (e) {
+        if (e instanceof Error && e.message === 'Unauthorized') {
+          window.location.href = '/sign-in';
+        } else {
+          setModalError('Failed to remove bid. Please try again.');
+        }
       }
     });
   }

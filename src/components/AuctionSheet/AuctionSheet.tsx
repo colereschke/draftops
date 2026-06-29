@@ -16,6 +16,8 @@ interface AuctionSheetProps {
   claimedBids: ClaimedBid[];
   teams: LeagueTeam[];
   nominatedPlayers: string[];
+  draftId: number;
+  ownerHandle: string | null;
 }
 
 const POSITIONS: Array<'ALL' | Position> = ['ALL', 'QB', 'RB', 'WR', 'TE', 'PICK', 'PKG'];
@@ -30,7 +32,13 @@ function ageColor(age: number | null): string {
   return '#e05050';
 }
 
-export default function AuctionSheet({ claimedBids, teams, nominatedPlayers }: AuctionSheetProps) {
+export default function AuctionSheet({
+  claimedBids,
+  teams,
+  nominatedPlayers,
+  draftId,
+  ownerHandle,
+}: AuctionSheetProps) {
   const [posFilter, setPosFilter] = useState<'ALL' | Position>('ALL');
   const [search, setSearch] = useState<string>('');
   const [sortBy, setSortBy] = useState<SortKey>('sfRank');
@@ -64,10 +72,10 @@ export default function AuctionSheet({ claimedBids, teams, nominatedPlayers }: A
   );
 
   const mySpent = useMemo(() => {
-    const myTeam = teams.find((t) => t.handle === 'coreschke');
+    const myTeam = ownerHandle ? teams.find((t) => t.handle === ownerHandle) : null;
     if (!myTeam) return 0;
     return optimisticBids.filter((b) => b.teamId === myTeam.id).reduce((s, b) => s + b.price, 0);
-  }, [teams, optimisticBids]);
+  }, [teams, optimisticBids, ownerHandle]);
 
   const hasClaims = optimisticBids.length > 0;
 
@@ -83,7 +91,7 @@ export default function AuctionSheet({ claimedBids, teams, nominatedPlayers }: A
       startTransition(async () => {
         dispatchOptimistic({ type: 'update', bid: updated });
         try {
-          await updateBid({ id: existingBid.id, price, teamId });
+          await updateBid({ id: existingBid.id, price, teamId, draftId });
           setModalPlayer(null);
         } catch (e) {
           if (e instanceof Error && e.message === 'Unauthorized') {
@@ -117,6 +125,7 @@ export default function AuctionSheet({ claimedBids, teams, nominatedPlayers }: A
             price,
             sfRank: modalPlayer.sfRank,
             teamId,
+            draftId,
           });
           setModalPlayer(null);
         } catch (e) {
@@ -143,7 +152,7 @@ export default function AuctionSheet({ claimedBids, teams, nominatedPlayers }: A
     startTransition(async () => {
       dispatchOptimistic({ type: 'delete', id: existingBid.id });
       try {
-        await deleteBid({ id: existingBid.id });
+        await deleteBid({ id: existingBid.id, draftId });
         setModalPlayer(null);
       } catch (e) {
         if (e instanceof Error && e.message === 'Unauthorized') {

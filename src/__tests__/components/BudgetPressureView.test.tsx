@@ -54,55 +54,55 @@ const teams: TeamStats[] = [
 
 describe('BudgetPressureView', () => {
   it('renders a row for each team', () => {
-    render(<BudgetPressureView teams={teams} />);
+    render(<BudgetPressureView teams={teams} ownerHandle="coreschke" />);
     expect(screen.getByText('Cole')).toBeInTheDocument();
     expect(screen.getByText('chappy72')).toBeInTheDocument();
     expect(screen.getByText('DrFunk')).toBeInTheDocument();
   });
 
   it('displays handle when displayName is null', () => {
-    render(<BudgetPressureView teams={teams} />);
+    render(<BudgetPressureView teams={teams} ownerHandle="coreschke" />);
     expect(screen.getByText('chappy72')).toBeInTheDocument();
   });
 
   it('renders rank numbers starting at 1', () => {
-    render(<BudgetPressureView teams={teams} />);
+    render(<BudgetPressureView teams={teams} ownerHandle="coreschke" />);
     expect(screen.getByText('1')).toBeInTheDocument();
     expect(screen.getByText('2')).toBeInTheDocument();
     expect(screen.getByText('3')).toBeInTheDocument();
   });
 
   it('applies green color to buying power > 150', () => {
-    render(<BudgetPressureView teams={teams} />);
+    render(<BudgetPressureView teams={teams} ownerHandle="coreschke" />);
     const bpCell = screen.getByTestId('bp-1');
     expect(bpCell).toHaveStyle({ color: '#4caf6e' });
   });
 
   it('applies amber color to buying power between 50 and 150', () => {
-    render(<BudgetPressureView teams={teams} />);
+    render(<BudgetPressureView teams={teams} ownerHandle="coreschke" />);
     const bpCell = screen.getByTestId('bp-2');
     expect(bpCell).toHaveStyle({ color: '#e8a030' });
   });
 
   it('applies red color to buying power under 50', () => {
-    render(<BudgetPressureView teams={teams} />);
+    render(<BudgetPressureView teams={teams} ownerHandle="coreschke" />);
     const bpCell = screen.getByTestId('bp-3');
     expect(bpCell).toHaveStyle({ color: '#e05050' });
   });
 
   it("highlights Cole's row with QB-blue left border", () => {
-    render(<BudgetPressureView teams={teams} />);
+    render(<BudgetPressureView teams={teams} ownerHandle="coreschke" />);
     const coleRow = screen.getByTestId('row-coreschke');
     expect(coleRow).toHaveStyle({ borderLeft: '3px solid #4f83e8' });
   });
 
   it('renders the BudgetRefresher', () => {
-    render(<BudgetPressureView teams={teams} />);
+    render(<BudgetPressureView teams={teams} ownerHandle="coreschke" />);
     expect(screen.getByTestId('budget-refresher')).toBeInTheDocument();
   });
 
   it('renders dollar signs for monetary values', () => {
-    render(<BudgetPressureView teams={teams} />);
+    render(<BudgetPressureView teams={teams} ownerHandle="coreschke" />);
     expect(screen.getByText('$800')).toBeInTheDocument(); // Cole's buying power
   });
 });

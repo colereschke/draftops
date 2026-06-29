@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { auth } from '@/auth';
 import { prisma } from '@/lib/db';
-import { getDraftForUser } from '@/lib/draft';
+import { getDraft } from '@/lib/draft';
 
 export async function logBid(data: {
   player: string;
@@ -12,11 +12,12 @@ export async function logBid(data: {
   price: number;
   sfRank: number | null;
   teamId: number;
+  draftId: number;
 }): Promise<void> {
   const session = await auth();
   if (!session) throw new Error('Unauthorized');
 
-  const draft = await getDraftForUser(session.user.id);
+  const draft = await getDraft(session.user.id, data.draftId);
   if (!draft) throw new Error('No draft found');
 
   const team = await prisma.team.findFirst({ where: { id: data.teamId, draftId: draft.id } });
@@ -36,43 +37,42 @@ export async function logBid(data: {
   await prisma.nominatedPlayer.deleteMany({
     where: { playerName: data.player, draftId: draft.id },
   });
-  revalidatePath('/');
+  revalidatePath(`/draft/${data.draftId}`);
 }
 
 export async function updateBid(data: {
   id: number;
   price: number;
   teamId: number;
+  draftId: number;
 }): Promise<void> {
   const session = await auth();
   if (!session) throw new Error('Unauthorized');
 
-  const draft = await getDraftForUser(session.user.id);
+  const draft = await getDraft(session.user.id, data.draftId);
   if (!draft) throw new Error('No draft found');
 
   const team = await prisma.team.findFirst({ where: { id: data.teamId, draftId: draft.id } });
   if (!team) throw new Error('Team not found in draft');
 
-  // updateMany with { id, draftId } prevents editing bids from other drafts
   const updateResult = await prisma.auctionResult.updateMany({
     where: { id: data.id, draftId: draft.id },
     data: { price: data.price, teamId: data.teamId },
   });
   if (updateResult.count === 0) throw new Error('Bid not found');
-  revalidatePath('/');
+  revalidatePath(`/draft/${data.draftId}`);
 }
 
-export async function deleteBid(data: { id: number }): Promise<void> {
+export async function deleteBid(data: { id: number; draftId: number }): Promise<void> {
   const session = await auth();
   if (!session) throw new Error('Unauthorized');
 
-  const draft = await getDraftForUser(session.user.id);
+  const draft = await getDraft(session.user.id, data.draftId);
   if (!draft) throw new Error('No draft found');
 
-  // deleteMany with { id, draftId } prevents deleting bids from other drafts
   const deleteResult = await prisma.auctionResult.deleteMany({
     where: { id: data.id, draftId: draft.id },
   });
   if (deleteResult.count === 0) throw new Error('Bid not found');
-  revalidatePath('/');
+  revalidatePath(`/draft/${data.draftId}`);
 }

@@ -56,24 +56,24 @@ const emptyTeam: TeamWithRoster = {
 
 describe('RosterTracker', () => {
   it('renders all team handles in the table', () => {
-    render(<RosterTracker teams={[makeTeam(), emptyTeam]} />);
+    render(<RosterTracker teams={[makeTeam(), emptyTeam]} ownerHandle="coreschke" />);
     expect(screen.getByText('coreschke')).toBeInTheDocument();
     expect(screen.getByText('chappy72')).toBeInTheDocument();
   });
 
   it('does not show roster player rows by default', () => {
-    render(<RosterTracker teams={[makeTeam()]} />);
+    render(<RosterTracker teams={[makeTeam()]} ownerHandle="coreschke" />);
     expect(screen.queryByText('Patrick Mahomes')).not.toBeInTheDocument();
   });
 
   it('shows roster when a team row is clicked', () => {
-    render(<RosterTracker teams={[makeTeam()]} />);
+    render(<RosterTracker teams={[makeTeam()]} ownerHandle="coreschke" />);
     fireEvent.click(screen.getByText('coreschke').closest('tr')!);
     expect(screen.getByText('Patrick Mahomes')).toBeInTheDocument();
   });
 
   it('collapses roster when the same row is clicked again', () => {
-    render(<RosterTracker teams={[makeTeam()]} />);
+    render(<RosterTracker teams={[makeTeam()]} ownerHandle="coreschke" />);
     const row = screen.getByText('coreschke').closest('tr')!;
     fireEvent.click(row);
     fireEvent.click(row);
@@ -100,7 +100,7 @@ describe('RosterTracker', () => {
         },
       ],
     });
-    render(<RosterTracker teams={[makeTeam(), team2]} />);
+    render(<RosterTracker teams={[makeTeam(), team2]} ownerHandle="coreschke" />);
     fireEvent.click(screen.getByText('coreschke').closest('tr')!);
     fireEvent.click(screen.getByText('chappy72').closest('tr')!);
     expect(screen.getByText('Patrick Mahomes')).toBeInTheDocument();
@@ -108,17 +108,17 @@ describe('RosterTracker', () => {
   });
 
   it('shows PKG badge for teams with pick packages', () => {
-    render(<RosterTracker teams={[makeTeam()]} />);
+    render(<RosterTracker teams={[makeTeam()]} ownerHandle="coreschke" />);
     expect(screen.getByText('1×')).toBeInTheDocument();
   });
 
   it('does not render a PKG badge for teams with zero pick packages', () => {
-    render(<RosterTracker teams={[emptyTeam]} />);
+    render(<RosterTracker teams={[emptyTeam]} ownerHandle="coreschke" />);
     expect(screen.queryByText('0×')).not.toBeInTheDocument();
   });
 
   it('shows empty state message when an expanded team has no results', () => {
-    render(<RosterTracker teams={[emptyTeam]} />);
+    render(<RosterTracker teams={[emptyTeam]} ownerHandle="coreschke" />);
     fireEvent.click(screen.getByText('chappy72').closest('tr')!);
     expect(screen.getByText('No players won yet.')).toBeInTheDocument();
   });

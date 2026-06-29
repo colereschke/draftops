@@ -10,9 +10,10 @@ function buyingPowerColor(bp: number): string {
 
 interface BudgetPressureViewProps {
   teams: TeamStats[];
+  ownerHandle: string | null;
 }
 
-export default function BudgetPressureView({ teams }: BudgetPressureViewProps) {
+export default function BudgetPressureView({ teams, ownerHandle }: BudgetPressureViewProps) {
   const maxBp = Math.max(...teams.map((t) => t.buyingPower), 1);
 
   return (
@@ -99,7 +100,7 @@ export default function BudgetPressureView({ teams }: BudgetPressureViewProps) {
           </thead>
           <tbody>
             {teams.map((team, i) => {
-              const isCole = team.handle === 'coreschke';
+              const isOwner = ownerHandle !== null && team.handle === ownerHandle;
               const bpColor = buyingPowerColor(team.buyingPower);
               const barWidth = maxBp > 0 ? Math.max(0, (team.buyingPower / maxBp) * 100) : 0;
 
@@ -109,8 +110,8 @@ export default function BudgetPressureView({ teams }: BudgetPressureViewProps) {
                   data-testid={`row-${team.handle}`}
                   style={{
                     borderBottom: '1px solid #141824',
-                    background: isCole ? '#141e2e' : i % 2 === 0 ? 'transparent' : '#0a0c10',
-                    borderLeft: `3px solid ${isCole ? '#4f83e8' : '#2a3048'}`,
+                    background: isOwner ? '#141e2e' : i % 2 === 0 ? 'transparent' : '#0a0c10',
+                    borderLeft: `3px solid ${isOwner ? '#4f83e8' : '#2a3048'}`,
                   }}
                 >
                   <td
@@ -128,8 +129,8 @@ export default function BudgetPressureView({ teams }: BudgetPressureViewProps) {
                     <span
                       style={{
                         fontSize: 13,
-                        fontWeight: isCole ? 700 : 500,
-                        color: isCole ? '#e8eaf0' : '#8892a4',
+                        fontWeight: isOwner ? 700 : 500,
+                        color: isOwner ? '#e8eaf0' : '#8892a4',
                       }}
                     >
                       {team.displayName ?? team.handle}

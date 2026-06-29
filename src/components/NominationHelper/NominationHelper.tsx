@@ -17,7 +17,7 @@ interface NomData {
   ownerHandle: string | null;
 }
 
-export default function NominationHelper() {
+export default function NominationHelper({ draftId }: { draftId: number }) {
   const router = useRouter();
   const [data, setData] = useState<NomData | null>(null);
   const [draftError, setDraftError] = useState<string | null>(null);
@@ -30,7 +30,7 @@ export default function NominationHelper() {
   useEffect(() => {
     async function fetchData() {
       try {
-        const res = await fetch('/api/nomination-data');
+        const res = await fetch(`/api/draft/${draftId}/nomination-data`);
         if (res.status === 401) {
           router.replace('/sign-in');
           return;
@@ -47,7 +47,7 @@ export default function NominationHelper() {
     void fetchData();
     const interval = setInterval(() => void fetchData(), 30_000);
     return () => clearInterval(interval);
-  }, [router]);
+  }, [router, draftId]);
 
   // Close dropdown on outside click
   useEffect(() => {
@@ -106,7 +106,7 @@ export default function NominationHelper() {
     setData((prev) => (prev ? { ...prev, watchlist: [...prev.watchlist, playerName] } : prev));
     setWatchlistSearch('');
     setShowDropdown(false);
-    const res = await fetch('/api/watchlist', {
+    const res = await fetch(`/api/draft/${draftId}/watchlist`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ playerName }),
@@ -125,7 +125,7 @@ export default function NominationHelper() {
     setData((prev) =>
       prev ? { ...prev, watchlist: prev.watchlist.filter((n) => n !== playerName) } : prev,
     );
-    const res = await fetch('/api/watchlist', {
+    const res = await fetch(`/api/draft/${draftId}/watchlist`, {
       method: 'DELETE',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ playerName }),
@@ -142,7 +142,7 @@ export default function NominationHelper() {
   const nominatePlayer = async (playerName: string) => {
     const snapshot = data;
     setData((prev) => (prev ? { ...prev, nominated: [...prev.nominated, playerName] } : prev));
-    const res = await fetch('/api/nominated', {
+    const res = await fetch(`/api/draft/${draftId}/nominated`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ playerName }),
@@ -161,7 +161,7 @@ export default function NominationHelper() {
     setData((prev) =>
       prev ? { ...prev, nominated: prev.nominated.filter((n) => n !== playerName) } : prev,
     );
-    const res = await fetch('/api/nominated', {
+    const res = await fetch(`/api/draft/${draftId}/nominated`, {
       method: 'DELETE',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ playerName }),

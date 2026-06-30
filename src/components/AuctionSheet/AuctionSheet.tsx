@@ -3,7 +3,6 @@
 import { useState, useMemo, useOptimistic, useTransition } from 'react';
 import type { Player, Position, ClaimedBid, LeagueTeam } from '@/types';
 import { POS_COLORS } from '@/lib/posColors';
-import { players } from '@/data/players';
 import { logBid, updateBid, deleteBid } from '@/lib/actions';
 import BidModal from '@/components/BidModal';
 
@@ -13,6 +12,7 @@ type OptimisticAction =
   | { type: 'delete'; id: number };
 
 interface AuctionSheetProps {
+  players: Player[];
   claimedBids: ClaimedBid[];
   teams: LeagueTeam[];
   nominatedPlayers: string[];
@@ -34,6 +34,7 @@ function ageColor(age: number | null): string {
 }
 
 export default function AuctionSheet({
+  players,
   claimedBids,
   teams,
   nominatedPlayers,
@@ -46,7 +47,7 @@ export default function AuctionSheet({
   const [sortBy, setSortBy] = useState<SortKey>('sfRank');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
   const [showNotes, setShowNotes] = useState<boolean>(false);
-  const [modalPlayer, setModalPlayer] = useState<(typeof players)[0] | null>(null);
+  const [modalPlayer, setModalPlayer] = useState<Player | null>(null);
   const [modalError, setModalError] = useState<string>('');
   const [, startTransition] = useTransition();
   const [extraNominated, setExtraNominated] = useState<string[]>([]);

@@ -1,34 +1,32 @@
 import React from 'react';
 import { render, screen, fireEvent } from '@testing-library/react';
 import AuctionSheet from '@/components/AuctionSheet/AuctionSheet';
-import type { ClaimedBid, LeagueTeam } from '@/types';
+import type { Player, ClaimedBid, LeagueTeam } from '@/types';
 
-jest.mock('@/data/players', () => ({
-  players: [
-    {
-      player: 'Josh Allen',
-      team: 'BUF',
-      pos: 'QB',
-      age: 28,
-      sfRank: 1,
-      budget: 120,
-      ceiling: 138,
-      floor: 104,
-      notes: '',
-    },
-    {
-      player: 'Justin Jefferson',
-      team: 'MIN',
-      pos: 'WR',
-      age: 25,
-      sfRank: 5,
-      budget: 95,
-      ceiling: 109,
-      floor: 83,
-      notes: '',
-    },
-  ],
-}));
+const MOCK_PLAYERS: Player[] = [
+  {
+    player: 'Josh Allen',
+    team: 'BUF',
+    pos: 'QB',
+    age: 28,
+    sfRank: 1,
+    budget: 120,
+    ceiling: 138,
+    floor: 104,
+    notes: '',
+  },
+  {
+    player: 'Justin Jefferson',
+    team: 'MIN',
+    pos: 'WR',
+    age: 25,
+    sfRank: 5,
+    budget: 95,
+    ceiling: 109,
+    floor: 83,
+    notes: '',
+  },
+];
 
 jest.mock('@/lib/actions', () => ({
   logBid: jest.fn().mockResolvedValue(undefined),
@@ -62,6 +60,7 @@ describe('AuctionSheet with claimed bids', () => {
   it('renders without claimed bids and does not show a Claimed column', () => {
     render(
       <AuctionSheet
+        players={MOCK_PLAYERS}
         claimedBids={[]}
         teams={mockTeams}
         nominatedPlayers={[]}
@@ -77,6 +76,7 @@ describe('AuctionSheet with claimed bids', () => {
   it('shows a Claimed column header when at least one bid exists', () => {
     render(
       <AuctionSheet
+        players={MOCK_PLAYERS}
         claimedBids={[mockClaim]}
         teams={mockTeams}
         nominatedPlayers={[]}
@@ -92,6 +92,7 @@ describe('AuctionSheet with claimed bids', () => {
   it('shows team handle and price in the claimed column for a claimed player', () => {
     render(
       <AuctionSheet
+        players={MOCK_PLAYERS}
         claimedBids={[mockClaim]}
         teams={mockTeams}
         nominatedPlayers={[]}
@@ -109,6 +110,7 @@ describe('AuctionSheet with claimed bids', () => {
     // mockClaim.price = 110, player.budget = 120, diff = -10 → ▼$10
     render(
       <AuctionSheet
+        players={MOCK_PLAYERS}
         claimedBids={[mockClaim]}
         teams={mockTeams}
         nominatedPlayers={[]}
@@ -125,6 +127,7 @@ describe('AuctionSheet with claimed bids', () => {
     const overClaim: ClaimedBid = { ...mockClaim, price: 130 };
     render(
       <AuctionSheet
+        players={MOCK_PLAYERS}
         claimedBids={[overClaim]}
         teams={mockTeams}
         nominatedPlayers={[]}
@@ -141,6 +144,7 @@ describe('AuctionSheet with claimed bids', () => {
   it('opens the modal when a claimed player row is clicked', () => {
     render(
       <AuctionSheet
+        players={MOCK_PLAYERS}
         claimedBids={[mockClaim]}
         teams={mockTeams}
         nominatedPlayers={[]}
@@ -159,6 +163,7 @@ describe('AuctionSheet with claimed bids', () => {
   it('opens the modal when an unclaimed player row is clicked', () => {
     render(
       <AuctionSheet
+        players={MOCK_PLAYERS}
         claimedBids={[]}
         teams={mockTeams}
         nominatedPlayers={[]}
@@ -177,6 +182,7 @@ describe('AuctionSheet with claimed bids', () => {
   it('shows LIVE badge for a player in the nominatedPlayers prop', () => {
     render(
       <AuctionSheet
+        players={MOCK_PLAYERS}
         claimedBids={[]}
         teams={mockTeams}
         nominatedPlayers={['Josh Allen']}
@@ -191,6 +197,7 @@ describe('AuctionSheet with claimed bids', () => {
   it('shows Nom button in modal for an unnominated player', () => {
     render(
       <AuctionSheet
+        players={MOCK_PLAYERS}
         claimedBids={[]}
         teams={mockTeams}
         nominatedPlayers={[]}
@@ -206,6 +213,7 @@ describe('AuctionSheet with claimed bids', () => {
   it('shows In Auction in modal for an already-nominated player', () => {
     render(
       <AuctionSheet
+        players={MOCK_PLAYERS}
         claimedBids={[]}
         teams={mockTeams}
         nominatedPlayers={['Josh Allen']}
@@ -221,6 +229,7 @@ describe('AuctionSheet with claimed bids', () => {
   it('closes modal, shows LIVE badge, and calls /api/draft/1/nominated after clicking Nom', async () => {
     render(
       <AuctionSheet
+        players={MOCK_PLAYERS}
         claimedBids={[]}
         teams={mockTeams}
         nominatedPlayers={[]}

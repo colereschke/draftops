@@ -16,6 +16,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   providers: [Discord],
   session: { strategy: 'jwt' },
   callbacks: {
+    jwt({ token, account }) {
+      if (account) token.sub = account.providerAccountId;
+      return token;
+    },
     session({ session, token }) {
       session.user.id = token.sub ?? '';
       return session;

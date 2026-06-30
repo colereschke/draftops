@@ -18,7 +18,8 @@ make db-reset    # Wipe DB and re-seed (destructive)
 - **Next.js 16** with App Router, `src/` directory, `@/*` import alias
 - **TypeScript 5** — strict mode, no explicit `any` warnings
 - **Tailwind CSS 4** — used for layout utilities; dynamic/computed styles (position colors, age colors) stay as inline styles
-- **Prisma 7** with SQLite — see Prisma v7 notes below
+- **Prisma 7** with PostgreSQL (Neon in prod, local WSL2 Postgres in dev) — see Prisma v7 notes below
+- **Auth.js v5 (NextAuth)** — Discord OAuth, JWT session strategy; `src/auth.ts` exports `auth`, `signIn`, `signOut`
 - **pnpm 11** — do not use npm or yarn
 - **Jest + React Testing Library** — tests in `src/__tests__/` or co-located `*.test.ts`
 - **ESLint 9** flat config + Prettier — pre-commit hook enforces both via Husky + lint-staged
@@ -30,16 +31,19 @@ src/
 ├── __tests__/                        # Test files (Jest + React Testing Library)
 ├── app/
 │   ├── api/
-│   │   ├── nomination-data/route.ts  # GET — returns teamStats, auctionResults, watchlist, nominatedPlayers
-│   │   ├── nominated/route.ts        # POST/DELETE — mark/unmark a player as currently in auction
-│   │   └── watchlist/route.ts        # POST/DELETE — add/remove from PlayerWatchlist
+│   │   ├── auth/[...nextauth]/route.ts  # Auth.js catch-all route
+│   │   ├── nomination-data/route.ts     # GET — returns teamStats, auctionResults, watchlist, nominatedPlayers
+│   │   ├── nominated/route.ts           # POST/DELETE — mark/unmark a player as currently in auction
+│   │   └── watchlist/route.ts           # POST/DELETE — add/remove from PlayerWatchlist
 │   ├── budget/page.tsx               # /budget — buying power view (server component)
 │   ├── nominate/page.tsx             # /nominate — nomination helper (server component)
+│   ├── sign-in/page.tsx              # /sign-in — Discord OAuth sign-in page
 │   ├── teams/page.tsx                # /teams — team roster tracker (server component)
 │   ├── error.tsx                     # App-level error boundary
 │   ├── globals.css                   # CSS custom properties (design tokens)
 │   ├── layout.tsx                    # Font setup + NavBar
 │   └── page.tsx                      # / — value sheet (server component)
+├── auth.ts                           # Auth.js config: Discord provider, JWT strategy, session callback
 ├── components/
 │   ├── AuctionSheet/                 # Main player value sheet + bid logging
 │   ├── BidModal/                     # Log/edit/delete bid modal
@@ -50,21 +54,23 @@ src/
 ├── data/
 │   └── players.ts                    # ~270 players, fully processed (budget/ceiling/floor)
 ├── lib/
-│   ├── actions.ts                    # Server actions: logBid, updateBid, deleteBid
+│   ├── actions.ts                    # Server actions: logBid, updateBid, deleteBid (auth-gated, draft-scoped)
 │   ├── budget.ts                     # computeTeamStats for /budget page
 │   ├── computeTeamStats.ts           # computeTeamStats for /teams page (includes roster + delta)
-│   ├── db.ts                         # Prisma singleton (required for Next.js dev hot reload)
+│   ├── db.ts                         # Prisma singleton using PrismaPg adapter (pg Pool)
+│   ├── draft.ts                      # getDraftForUser(userId) — looks up draft by Auth.js userId
 │   ├── nominationScoring.ts          # computeNominationScores — core nomination logic
 │   ├── posColors.ts                  # POS_COLORS map (bg, accent, badge, badgeText per position)
 │   └── teams.ts                      # LEAGUE_TEAMS, ROSTER_SIZE = 30, TARGET_ROSTER
 └── types/
     └── index.ts                      # Player, Position, TeamStats, AuctionResultEntry,
                                       # RosterEntry, TeamWithRoster, ClaimedBid, LeagueTeam
+middleware.ts                         # Auth.js middleware — redirects unauthenticated users to /sign-in
 prisma/
-├── schema.prisma                     # Team + AuctionResult + PlayerWatchlist + NominatedPlayer models
-├── seed.ts                           # Upserts all 12 teams (idempotent)
-└── dev.db                            # Local SQLite DB (gitignored)
-prisma.config.ts                      # Prisma v7 config (replaces datasource url in schema)
+├── schema.prisma                     # Draft + Team + AuctionResult + PlayerWatchlist + NominatedPlayer
+├── seed.ts                           # Upserts default draft + 12 teams (idempotent)
+└── migrations/                       # Postgres migration history
+prisma.config.ts                      # Prisma v7 config — DATABASE_URL from env
 existing_project_docs/                # Original reference files — do not delete
 ```
 
@@ -72,21 +78,23 @@ existing_project_docs/                # Original reference files — do not dele
 
 | Route       | Purpose                                                                                                |
 | ----------- | ------------------------------------------------------------------------------------------------------ |
+| `/sign-in`  | Discord OAuth sign-in; redirects to `/` after auth                                                     |
 | `/`         | Value sheet — full player list with filters, search, sort, bid logging via modal                       |
 | `/teams`    | Team roster tracker — expandable rows showing each player a team has won, with delta vs. target budget |
 | `/budget`   | Budget pressure view — teams sorted by buying power with visual bar; auto-refreshes every 20s          |
 | `/nominate` | Nomination helper — ranks available players by rival demand score; personal watchlist sidebar          |
 
-All pages are server components that fetch from Prisma directly and pass data down to `'use client'` components.
+All pages are server components that fetch from Prisma directly and pass data down to `'use client'` components. Every route except `/sign-in` and the Auth.js API route is protected by `middleware.ts`.
 
 ## Database Schema
 
-Four models:
+Five models — all data scoped to a `Draft`:
 
-- `Team` — 12 managers with $1,000 budgets
-- `AuctionResult` — one row per completed bid (player, position, nflTeam, price, sfRank, notes, teamId)
-- `PlayerWatchlist` — Cole's personal watchlist; players here are excluded from nomination suggestions
-- `NominatedPlayer` — players currently up for bidding in the live auction; excluded from nomination suggestions and shown with a teal "LIVE" badge + row tint in the value sheet; auto-removed when a bid is logged via `logBid`
+- `Draft` — top-level container. `ownerId` = Auth.js userId (Discord snowflake); `ownerTeamId` = which `Team` belongs to the owner (used by nomination scoring instead of the old hardcoded `'coreschke'` handle)
+- `Team` — managers within a draft; unique on `(handle, draftId)`
+- `AuctionResult` — one row per completed bid (player, position, nflTeam, price, sfRank, notes, teamId, draftId)
+- `PlayerWatchlist` — owner's personal watchlist; excluded from nomination suggestions; unique on `(playerName, draftId)`
+- `NominatedPlayer` — players currently up for bidding; shown with a teal "LIVE" badge; auto-removed when a bid is logged via `logBid`; unique on `(playerName, draftId)`
 
 Derived values (computed at query time, not stored):
 
@@ -104,6 +112,10 @@ Derived values (computed at query time, not stored):
 - `ROSTER_SIZE = 30`
 - `TARGET_ROSTER = { QB: 4, RB: 9, WR: 11, TE: 3 }` — used by nomination scoring
 
+**`src/lib/draft.ts`**
+
+- `getDraftForUser(userId)` — finds the Draft whose `ownerId` matches the Auth.js userId; returns `DraftWithOwnerTeam | null`
+
 **`src/lib/nominationScoring.ts`** — core nomination intelligence
 
 - `computeNominationScores(players, teamStats, auctionResults, watchlist, nominatedPlayers, myHandle)`
@@ -112,8 +124,9 @@ Derived values (computed at query time, not stored):
 - Nomination score = `totalRivalDemand × player.ceiling` where demand = `sum(rival.buyingPower × needRatio)`
 - Returns `ScoredPlayer[]` with top rival contributors
 
-**`src/lib/actions.ts`** — server actions (revalidate `/` on each mutation)
+**`src/lib/actions.ts`** — server actions (auth-gated; revalidate `/` on each mutation)
 
+- All actions call `auth()` and `getDraftForUser()` — unauthorized or no-draft throws immediately
 - `logBid({ player, position, nflTeam, price, teamId, sfRank?, notes? })`
 - `updateBid({ id, price, teamId })`
 - `deleteBid({ id })`
@@ -165,42 +178,71 @@ Key logic:
 
 ## Prisma v7 Notes
 
-Prisma 7 changed how SQLite connections are configured:
+Prisma 7 changed how connections are configured:
 
-- `datasource` block in `schema.prisma` no longer takes a `url` field
-- Connection config lives in `prisma.config.ts` (root-level)
-- Requires the `@prisma/adapter-better-sqlite3` adapter in the PrismaClient constructor
-- The `db.ts` singleton passes the adapter explicitly — do not instantiate PrismaClient without it
+- `datasource` block in `schema.prisma` takes no `url` field — connection config lives in `prisma.config.ts`
+- Uses `@prisma/adapter-pg` (pg Pool) — do not instantiate PrismaClient without the adapter
+- `db.ts` creates a `Pool` from `DATABASE_URL` and passes a `PrismaPg` adapter to `PrismaClient`
+- `prisma.config.ts` loads `.env.local` explicitly via `dotenv` (Prisma CLI does not auto-load it)
 - `postinstall` script runs `prisma generate` automatically after `pnpm install`
 
 After any schema change: `pnpm prisma migrate dev --name <description>`
 After pulling changes with new migrations: `pnpm prisma migrate dev` (applies pending)
 
+## Environment Variables
+
+Required in `.env.local` (never commit):
+
+```
+DATABASE_URL=          # Postgres connection string (Neon or local)
+AUTH_SECRET=           # Auth.js secret (generate with: openssl rand -base64 32)
+AUTH_DISCORD_ID=       # Discord OAuth app client ID
+AUTH_DISCORD_SECRET=   # Discord OAuth app client secret
+OWNER_DISCORD_ID=      # Your Discord user ID — seeds ownerId on the default draft
+```
+
 ## Code Quality Rules
 
 - Single quotes, trailing commas, 2-space indent, 100 char line width (Prettier)
-- No unused vars (ESLint errors), no explicit `any` (ESLint warns)
+- No unused vars (ESLint errors), no explicit `any` (ESLint warns) — use `unknown` with a type guard if the type is genuinely unknown
 - Pre-commit hook runs `pnpm lint-staged` + `pnpm tsc --noEmit` — do not skip with `--no-verify`
 - CI runs typecheck + lint + format check + tests on every PR
+- **Before any code review** (`/code-review` or otherwise): run `pnpm tsc --noEmit` and `pnpm lint` to surface type errors and lint violations early — these are the same checks the pre-commit hook enforces and they won't run automatically during edit sessions
+- Non-null assertions (`!`) only when the value's existence is obvious from context
+- Prefer `interface` over `type` for object shapes (props, API responses, domain types) — reserve `type` for unions, intersections, and aliases
+- No unhandled promise rejections — every async call must either propagate to an error state the UI renders, or be caught with a visible fallback
+
+## TypeScript & React Standards
+
+- **Functional components only** — no class-based components
+- **Typed props interfaces** — every component must have an explicit `interface` for its props; no inline type literals, no `any`
+- **Decompose large components** — if a component exceeds ~300 lines or handles more than one concern, split it
+- **`useEffect` / `ref` carefully** — only when necessary and as React designs them; overuse is a common source of bugs and unnecessary renders
+- **No duplicate components** — check existing components and the codebase before creating a new one
+
+## Testing Standards
+
+- **Select by `data-testid` or `id`** — avoid visible text, role+name, or CSS class selectors; they're brittle. Add a `data-testid` to the component under test if one doesn't exist.
+- **Typed mock data** — annotate test fixtures with the real source type (e.g. `const MOCK_TEAM: Team[]`). Reuse types from `src/types/` rather than redefining shapes locally.
 
 ## What's Built
 
+- **Auth** — Discord OAuth via Auth.js v5; JWT sessions; middleware protects all routes; `/sign-in` page
+- **PostgreSQL** — migrated from SQLite; Neon in prod, local WSL2 Postgres in dev; `@prisma/adapter-pg`
+- **Multi-draft schema** — `Draft` model with `ownerId` + `ownerTeamId`; all data scoped to `draftId`; expand/contract migration complete (non-nullable, composite uniques)
 - `/` — Value sheet with full player list, filters, search, sort, bid logging modal, budget tracker
 - `/teams` — Team roster tracker with expandable rows, spend/remaining/buying power per team, delta vs. target per player
 - `/budget` — Budget pressure view sorted by buying power with auto-refresh
-- `/nominate` — Nomination helper that ranks available players by rival demand; personal watchlist persisted to DB excludes players Cole wants; "Nom" button tracks players currently in auction (persisted to DB, auto-clears on bid completion)
+- `/nominate` — Nomination helper that ranks available players by rival demand; personal watchlist persisted to DB; "Nom" button tracks players currently in auction (persisted to DB, auto-clears on bid completion)
 
 ## What's Next
 
-**Generalize and make configurable** — DraftOps is currently hardcoded to Cole's league. The next major initiative is making it a proper multi-draft tool:
+**Deploy Milestone** (Vercel + Neon) — #4 Draft Creation & Management UI is done (PR #18). Next:
 
-- Create/manage multiple drafts
-- Upload custom rankings (e.g., FantasyCalc CSV) per draft
-- Configure scoring settings, league size, roster size, budget per draft
-- Support any number of teams (not just 12)
-- Remove all hardcoded league assumptions (handles, `LEAGUE_TEAMS`, kicker-PKG rules, etc.)
+- Error monitoring (Sentry or Vercel built-in)
+- Feedback link in the UI
 
-Design decisions (e.g., dropdowns over quick-pick grids for team selection) should already account for this — keep that in mind when touching anything.
+**Longer term** (see `ROADMAP.md`): configurable league settings (#5a/#5b), custom rankings upload (#6). Design decisions should already account for the multi-draft direction — keep that in mind when touching anything.
 
 ## Global Rules
 

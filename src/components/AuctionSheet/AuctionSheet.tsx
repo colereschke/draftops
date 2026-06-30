@@ -18,6 +18,7 @@ interface AuctionSheetProps {
   nominatedPlayers: string[];
   draftId: number;
   ownerHandle: string | null;
+  ownerBudget: number;
 }
 
 const POSITIONS: Array<'ALL' | Position> = ['ALL', 'QB', 'RB', 'WR', 'TE', 'PICK', 'PKG'];
@@ -38,13 +39,13 @@ export default function AuctionSheet({
   nominatedPlayers,
   draftId,
   ownerHandle,
+  ownerBudget,
 }: AuctionSheetProps) {
   const [posFilter, setPosFilter] = useState<'ALL' | Position>('ALL');
   const [search, setSearch] = useState<string>('');
   const [sortBy, setSortBy] = useState<SortKey>('sfRank');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
   const [showNotes, setShowNotes] = useState<boolean>(false);
-  const [myBudget] = useState<number>(1000);
   const [modalPlayer, setModalPlayer] = useState<(typeof players)[0] | null>(null);
   const [modalError, setModalError] = useState<string>('');
   const [, startTransition] = useTransition();
@@ -178,7 +179,7 @@ export default function AuctionSheet({
     });
   }
 
-  const remaining = myBudget - mySpent;
+  const remaining = ownerBudget - mySpent;
 
   const filtered = useMemo<Player[]>(() => {
     let data = [...players];
@@ -317,7 +318,7 @@ export default function AuctionSheet({
                   fontFamily: 'var(--font-mono), monospace',
                 }}
               >
-                ${myBudget}
+                ${ownerBudget}
               </div>
             </div>
             <div style={{ textAlign: 'center' }}>

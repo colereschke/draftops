@@ -67,6 +67,7 @@ describe('AuctionSheet with claimed bids', () => {
         nominatedPlayers={[]}
         draftId={1}
         ownerHandle="coreschke"
+        ownerBudget={1000}
       />,
     );
 
@@ -81,6 +82,7 @@ describe('AuctionSheet with claimed bids', () => {
         nominatedPlayers={[]}
         draftId={1}
         ownerHandle="coreschke"
+        ownerBudget={1000}
       />,
     );
 
@@ -95,6 +97,7 @@ describe('AuctionSheet with claimed bids', () => {
         nominatedPlayers={[]}
         draftId={1}
         ownerHandle="coreschke"
+        ownerBudget={1000}
       />,
     );
 
@@ -111,6 +114,7 @@ describe('AuctionSheet with claimed bids', () => {
         nominatedPlayers={[]}
         draftId={1}
         ownerHandle="coreschke"
+        ownerBudget={1000}
       />,
     );
 
@@ -126,6 +130,7 @@ describe('AuctionSheet with claimed bids', () => {
         nominatedPlayers={[]}
         draftId={1}
         ownerHandle="coreschke"
+        ownerBudget={1000}
       />,
     );
 
@@ -141,6 +146,7 @@ describe('AuctionSheet with claimed bids', () => {
         nominatedPlayers={[]}
         draftId={1}
         ownerHandle="coreschke"
+        ownerBudget={1000}
       />,
     );
 
@@ -158,6 +164,7 @@ describe('AuctionSheet with claimed bids', () => {
         nominatedPlayers={[]}
         draftId={1}
         ownerHandle="coreschke"
+        ownerBudget={1000}
       />,
     );
 
@@ -175,6 +182,7 @@ describe('AuctionSheet with claimed bids', () => {
         nominatedPlayers={['Josh Allen']}
         draftId={1}
         ownerHandle="coreschke"
+        ownerBudget={1000}
       />,
     );
     expect(screen.getByText('LIVE')).toBeInTheDocument();
@@ -188,6 +196,7 @@ describe('AuctionSheet with claimed bids', () => {
         nominatedPlayers={[]}
         draftId={1}
         ownerHandle="coreschke"
+        ownerBudget={1000}
       />,
     );
     fireEvent.click(screen.getByText('Josh Allen'));
@@ -202,13 +211,14 @@ describe('AuctionSheet with claimed bids', () => {
         nominatedPlayers={['Josh Allen']}
         draftId={1}
         ownerHandle="coreschke"
+        ownerBudget={1000}
       />,
     );
     fireEvent.click(screen.getAllByText('Josh Allen')[0]);
     expect(screen.getByText(/in auction/i)).toBeInTheDocument();
   });
 
-  it('closes modal, shows LIVE badge, and calls /api/nominated after clicking Nom', async () => {
+  it('closes modal, shows LIVE badge, and calls /api/draft/1/nominated after clicking Nom', async () => {
     render(
       <AuctionSheet
         claimedBids={[]}
@@ -216,6 +226,7 @@ describe('AuctionSheet with claimed bids', () => {
         nominatedPlayers={[]}
         draftId={1}
         ownerHandle="coreschke"
+        ownerBudget={1000}
       />,
     );
 

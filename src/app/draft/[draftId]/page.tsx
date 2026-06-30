@@ -1,3 +1,4 @@
+import { notFound } from 'next/navigation';
 import { prisma } from '@/lib/db';
 import AuctionSheet from '@/components/AuctionSheet/AuctionSheet';
 import type { ClaimedBid, LeagueTeam } from '@/types';
@@ -8,6 +9,7 @@ export default async function DraftHomePage({ params }: { params: Promise<{ draf
   const draftId = parseInt((await params).draftId, 10);
   const session = await auth();
   const draft = await getDraft(session!.user.id, draftId);
+  if (!session || !draft) notFound();
 
   const [rawBids, teams, nominatedEntries] = await Promise.all([
     prisma.auctionResult.findMany({
@@ -47,7 +49,8 @@ export default async function DraftHomePage({ params }: { params: Promise<{ draf
       teams={teams as LeagueTeam[]}
       nominatedPlayers={nominatedEntries.map((e) => e.playerName)}
       draftId={draftId}
-      ownerHandle={draft?.ownerTeam?.handle ?? null}
+      ownerHandle={draft.ownerTeam?.handle ?? null}
+      ownerBudget={draft.ownerTeam?.budget ?? 1000}
     />
   );
 }

@@ -121,31 +121,41 @@ Vercel + Neon PostgreSQL. At this point the app is shareable with ETR Discord fo
 
 ---
 
-## 5a. Configurable League Settings — Model
+## 5a. Configurable League Settings — Model + Player Table
 
-**Blocks:** wiring settings through logic; custom rankings
+**Blocks:** #5b (wiring); #5c (Sleeper import); #8 (custom rankings)
 **Blocked by:** #3 (settings live on a `Draft`)
 **Parallelizable with:** #4
 
-Add settings fields to the `Draft` model:
+Spec: `docs/superpowers/specs/2026-06-30-league-settings-design.md`
 
-- `teamCount` (default 12)
-- `rosterSize` (default 30)
-- `budget` (default 1000)
-- `targetRoster` (JSON — per-position targets, default `{QB:4, RB:9, WR:11, TE:3}`)
-- `teMultiplier` (TE premium, default 1.18)
+Expands significantly from the original roadmap item — collapses #7 (custom rankings player table) into this milestone since the architecture is the same. Three-PR arc:
 
-Wire into the draft creation form so users configure their league on setup.
+**PR A — Schema:** Add settings fields to `Draft` model + new `Player` model (per-draft):
 
-> **Scope note:** scoring format is fixed to **Superflex** for now. Player values derive entirely from FantasyCalc's 2QB column, so a 1QB option would require a different source column, not just a different multiplier — it's deferred (tracked in the README's future-features list), not in this milestone.
+- `teamCount`, `rosterSize`, `budget`, `startingLineup` (JSON — starting slot array), `scoringSettings` (JSON), `targetRoster` (JSON)
+- `Player` model scoped to `draftId` — mirrors existing `Player` TS interface fields
+
+**PR B — Form + Seeding:** Full draft creation form UI with Roster Settings, Starting Lineup builder, and Scoring sections. `createDraft` action seeds `Player` table from base ETR values (1:1, no adjustment). Backfill migration for existing drafts.
+
+**PR C — Page Wiring:** `AuctionSheet` and `NominationHelper` accept `players: Player[]` as a prop instead of importing the static file. Server components query `prisma.player.findMany({ where: { draftId } })`. `computeTeamStats` takes `players` as a parameter. `players.ts` eliminated from all client imports.
+
+> **Algorithm deferred to #5b.** Player values are seeded 1:1 from ETR baseline. The adjustment algorithm (tuning values based on lineup/scoring delta from baseline) ships in #5b so it can iterate independently.
 
 ---
 
-## 5b. Configurable League Settings — Wire Through Logic
+## 5b. Configurable League Settings — Value Adjustment Algorithm
 
-**Blocks:** custom rankings
+**Blocks:** #8 (custom rankings benefits from algorithm being in place)
 **Blocked by:** #5a
-**Parallelizable with:** nothing (depends directly on 5a's fields)
+**Parallelizable with:** nothing (depends directly on 5a's Player table)
+
+The riskiest and most iterative piece — isolated deliberately. Starting from the base ETR values seeded in #5a, compute adjusted `budget`/`ceiling`/`floor` per player based on the draft's settings delta from baseline:
+
+- Base reference: standard full-PPR Superflex, 10-slot vanilla lineup (QB/RB/RB/WR/WR/TE/FLEX/FLEX/FLEX/SUPER_FLEX)
+- Lineup delta: extra starting slots for a position → scarcity increases → values go up proportionally
+- Scoring delta: higher PPR tier for a position → values go up; rushing bonuses → mobile QBs / RBs benefit
+- Algorithm runs once at draft creation (after player seeding) and stores results in the `Player` table
 
 Replace all hardcoded league assumptions with values pulled from the draft's settings:
 
@@ -156,19 +166,161 @@ Replace all hardcoded league assumptions with values pulled from the draft's set
 
 ---
 
-## 6. Custom Rankings Upload
+## 5c. Sleeper League Import
+
+**Blocks:** nothing (UX enhancement on top of #5a)
+**Blocked by:** #5a (settings model must exist to import into)
+**Parallelizable with:** #5b (touches only draft creation flow, not the algorithm)
+
+Allow users to populate the draft creation form automatically by entering a Sleeper league ID. Two public unauthenticated API calls:
+
+- `GET https://api.sleeper.app/v1/league/<league_id>` → `total_rosters`, `roster_positions`, `scoring_settings`
+- `GET https://api.sleeper.app/v1/league/<league_id>/users` → team display names and user handles
+
+**Import flow:**
+
+1. User enters Sleeper league ID on the draft creation page (above the manual form)
+2. Server action fetches both endpoints, maps response to DraftOps settings
+3. Form pre-fills: teamCount, startingLineup (filter BN/IR from `roster_positions`), scoringSettings (mapper: `pprTE = rec + bonus_rec_te`, `teFDBonus = bonus_fd_te ?? 0`, etc.), team handles + display names
+4. User reviews pre-filled form and can edit before submitting — import is a suggestion, not a lock
+
+**Key Sleeper → DraftOps field mappings** (verified against league `1360707683916734464`):
+
+- `total_rosters` → `teamCount`
+- `roster_positions` filtered to exclude `BN`, `IR`, `K` → `startingLineup`
+- `scoring_settings.rec + bonus_rec_rb` → `pprRB`; `+ bonus_rec_wr` → `pprWR`; `+ bonus_rec_te` → `pprTE`
+- `scoring_settings.rec_fd` → `recFD`; `bonus_fd_rb` → `rbFDBonus`; `bonus_fd_wr` → `wrFDBonus`; `bonus_fd_te` → `teFDBonus`
+- `scoring_settings.pass_yd` (pts/yd) → `passYdsPerPoint` (yds/pt = 1 / pass_yd)
+- `scoring_settings.pass_td` → `passTD`; `pass_int` → `passInt`
+- `scoring_settings.rush_att` → `rushAtt`; `rush_fd` → `rushFD`
+
+---
+
+## 6. UI Redesign
+
+**Blocks:** nothing (visual layer only)
+**Blocked by:** Deploy milestone (want real user feedback before committing to a direction)
+**Parallelizable with:** #7
+
+Target aesthetic: Linear / Vercel — modern, dark, intentional. The current design has solid bones (design token system in `globals.css`, position accent colors, JetBrains Mono for numbers) but needs a more polished, progressive feel overall.
+
+**Component library:** Strongly consider **shadcn/ui** over MUI. shadcn/ui is Tailwind-based (no paradigm shift), uses CSS variables for theming (compatible with the existing `globals.css` token approach), is built on Radix UI primitives (accessibility handled), and components live in the repo so there's no library aesthetic to fight. MUI was evaluated and rejected — Material Design defaults conflict with the target aesthetic and would require constant fighting to override.
+
+Key areas:
+
+- Typography and spacing refinement
+- Component-level polish (tables, modals, badges, nav)
+- Consider adopting shadcn/ui primitives for interactive elements (dialogs, dropdowns, command palette)
+- Maintain the existing design token layer — extend/refine rather than replace
+
+---
+
+## 7. Custom Rankings Upload
 
 **Blocks:** nothing (final major feature)
-**Blocked by:** #3 (players need `draftId`), #5a (need scoring config to validate/scale values)
-**Parallelizable with:** #5b (different surfaces — upload pipeline vs. settings wiring — but both touch valuation; coordinate if they collide)
+**Blocked by:** #5a (`Player` model already ships there — this adds upload on top)
+**Parallelizable with:** #5b (different surfaces — upload pipeline vs. algorithm)
 
-Currently the player pool is a static hardcoded file (`src/data/players.ts`). This moves it to the DB, scoped per draft.
+The `Player` model and per-draft player table land in #5a. This item adds the ability for users to replace the default ETR seed with their own rankings CSV.
 
-- Add `Player` model to schema, scoped to `draftId`
-- CSV upload UI targeting FantasyCalc export format (Superflex `$200` budget column)
-- Parsing + scaling logic (currently `× 5` for $1000 budget, TE premium, ceiling/floor)
-- Validate the uploaded CSV has the expected Superflex columns
-- Fallback/seed: keep the current dynasty-Superflex player data as a default pool for new drafts. **Label it clearly** as dynasty-Superflex-specific so users in other formats know to replace it.
+- CSV upload UI targeting ETR dynasty export format
+- Parsing + scaling logic (currently `× 5` for $1,000 budget, ceiling/floor derivation)
+- Validate uploaded CSV has expected columns; show parse errors clearly
+- On upload, replace existing `Player` rows for the draft (re-run adjustment algorithm from #5b after import)
+- Fallback: default ETR pool remains for new drafts; label it clearly as dynasty-Superflex-specific
+
+---
+
+## 8. Dynamic Pick Valuation
+
+**Blocks:** nothing downstream yet
+**Blocked by:** #7 (needs per-player values in DB to compute market-relative spend), #5b (needs roster targets and budget from draft settings)
+**Parallelizable with:** #6 (UI-only)
+
+Pick package values in the current tool are static (hardcoded `PKG_VALUES` in `players.ts`). This item makes them dynamic — each team's 2027 pick package value adjusts based on observable signals about that team's draft, replacing or overriding the static baseline at query time.
+
+### 8a. Teams Page: Aggregate Stats (prerequisite, standalone)
+
+Two additions to the teams page that surface data already available:
+
+**Aggregate spend delta:**
+The teams page already renders per-player `delta = result.price - player.budget`. Add one aggregate column per team:
+
+- `totalDelta = SUM(result.price) - SUM(player.budget)` across all won players
+- Positive → team has overpaid vs. market; negative → underpaid
+- Display inline with the existing spend/remaining/buying-power columns
+- Requires player pool in DB (#7) since `player.budget` lives there
+
+**Average roster age:**
+
+- `avgAge = AVG(player.age)` across all won players
+- Age is already in the player data (the existing age-color design system uses it)
+- Young average age signals a rebuilding/tanking posture; older signals competing-now
+- Display as a single column; use the existing age-color tokens for visual reinforcement
+- Usable as a prerequisite signal for #8b's posture classifier
+
+Both can ship in one PR as soon as #7 is done.
+
+### 8b. Dynamic Pick Value Model
+
+The goal is to replace the static pick package valuations with a per-team score that updates as bids are logged. Three signals:
+
+**Signal 1 — Market-relative overspend (from 8a)**
+
+- Teams that are consistently overpaying vs. FantasyCalc values are burning budget inefficiently → their picks arrive in a weaker financial context
+- Teams underpaying signal discipline and surplus → picks likely more attractive
+- Adjustment: scale the static pick baseline up or down by some factor of `totalDelta / totalTargetSpend`; needs a sensitivity cap to avoid wild swings early in the draft when few bids are logged
+
+**Signal 2 — Competitive posture (age + lineup value)**
+The real goal here is classifying whether a team is **competing in Year 1** or **tanking/rebuilding**. Two sub-signals combine for this:
+
+- **Average roster age** (from 8a): young average age → rebuilding; older → competing now. Age is already in the player data — no external source needed.
+- **Starting lineup value** (proxy: auction values): take the top-N players by `budget` from a team's roster (N ≈ 8–9 starting slots). High aggregate value → likely competing; low → rebuilding. Use `player.budget` from the DB (#7) as the proxy — it's projection-derived from FantasyCalc.
+- Pick-heavy ratio (`numberOfPickPackagesWon / totalAssetsWon`) feeds in as a third sub-signal: pick-heavy + young + weak lineup → strong rebuilding signal; pick-heavy + strong lineup → ambiguous (aggressive competing team that still holds future assets).
+- Combine all three into a simple posture score. Clear cases (young + pick-heavy + low lineup value, or old + player-heavy + high lineup value) get meaningful adjustment. Ambiguous middle cases get minimal or no adjustment.
+- Only activate this signal once a team has ≥ 5–6 players (too few → noisy).
+- **Sleeper projections** (if #9 is built) could refine this further by providing actual Year 1 projected scores, but the age + auction-value proxy is the V1 implementation and likely good enough for dynasty.
+
+**Combining signals:**
+A composite adjustment multiplier is applied to the static PKG baseline:
+
+```
+adjustedValue = staticBaseline × (1 + overspendAdjustment + lineupQualityAdjustment + strategyAdjustment)
+```
+
+Weights and caps need tuning; start conservative (±15% max total adjustment) so the model is informative rather than destabilizing the nomination scoring that consumes pick values.
+
+**Design decisions:**
+
+1. Signal activation is non-uniform — gate each signal on a combination of **% of draft budget spent** AND **number of players won** for that team. These thresholds will need empirical tuning; revisit after the first real draft that uses dynamic valuation.
+2. Adjusted values are surfaced in the UI with a directional indicator (↑/↓ arrow) next to the pick's displayed value, so users know the static baseline has been modified and in which direction. The raw adjusted value (not just the direction) should be visible somewhere — tooltip or inline.
+3. Pick packages affect nomination scores directly — validate that the adjustment doesn't cause picks to dominate or disappear from nomination suggestions in edge cases before shipping.
+4. The model operates on team-level aggregate picks, not per-team-of-origin. A player-heavy competing team could still hold a high-value rival's picks — noted as a known limitation; revisit if it causes real confusion in use.
+
+---
+
+## 9. Sleeper API Integration (Exploratory)
+
+**Blocks:** Sleeper-powered Signal 2 in #8b; possibly replaces manual bid logging long-term
+**Blocked by:** nothing technically (API is public); design depends on what the API actually exposes
+**Parallelizable with:** most things — this is an integration layer, not core logic
+
+The Sleeper API ([docs](https://docs.sleeper.com/)) is a public, unauthenticated REST API that exposes league, roster, player, and projection data. Worth exploring as a source for two distinct things:
+
+**Use case A — Live data sync**
+Dynamically populate auction results and team rosters directly from Sleeper instead of (or alongside) manual bid logging. If the league runs its auction through Sleeper, this would let DraftOps stay in sync automatically rather than requiring the operator to log every winning bid. High value, potentially complex to reconcile with manual entries.
+
+**Use case B — Projections to refine posture classification (#8b Signal 2)**
+V1 of Signal 2 uses average roster age + auction values as a proxy for competitive posture. Sleeper projections could sharpen this by providing actual projected Year 1 scoring — a team with an old roster _and_ low projected scoring is definitively competing and losing, not just rebuilding. Needs investigation into what Sleeper exposes for dynasty/startup-auction contexts specifically, since their projections are primarily weekly in-season data.
+
+**Before committing to either use case, investigate:**
+
+- Does Sleeper expose auction draft picks and winning prices via the API? (Use case A viability)
+- What projection endpoints exist and at what granularity — weekly, seasonal, dynasty? (Use case B viability)
+- Is the data available for slow/slow-auction formats or only snake drafts?
+- Rate limits and caching strategy — DraftOps is a live-draft tool and can't afford projection fetches slowing down page loads
+
+Design this as an optional enhancement layer, not a hard dependency. The tool should remain fully functional without Sleeper credentials if a user's league isn't on Sleeper.
 
 ---
 
@@ -181,10 +333,18 @@ Currently the player pool is a static hardcoded file (`src/data/players.ts`). Th
 #3 Multi-draft schema + routing   ← expand/contract, 4 incremental PRs
         ↓
 #4 Draft creation UI ──┐  (parallel)
-#5a Configurable settings model ──┘
+#5a Settings model + Player table ──┘   ← collapses original #7 (Player model)
         ↓
 [DEPLOY]  (needs #1–4; #5a optional before deploy)
         ↓
-#5b Wire settings through logic
-#6  Custom rankings upload  (parallel-ish with #5b — coordinate on valuation)
+#5b Value adjustment algorithm ──┐  (parallel)
+#5c Sleeper league import ────────┤  (parallel — touches only creation form)
+#6  UI redesign ──────────────────┘  (visual only, no logic overlap)
+        ↓
+#7  Custom rankings upload  (replaces ETR seed; re-runs #5b algorithm after import)
+#9  Sleeper API integration  (live data sync + projections — integration layer)
+        ↓
+#8a Teams page: aggregate spend delta + avg age
+        ↓
+#8b Dynamic pick valuation  (needs #8a signals + #5b settings; enhanced by #9)
 ```

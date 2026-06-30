@@ -57,3 +57,40 @@ describe('NewDraftPage — roster settings and lineup', () => {
     expect(screen.getByTestId<HTMLSelectElement>('lineup-slot-0').value).toBe('SUPER_FLEX');
   });
 });
+
+describe('NewDraftPage — scoring settings', () => {
+  it('renders passing yards per point input with default 25', () => {
+    render(<NewDraftPage />);
+    const input = screen.getByTestId<HTMLInputElement>('scoring-passYdsPerPoint');
+    expect(input.value).toBe('25');
+  });
+
+  it('renders passing TD select with default 4', () => {
+    render(<NewDraftPage />);
+    const select = screen.getByTestId<HTMLSelectElement>('scoring-passTD');
+    expect(select.value).toBe('4');
+  });
+
+  it('renders all PPR selects defaulting to 1', () => {
+    render(<NewDraftPage />);
+    expect(screen.getByTestId<HTMLSelectElement>('scoring-pprRB').value).toBe('1');
+    expect(screen.getByTestId<HTMLSelectElement>('scoring-pprWR').value).toBe('1');
+    expect(screen.getByTestId<HTMLSelectElement>('scoring-pprTE').value).toBe('1');
+  });
+});
+
+describe('NewDraftPage — lineup validation', () => {
+  it('shows error when submitting with no QB or SUPER_FLEX slot', () => {
+    render(<NewDraftPage />);
+    // Change slot 0 from QB to RB
+    fireEvent.change(screen.getByTestId('lineup-slot-0'), { target: { value: 'RB' } });
+    // Change slot 9 from SUPER_FLEX to FLEX
+    fireEvent.change(screen.getByTestId('lineup-slot-9'), { target: { value: 'FLEX' } });
+    // Provide draft name to pass earlier validations
+    fireEvent.change(screen.getByTestId('draft-name-input'), {
+      target: { value: 'Test Draft' },
+    });
+    fireEvent.submit(screen.getByTestId('new-draft-form'));
+    expect(screen.getByText(/at least one QB or SUPER_FLEX/i)).toBeInTheDocument();
+  });
+});

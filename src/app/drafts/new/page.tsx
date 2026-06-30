@@ -2,8 +2,8 @@
 
 import { useState, useTransition } from 'react';
 import { createDraft } from '@/lib/actions';
-import type { StartingSlot } from '@/types';
-import { DEFAULT_STARTING_LINEUP, DEFAULT_TARGET_ROSTER } from '@/types';
+import type { StartingSlot, ScoringSettings } from '@/types';
+import { DEFAULT_STARTING_LINEUP, DEFAULT_TARGET_ROSTER, DEFAULT_SCORING_SETTINGS } from '@/types';
 
 interface TeamRow {
   handle: string;
@@ -36,6 +36,13 @@ export default function NewDraftPage() {
   const [startingLineup, setStartingLineup] = useState<StartingSlot[]>([
     ...DEFAULT_STARTING_LINEUP,
   ]);
+  const [scoringSettings, setScoringSettings] = useState<ScoringSettings>({
+    ...DEFAULT_SCORING_SETTINGS,
+  });
+
+  function updateScoring<K extends keyof ScoringSettings>(key: K, value: ScoringSettings[K]) {
+    setScoringSettings((prev) => ({ ...prev, [key]: value }));
+  }
 
   function handleTeamCountChange(newCount: number) {
     const clamped = Math.max(2, Math.min(32, newCount));
@@ -93,6 +100,11 @@ export default function NewDraftPage() {
       return;
     }
 
+    if (!startingLineup.some((s) => s === 'QB' || s === 'SUPER_FLEX')) {
+      setError('Starting lineup must include at least one QB or SUPER_FLEX slot.');
+      return;
+    }
+
     startTransition(async () => {
       try {
         await createDraft({ name: name.trim(), budgetPerTeam: budget, teams });
@@ -115,7 +127,7 @@ export default function NewDraftPage() {
         New Draft
       </h1>
 
-      <form onSubmit={handleSubmit}>
+      <form data-testid="new-draft-form" onSubmit={handleSubmit}>
         {/* --- Draft Settings --- */}
         <div
           style={{
@@ -128,6 +140,7 @@ export default function NewDraftPage() {
           <label style={labelStyle}>
             Draft name
             <input
+              data-testid="draft-name-input"
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
@@ -306,6 +319,152 @@ export default function NewDraftPage() {
           </button>
         </div>
 
+        {/* --- Scoring --- */}
+        <div
+          style={{
+            background: 'var(--bg-surface)',
+            borderRadius: '6px',
+            padding: '1.25rem',
+            marginBottom: '1rem',
+          }}
+        >
+          <div style={sectionHeaderStyle}>Scoring</div>
+
+          {/* Passing */}
+          <div style={{ marginBottom: '0.875rem' }}>
+            <div style={subSectionStyle}>Passing</div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.5rem' }}>
+              <label style={labelStyle}>
+                Yds / point
+                <input
+                  data-testid="scoring-passYdsPerPoint"
+                  type="number"
+                  min={1}
+                  step={5}
+                  value={scoringSettings.passYdsPerPoint}
+                  onChange={(e) =>
+                    updateScoring('passYdsPerPoint', parseFloat(e.target.value) || 25)
+                  }
+                  style={inputStyle}
+                />
+              </label>
+              <label style={labelStyle}>
+                Passing TD
+                <select
+                  data-testid="scoring-passTD"
+                  value={scoringSettings.passTD}
+                  onChange={(e) => updateScoring('passTD', parseFloat(e.target.value))}
+                  style={inputStyle}
+                >
+                  <option value={4}>4</option>
+                  <option value={6}>6</option>
+                </select>
+              </label>
+              <label style={labelStyle}>
+                Interception
+                <input
+                  data-testid="scoring-passInt"
+                  type="number"
+                  max={0}
+                  step={1}
+                  value={scoringSettings.passInt}
+                  onChange={(e) => updateScoring('passInt', parseFloat(e.target.value) || -2)}
+                  style={inputStyle}
+                />
+              </label>
+            </div>
+          </div>
+
+          {/* Rushing */}
+          <div style={{ marginBottom: '0.875rem' }}>
+            <div style={subSectionStyle}>Rushing (all positions)</div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '0.5rem' }}>
+              <label style={labelStyle}>
+                Rush attempt bonus
+                <input
+                  data-testid="scoring-rushAtt"
+                  type="number"
+                  min={0}
+                  step={0.1}
+                  value={scoringSettings.rushAtt}
+                  onChange={(e) => updateScoring('rushAtt', parseFloat(e.target.value) || 0)}
+                  style={inputStyle}
+                />
+              </label>
+              <label style={labelStyle}>
+                Rush 1st down bonus
+                <input
+                  data-testid="scoring-rushFD"
+                  type="number"
+                  min={0}
+                  step={0.25}
+                  value={scoringSettings.rushFD}
+                  onChange={(e) => updateScoring('rushFD', parseFloat(e.target.value) || 0)}
+                  style={inputStyle}
+                />
+              </label>
+            </div>
+          </div>
+
+          {/* Reception (PPR) */}
+          <div style={{ marginBottom: '0.875rem' }}>
+            <div style={subSectionStyle}>Reception (PPR)</div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.5rem' }}>
+              {(
+                [
+                  { pos: 'RB', key: 'pprRB', opts: [0, 0.5, 1] },
+                  { pos: 'WR', key: 'pprWR', opts: [0, 0.5, 1] },
+                  { pos: 'TE', key: 'pprTE', opts: [0, 0.5, 1, 1.5, 2] },
+                ] as const
+              ).map(({ pos, key, opts }) => (
+                <label key={pos} style={labelStyle}>
+                  {pos}
+                  <select
+                    data-testid={`scoring-${key}`}
+                    value={scoringSettings[key]}
+                    onChange={(e) => updateScoring(key, parseFloat(e.target.value))}
+                    style={inputStyle}
+                  >
+                    {opts.map((v) => (
+                      <option key={v} value={v}>
+                        {v}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              ))}
+            </div>
+          </div>
+
+          {/* First down bonuses */}
+          <div>
+            <div style={subSectionStyle}>Receiving 1st down bonus</div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.5rem' }}>
+              {(
+                [
+                  { label: 'All', key: 'recFD' },
+                  { label: 'RB', key: 'rbFDBonus' },
+                  { label: 'WR', key: 'wrFDBonus' },
+                  { label: 'TE', key: 'teFDBonus' },
+                ] as const
+              ).map(({ label, key }) => (
+                <label key={key} style={labelStyle}>
+                  {label}
+                  <input
+                    data-testid={`scoring-${key}`}
+                    type="number"
+                    min={0}
+                    step={0.25}
+                    value={scoringSettings[key]}
+                    onChange={(e) => updateScoring(key, parseFloat(e.target.value) || 0)}
+                    style={inputStyle}
+                  />
+                </label>
+              ))}
+            </div>
+          </div>
+        </div>
+
         {/* --- Team Roster Table --- */}
         <div
           style={{
@@ -438,4 +597,13 @@ const sectionHeaderStyle: React.CSSProperties = {
   textTransform: 'uppercase',
   letterSpacing: '0.05em',
   marginBottom: '0.75rem',
+};
+
+const subSectionStyle: React.CSSProperties = {
+  fontFamily: 'var(--font-barlow)',
+  fontSize: '0.72rem',
+  color: 'var(--text-secondary)',
+  textTransform: 'uppercase',
+  letterSpacing: '0.03em',
+  marginBottom: '0.4rem',
 };

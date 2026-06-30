@@ -1,4 +1,5 @@
 import { computeTeamStats } from '@/lib/computeTeamStats';
+import type { Player } from '@/types';
 
 const makeResult = (
   overrides: Partial<{
@@ -40,7 +41,7 @@ const makeTeam = (
 
 describe('computeTeamStats', () => {
   it('computes zero stats for a team with no results', () => {
-    const [stats] = computeTeamStats([makeTeam()]);
+    const [stats] = computeTeamStats([makeTeam()], []);
     expect(stats.spent).toBe(0);
     expect(stats.remaining).toBe(1000);
     expect(stats.rosterCount).toBe(0);
@@ -53,7 +54,7 @@ describe('computeTeamStats', () => {
     const team = makeTeam({
       results: [makeResult({ price: 150 }), makeResult({ id: 2, price: 100 })],
     });
-    const [stats] = computeTeamStats([team]);
+    const [stats] = computeTeamStats([team], []);
     expect(stats.spent).toBe(250);
     expect(stats.remaining).toBe(750);
   });
@@ -62,14 +63,14 @@ describe('computeTeamStats', () => {
     const team = makeTeam({
       results: [makeResult(), makeResult({ id: 2 }), makeResult({ id: 3 })],
     });
-    const [stats] = computeTeamStats([team]);
+    const [stats] = computeTeamStats([team], []);
     expect(stats.rosterCount).toBe(3);
     expect(stats.rosterRemaining).toBe(27);
   });
 
   it('computes buyingPower as remaining minus rosterRemaining', () => {
     const team = makeTeam({ results: [makeResult({ price: 100 })] });
-    const [stats] = computeTeamStats([team]);
+    const [stats] = computeTeamStats([team], []);
     // remaining=900, rosterRemaining=29, buyingPower=871
     expect(stats.buyingPower).toBe(871);
   });
@@ -82,13 +83,13 @@ describe('computeTeamStats', () => {
         makeResult({ id: 3, position: 'PKG', price: 72 }),
       ],
     });
-    const [stats] = computeTeamStats([team]);
+    const [stats] = computeTeamStats([team], []);
     expect(stats.pkgCount).toBe(2);
   });
 
   it('maps results to RosterEntry shape and injects teamHandle', () => {
     const team = makeTeam({ handle: 'coreschke', results: [makeResult()] });
-    const [stats] = computeTeamStats([team]);
+    const [stats] = computeTeamStats([team], []);
     expect(stats.results[0]).toMatchObject({
       id: 1,
       player: 'Patrick Mahomes',
@@ -106,8 +107,33 @@ describe('computeTeamStats', () => {
       makeTeam({ id: 1, handle: 'a', results: [makeResult({ price: 300, teamId: 1 })] }),
       makeTeam({ id: 2, handle: 'b', results: [] }),
     ];
-    const stats = computeTeamStats(teams);
+    const stats = computeTeamStats(teams, []);
     expect(stats[0].spent).toBe(300);
     expect(stats[1].spent).toBe(0);
+  });
+
+  it('computes delta as price minus player budget when player is found', () => {
+    const mockPlayers: Player[] = [
+      {
+        player: 'Patrick Mahomes',
+        team: 'KC',
+        pos: 'QB',
+        age: 30,
+        sfRank: 1,
+        budget: 150,
+        ceiling: 172,
+        floor: 130,
+        notes: '',
+      },
+    ];
+    const team = makeTeam({ results: [makeResult({ price: 200 })] });
+    const [stats] = computeTeamStats([team], mockPlayers);
+    expect(stats.results[0].delta).toBe(50); // 200 paid - 150 target
+  });
+
+  it('sets delta to null when player is not in the players list', () => {
+    const team = makeTeam({ results: [makeResult({ player: 'Unknown Player' })] });
+    const [stats] = computeTeamStats([team], []);
+    expect(stats.results[0].delta).toBeNull();
   });
 });

@@ -4,6 +4,7 @@ import { prisma } from '@/lib/db';
 import { getDraft } from '@/lib/draft';
 import { computeTeamStats } from '@/lib/computeTeamStats';
 import RosterTracker from '@/components/RosterTracker';
+import type { Player, Position } from '@/types';
 
 export const dynamic = 'force-dynamic';
 
@@ -14,15 +15,30 @@ export default async function TeamsPage({ params }: { params: Promise<{ draftId:
   const draft = await getDraft(session.user.id, draftId);
   if (!draft) notFound();
 
-  const rawTeams = await prisma.team.findMany({
-    where: { draftId },
-    include: { results: true },
-    orderBy: { handle: 'asc' },
-  });
+  const [rawTeams, dbPlayers] = await Promise.all([
+    prisma.team.findMany({
+      where: { draftId },
+      include: { results: true },
+      orderBy: { handle: 'asc' },
+    }),
+    prisma.player.findMany({ where: { draftId }, orderBy: { sfRank: 'asc' } }),
+  ]);
+
+  const players: Player[] = dbPlayers.map((p) => ({
+    player: p.name,
+    team: p.nflTeam,
+    pos: p.pos as Position,
+    age: p.age,
+    sfRank: p.sfRank,
+    budget: p.budget,
+    ceiling: p.ceiling,
+    floor: p.floor,
+    notes: p.notes,
+  }));
 
   return (
     <RosterTracker
-      teams={computeTeamStats(rawTeams)}
+      teams={computeTeamStats(rawTeams, players)}
       ownerHandle={draft.ownerTeam?.handle ?? null}
     />
   );

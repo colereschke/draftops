@@ -107,7 +107,15 @@ export default function NewDraftPage() {
 
     startTransition(async () => {
       try {
-        await createDraft({ name: name.trim(), budgetPerTeam: budget, teams });
+        await createDraft({
+          name: name.trim(),
+          budgetPerTeam: budget,
+          rosterSize,
+          targetRoster,
+          startingLineup,
+          scoringSettings,
+          teams,
+        });
       } catch (err) {
         setError((err as Error).message ?? 'Something went wrong.');
       }

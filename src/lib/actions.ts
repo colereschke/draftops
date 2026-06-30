@@ -5,6 +5,8 @@ import { redirect } from 'next/navigation';
 import { auth } from '@/auth';
 import { prisma } from '@/lib/db';
 import { getDraft } from '@/lib/draft';
+import type { Position, StartingSlot, ScoringSettings } from '@/types';
+import { players as BASE_PLAYERS } from '@/data/players';
 
 export async function logBid(data: {
   player: string;
@@ -87,6 +89,10 @@ interface TeamInput {
 export async function createDraft(data: {
   name: string;
   budgetPerTeam: number;
+  rosterSize: number;
+  targetRoster: Partial<Record<Position, number>>;
+  startingLineup: StartingSlot[];
+  scoringSettings: ScoringSettings;
   teams: TeamInput[];
 }): Promise<void> {
   const session = await auth();
@@ -104,7 +110,17 @@ export async function createDraft(data: {
 
   const draftId = await prisma.$transaction(async (tx) => {
     const draft = await tx.draft.create({
-      data: { name: data.name.trim(), ownerId: session.user.id, status: 'ACTIVE' },
+      data: {
+        name: data.name.trim(),
+        ownerId: session.user.id,
+        status: 'ACTIVE',
+        teamCount: data.teams.length,
+        rosterSize: data.rosterSize,
+        budget: data.budgetPerTeam,
+        startingLineup: data.startingLineup,
+        scoringSettings: data.scoringSettings,
+        targetRoster: data.targetRoster,
+      },
     });
 
     let ownerTeamId: number | null = null;
@@ -121,6 +137,22 @@ export async function createDraft(data: {
     }
 
     await tx.draft.update({ where: { id: draft.id }, data: { ownerTeamId } });
+
+    await tx.player.createMany({
+      data: BASE_PLAYERS.map((p) => ({
+        name: p.player,
+        nflTeam: p.team,
+        pos: p.pos,
+        age: p.age,
+        sfRank: p.sfRank,
+        budget: p.budget,
+        ceiling: p.ceiling,
+        floor: p.floor,
+        notes: p.notes,
+        draftId: draft.id,
+      })),
+    });
+
     return draft.id;
   });
 

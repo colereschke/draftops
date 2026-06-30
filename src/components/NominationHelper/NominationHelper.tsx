@@ -2,8 +2,7 @@
 
 import { useState, useMemo, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import type { Position, TeamStats, AuctionResultEntry } from '@/types';
-import { players } from '@/data/players';
+import type { Player, Position, TeamStats, AuctionResultEntry } from '@/types';
 import { computeNominationScores, type ScoredPlayer } from '@/lib/nominationScoring';
 import { POS_COLORS } from '@/lib/posColors';
 
@@ -17,7 +16,13 @@ interface NomData {
   ownerHandle: string | null;
 }
 
-export default function NominationHelper({ draftId }: { draftId: number }) {
+export default function NominationHelper({
+  draftId,
+  players,
+}: {
+  draftId: number;
+  players: Player[];
+}) {
   const router = useRouter();
   const [data, setData] = useState<NomData | null>(null);
   const [draftError, setDraftError] = useState<string | null>(null);

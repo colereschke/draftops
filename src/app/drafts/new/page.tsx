@@ -2,6 +2,8 @@
 
 import { useState, useTransition } from 'react';
 import { createDraft } from '@/lib/actions';
+import type { StartingSlot } from '@/types';
+import { DEFAULT_STARTING_LINEUP, DEFAULT_TARGET_ROSTER } from '@/types';
 
 interface TeamRow {
   handle: string;
@@ -24,6 +26,16 @@ export default function NewDraftPage() {
   const [teams, setTeams] = useState<TeamRow[]>(() => defaultTeams(12));
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+  const [rosterSize, setRosterSize] = useState(30);
+  const [targetRoster, setTargetRoster] = useState<Record<'QB' | 'RB' | 'WR' | 'TE', number>>({
+    QB: DEFAULT_TARGET_ROSTER.QB ?? 4,
+    RB: DEFAULT_TARGET_ROSTER.RB ?? 9,
+    WR: DEFAULT_TARGET_ROSTER.WR ?? 11,
+    TE: DEFAULT_TARGET_ROSTER.TE ?? 3,
+  });
+  const [startingLineup, setStartingLineup] = useState<StartingSlot[]>([
+    ...DEFAULT_STARTING_LINEUP,
+  ]);
 
   function handleTeamCountChange(newCount: number) {
     const clamped = Math.max(2, Math.min(32, newCount));
@@ -47,6 +59,20 @@ export default function NewDraftPage() {
 
   function updateTeam(index: number, field: 'handle' | 'displayName', value: string) {
     setTeams((prev) => prev.map((t, i) => (i === index ? { ...t, [field]: value } : t)));
+  }
+
+  const SLOT_OPTIONS: StartingSlot[] = ['QB', 'RB', 'WR', 'TE', 'FLEX', 'SUPER_FLEX'];
+
+  function addSlot() {
+    setStartingLineup((prev) => [...prev, 'FLEX']);
+  }
+
+  function removeSlot(index: number) {
+    setStartingLineup((prev) => prev.filter((_, i) => i !== index));
+  }
+
+  function updateSlot(index: number, slot: StartingSlot) {
+    setStartingLineup((prev) => prev.map((s, i) => (i === index ? slot : s)));
   }
 
   function handleSubmit(e: React.FormEvent) {
@@ -134,6 +160,150 @@ export default function NewDraftPage() {
               />
             </label>
           </div>
+        </div>
+
+        {/* --- Roster Settings --- */}
+        <div
+          style={{
+            background: 'var(--bg-surface)',
+            borderRadius: '6px',
+            padding: '1.25rem',
+            marginBottom: '1rem',
+          }}
+        >
+          <div style={sectionHeaderStyle}>Roster Settings</div>
+          <label style={{ ...labelStyle, maxWidth: '160px', marginBottom: '0.75rem' }}>
+            Roster size
+            <input
+              data-testid="roster-size-input"
+              type="number"
+              min={10}
+              max={60}
+              value={rosterSize}
+              onChange={(e) => setRosterSize(parseInt(e.target.value, 10) || 30)}
+              style={inputStyle}
+            />
+          </label>
+          <div style={sectionHeaderStyle}>Target roster slots</div>
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(4, 1fr)',
+              gap: '0.5rem',
+              marginTop: '0.4rem',
+            }}
+          >
+            {(['QB', 'RB', 'WR', 'TE'] as const).map((pos) => (
+              <label key={pos} style={labelStyle}>
+                {pos}
+                <input
+                  data-testid={`target-roster-${pos}`}
+                  type="number"
+                  min={0}
+                  value={targetRoster[pos]}
+                  onChange={(e) =>
+                    setTargetRoster((prev) => ({
+                      ...prev,
+                      [pos]: parseInt(e.target.value, 10) || 0,
+                    }))
+                  }
+                  style={inputStyle}
+                />
+              </label>
+            ))}
+          </div>
+        </div>
+
+        {/* --- Starting Lineup --- */}
+        <div
+          style={{
+            background: 'var(--bg-surface)',
+            borderRadius: '6px',
+            padding: '1.25rem',
+            marginBottom: '1rem',
+          }}
+        >
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              marginBottom: '0.5rem',
+            }}
+          >
+            <div style={sectionHeaderStyle}>Starting Lineup</div>
+            <span
+              style={{
+                fontFamily: 'var(--font-mono)',
+                fontSize: '0.75rem',
+                color: 'var(--text-secondary)',
+              }}
+            >
+              {startingLineup.length} slots
+            </span>
+          </div>
+
+          {startingLineup.map((slot, i) => (
+            <div
+              key={i}
+              style={{
+                display: 'flex',
+                gap: '0.5rem',
+                marginBottom: '0.4rem',
+                alignItems: 'center',
+              }}
+            >
+              <select
+                data-testid={`lineup-slot-${i}`}
+                value={slot}
+                onChange={(e) => updateSlot(i, e.target.value as StartingSlot)}
+                style={{ ...inputStyle, flex: 1 }}
+              >
+                {SLOT_OPTIONS.map((opt) => (
+                  <option key={opt} value={opt}>
+                    {opt}
+                  </option>
+                ))}
+              </select>
+              <button
+                type="button"
+                data-testid={`remove-lineup-slot-${i}`}
+                onClick={() => removeSlot(i)}
+                disabled={startingLineup.length <= 1}
+                style={{
+                  background: 'none',
+                  border: '1px solid #3a3f50',
+                  color: 'var(--text-secondary)',
+                  borderRadius: '4px',
+                  padding: '0.2rem 0.5rem',
+                  cursor: startingLineup.length <= 1 ? 'not-allowed' : 'pointer',
+                  fontFamily: 'var(--font-mono)',
+                  fontSize: '0.875rem',
+                }}
+              >
+                ×
+              </button>
+            </div>
+          ))}
+
+          <button
+            type="button"
+            data-testid="add-lineup-slot"
+            onClick={addSlot}
+            style={{
+              marginTop: '0.4rem',
+              background: 'none',
+              border: '1px solid #3a3f50',
+              color: 'var(--text-secondary)',
+              borderRadius: '4px',
+              padding: '0.3rem 0.75rem',
+              fontFamily: 'var(--font-barlow)',
+              fontSize: '0.8rem',
+              cursor: 'pointer',
+            }}
+          >
+            + Add slot
+          </button>
         </div>
 
         {/* --- Team Roster Table --- */}
@@ -259,4 +429,13 @@ const colHeaderStyle: React.CSSProperties = {
   color: 'var(--text-secondary)',
   textTransform: 'uppercase',
   letterSpacing: '0.05em',
+};
+
+const sectionHeaderStyle: React.CSSProperties = {
+  fontFamily: 'var(--font-barlow)',
+  fontSize: '0.8rem',
+  color: 'var(--text-secondary)',
+  textTransform: 'uppercase',
+  letterSpacing: '0.05em',
+  marginBottom: '0.75rem',
 };

@@ -52,23 +52,24 @@ src/
 │   ├── NominationHelper/             # Nomination scorer + watchlist + in-auction sidebar
 │   └── RosterTracker/                # Expandable team roster view
 ├── data/
-│   └── players.ts                    # ~270 players, fully processed (budget/ceiling/floor)
+│   └── players.ts                    # ~267 ETR dynasty players — server-only seed source (NOT imported by client components)
 ├── lib/
-│   ├── actions.ts                    # Server actions: logBid, updateBid, deleteBid (auth-gated, draft-scoped)
+│   ├── actions.ts                    # Server actions: createDraft (seeds Player table), logBid, updateBid, deleteBid
 │   ├── budget.ts                     # computeTeamStats for /budget page
-│   ├── computeTeamStats.ts           # computeTeamStats for /teams page (includes roster + delta)
+│   ├── computeTeamStats.ts           # computeTeamStats(teams, players) for /teams page (players param, no static import)
 │   ├── db.ts                         # Prisma singleton using PrismaPg adapter (pg Pool)
-│   ├── draft.ts                      # getDraftForUser(userId) — looks up draft by Auth.js userId
+│   ├── draft.ts                      # getDraft(userId, draftId) — auth-gated draft lookup
 │   ├── nominationScoring.ts          # computeNominationScores — core nomination logic
 │   ├── posColors.ts                  # POS_COLORS map (bg, accent, badge, badgeText per position)
-│   └── teams.ts                      # LEAGUE_TEAMS, ROSTER_SIZE = 30, TARGET_ROSTER
+│   └── teams.ts                      # LEAGUE_TEAMS, ROSTER_SIZE = 30, TARGET_ROSTER (ROSTER_SIZE used as fallback until #5b)
 └── types/
-    └── index.ts                      # Player, Position, TeamStats, AuctionResultEntry,
-                                      # RosterEntry, TeamWithRoster, ClaimedBid, LeagueTeam
+    └── index.ts                      # Player, Position, StartingSlot, ScoringSettings, DEFAULT_* constants,
+                                      # TeamStats, AuctionResultEntry, RosterEntry, TeamWithRoster, ClaimedBid, LeagueTeam
 middleware.ts                         # Auth.js middleware — redirects unauthenticated users to /sign-in
 prisma/
-├── schema.prisma                     # Draft + Team + AuctionResult + PlayerWatchlist + NominatedPlayer
+├── schema.prisma                     # Draft + Team + AuctionResult + PlayerWatchlist + NominatedPlayer + Player
 ├── seed.ts                           # Upserts default draft + 12 teams (idempotent)
+├── seed-players.ts                   # Backfill script: seeds Player rows for existing drafts (run via pnpm tsx)
 └── migrations/                       # Postgres migration history
 prisma.config.ts                      # Prisma v7 config — DATABASE_URL from env
 existing_project_docs/                # Original reference files — do not delete
@@ -230,19 +231,29 @@ OWNER_DISCORD_ID=      # Your Discord user ID — seeds ownerId on the default d
 - **Auth** — Discord OAuth via Auth.js v5; JWT sessions; middleware protects all routes; `/sign-in` page
 - **PostgreSQL** — migrated from SQLite; Neon in prod, local WSL2 Postgres in dev; `@prisma/adapter-pg`
 - **Multi-draft schema** — `Draft` model with `ownerId` + `ownerTeamId`; all data scoped to `draftId`; expand/contract migration complete (non-nullable, composite uniques)
-- `/` — Value sheet with full player list, filters, search, sort, bid logging modal, budget tracker
-- `/teams` — Team roster tracker with expandable rows, spend/remaining/buying power per team, delta vs. target per player
+- **League settings** — `Draft` stores `teamCount`, `rosterSize`, `budget`, `startingLineup Json?`, `scoringSettings Json?`, `targetRoster Json?`; form has Roster Settings, Starting Lineup builder, and Scoring sections; QB/SUPER_FLEX lineup validation (PR #20)
+- **Per-draft Player table** — `Player` model scoped to `draftId`, seeded from ETR base values at draft creation; `age Float?`; `@@unique([name, draftId])`; `prisma/seed-players.ts` backfills existing drafts (PR #20)
+- `/` — Value sheet with full player list (from DB), filters, search, sort, bid logging modal, budget tracker
+- `/teams` — Team roster tracker with expandable rows, spend/remaining/buying power per team, delta vs. target per player (players from DB)
 - `/budget` — Budget pressure view sorted by buying power with auto-refresh
-- `/nominate` — Nomination helper that ranks available players by rival demand; personal watchlist persisted to DB; "Nom" button tracks players currently in auction (persisted to DB, auto-clears on bid completion)
+- `/nominate` — Nomination helper that ranks available players by rival demand; personal watchlist persisted to DB; "Nom" button tracks players currently in auction; full server-component with auth gate (PR #20)
+
+## Player Data
+
+Source: ETR dynasty rankings CSV (~267 players). Values scaled ×5 for $1,000 budget; TE premium applied post-import. Lives in `src/data/players.ts` as server-only seed data — **never import this in client components**. Will be replaced by custom rankings upload (#7) when that lands.
+
+`ScoringSettings` is a `type` alias (not `interface`) — Prisma's `InputJsonValue` requires implicit string index signature that only type aliases provide.
 
 ## What's Next
 
-**Deploy Milestone** (Vercel + Neon) — #4 Draft Creation & Management UI is done (PR #18). Next:
+**Deploy Milestone** (Vercel + Neon) — #5a League Settings + Player Table is done (PR #20). `prisma migrate deploy` is already wired into the Vercel build command — Neon migration applies on deploy. Run `pnpm tsx prisma/seed-players.ts` against prod DB after PR #20 merges (before deploying) to backfill existing drafts.
 
-- Error monitoring (Sentry or Vercel built-in)
-- Feedback link in the UI
+**Longer term** (see `ROADMAP.md`):
 
-**Longer term** (see `ROADMAP.md`): configurable league settings (#5a/#5b), custom rankings upload (#6). Design decisions should already account for the multi-draft direction — keep that in mind when touching anything.
+- #5b Value adjustment algorithm — tunes player budget/ceiling/floor based on league settings delta from baseline. `rosterSize` is stored on `Draft` but `computeTeamStats` still uses the `ROSTER_SIZE` constant — #5b wires those together.
+- #5c Sleeper league import — auto-populate draft settings from a Sleeper league ID
+- #6 UI redesign (Linear/Vercel aesthetic, shadcn/ui shortlisted) — after deploy milestone
+- #7 Custom rankings upload CSV — adds upload UI on top of the Player model from #5a
 
 ## Global Rules
 

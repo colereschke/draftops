@@ -10,8 +10,9 @@ export const dynamic = 'force-dynamic';
 export default async function BudgetPage({ params }: { params: Promise<{ draftId: string }> }) {
   const draftId = parseInt((await params).draftId, 10);
   const session = await auth();
-  const draft = await getDraft(session!.user.id, draftId);
-  if (!session || !draft) notFound();
+  if (!session) notFound();
+  const draft = await getDraft(session.user.id, draftId);
+  if (!draft) notFound();
 
   const teams = await prisma.team.findMany({
     where: { draftId },

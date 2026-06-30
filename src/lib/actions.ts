@@ -131,14 +131,11 @@ export async function completeDraft(draftId: number): Promise<void> {
   const session = await auth();
   if (!session) throw new Error('Unauthorized');
 
-  const draft = await prisma.draft.findFirst({
+  const result = await prisma.draft.updateMany({
     where: { id: draftId, ownerId: session.user.id },
-  });
-  if (!draft) throw new Error('Draft not found');
-
-  await prisma.draft.update({
-    where: { id: draftId },
     data: { status: 'COMPLETE' },
   });
+  if (result.count === 0) throw new Error('Draft not found');
+
   revalidatePath('/drafts');
 }

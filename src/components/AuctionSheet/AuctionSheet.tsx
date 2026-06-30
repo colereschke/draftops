@@ -176,6 +176,14 @@ export default function AuctionSheet({
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ playerName }),
+    }).then((res) => {
+      if (res.status === 401) {
+        window.location.href = '/sign-in';
+        return;
+      }
+      if (!res.ok) {
+        setExtraNominated((prev) => prev.filter((n) => n !== playerName));
+      }
     });
   }
 

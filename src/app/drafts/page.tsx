@@ -111,7 +111,7 @@ interface DraftRowProps {
   draft: {
     id: number;
     name: string;
-    status: string;
+    status: 'ACTIVE' | 'COMPLETE';
     createdAt: Date;
     _count: { teams: number };
   };

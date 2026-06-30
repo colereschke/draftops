@@ -1,6 +1,6 @@
 import { auth } from '@/auth';
 import { redirect, notFound } from 'next/navigation';
-import { prisma } from '@/lib/db';
+import { getDraft } from '@/lib/draft';
 
 export default async function DraftLayout({
   children,
@@ -16,9 +16,7 @@ export default async function DraftLayout({
   if (!session) redirect(`/sign-in?callbackUrl=/draft/${draftIdStr}`);
   if (isNaN(draftId)) notFound();
 
-  const draft = await prisma.draft.findFirst({
-    where: { id: draftId, ownerId: session.user.id },
-  });
+  const draft = await getDraft(session.user.id, draftId);
   if (!draft) notFound();
 
   return <>{children}</>;

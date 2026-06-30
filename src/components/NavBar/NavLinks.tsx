@@ -23,12 +23,22 @@ export default function NavLinks() {
 
   useEffect(() => {
     if (!hasDraftId) return;
-    void fetch('/api/drafts')
-      .then((r) => r.json())
-      .then((data: DraftInfo[]) => setActiveDrafts(data));
-    void fetch(`/api/draft/${draftId}/info`)
-      .then((r) => r.json())
-      .then((data: { name: string }) => setCurrentDraftName(data.name));
+    void (async () => {
+      const r = await fetch('/api/drafts');
+      if (!r.ok) return;
+      const drafts: DraftInfo[] = await r.json();
+      setActiveDrafts(drafts);
+      const current = drafts.find((d) => d.id === draftId);
+      if (current) {
+        setCurrentDraftName(current.name);
+      } else {
+        // Current draft not in active list (e.g. COMPLETE) — fetch its name directly.
+        const r2 = await fetch(`/api/draft/${draftId}/info`);
+        if (!r2.ok) return;
+        const info: { name: string } = await r2.json();
+        setCurrentDraftName(info.name);
+      }
+    })();
   }, [draftId, hasDraftId]);
 
   useEffect(() => {

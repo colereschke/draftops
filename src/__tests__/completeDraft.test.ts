@@ -1,15 +1,13 @@
 import { completeDraft } from '@/lib/actions';
 
-const mockUpdate = jest.fn().mockResolvedValue({});
-const mockFindFirst = jest.fn();
+const mockUpdateMany = jest.fn().mockResolvedValue({ count: 1 });
 const mockRevalidatePath = jest.fn();
 const mockAuth = jest.fn();
 
 jest.mock('@/lib/db', () => ({
   prisma: {
     draft: {
-      findFirst: (...args: unknown[]) => mockFindFirst(...args),
-      update: (...args: unknown[]) => mockUpdate(...args),
+      updateMany: (...args: unknown[]) => mockUpdateMany(...args),
     },
   },
 }));
@@ -23,12 +21,10 @@ jest.mock('@/auth', () => ({
 }));
 
 const MOCK_SESSION = { user: { id: '123456789', name: 'Cole' } };
-const MOCK_DRAFT = { id: 3, name: "Cole's Draft 2025", ownerId: '123456789', status: 'ACTIVE' };
 
 beforeEach(() => {
   jest.clearAllMocks();
   mockAuth.mockResolvedValue(MOCK_SESSION);
-  mockFindFirst.mockResolvedValue(MOCK_DRAFT);
 });
 
 describe('completeDraft', () => {
@@ -38,14 +34,14 @@ describe('completeDraft', () => {
   });
 
   it('throws when draft not found or not owned by user', async () => {
-    mockFindFirst.mockResolvedValue(null);
+    mockUpdateMany.mockResolvedValueOnce({ count: 0 });
     await expect(completeDraft(3)).rejects.toThrow('Draft not found');
   });
 
-  it('updates draft status to COMPLETE', async () => {
+  it('updates draft status to COMPLETE scoped to the owner', async () => {
     await completeDraft(3);
-    expect(mockUpdate).toHaveBeenCalledWith({
-      where: { id: 3 },
+    expect(mockUpdateMany).toHaveBeenCalledWith({
+      where: { id: 3, ownerId: '123456789' },
       data: { status: 'COMPLETE' },
     });
   });

@@ -60,19 +60,46 @@ afterEach(() => {
 
 describe('AuctionSheet with claimed bids', () => {
   it('renders without claimed bids and does not show a Claimed column', () => {
-    render(<AuctionSheet claimedBids={[]} teams={mockTeams} nominatedPlayers={[]} />);
+    render(
+      <AuctionSheet
+        claimedBids={[]}
+        teams={mockTeams}
+        nominatedPlayers={[]}
+        draftId={1}
+        ownerHandle="coreschke"
+        ownerBudget={1000}
+      />,
+    );
 
     expect(screen.queryByText('Claimed')).not.toBeInTheDocument();
   });
 
   it('shows a Claimed column header when at least one bid exists', () => {
-    render(<AuctionSheet claimedBids={[mockClaim]} teams={mockTeams} nominatedPlayers={[]} />);
+    render(
+      <AuctionSheet
+        claimedBids={[mockClaim]}
+        teams={mockTeams}
+        nominatedPlayers={[]}
+        draftId={1}
+        ownerHandle="coreschke"
+        ownerBudget={1000}
+      />,
+    );
 
     expect(screen.getByText('Claimed')).toBeInTheDocument();
   });
 
   it('shows team handle and price in the claimed column for a claimed player', () => {
-    render(<AuctionSheet claimedBids={[mockClaim]} teams={mockTeams} nominatedPlayers={[]} />);
+    render(
+      <AuctionSheet
+        claimedBids={[mockClaim]}
+        teams={mockTeams}
+        nominatedPlayers={[]}
+        draftId={1}
+        ownerHandle="coreschke"
+        ownerBudget={1000}
+      />,
+    );
 
     expect(screen.getByText(/coreschke/)).toBeInTheDocument();
     expect(screen.getAllByText(/\$110/).length).toBeGreaterThan(0);
@@ -80,21 +107,48 @@ describe('AuctionSheet with claimed bids', () => {
 
   it('shows EV diff with ▼ and green color when bought under target', () => {
     // mockClaim.price = 110, player.budget = 120, diff = -10 → ▼$10
-    render(<AuctionSheet claimedBids={[mockClaim]} teams={mockTeams} nominatedPlayers={[]} />);
+    render(
+      <AuctionSheet
+        claimedBids={[mockClaim]}
+        teams={mockTeams}
+        nominatedPlayers={[]}
+        draftId={1}
+        ownerHandle="coreschke"
+        ownerBudget={1000}
+      />,
+    );
 
     expect(screen.getByText(/▼\$10/)).toBeInTheDocument();
   });
 
   it('shows EV diff with ▲ and red when overpaid', () => {
     const overClaim: ClaimedBid = { ...mockClaim, price: 130 };
-    render(<AuctionSheet claimedBids={[overClaim]} teams={mockTeams} nominatedPlayers={[]} />);
+    render(
+      <AuctionSheet
+        claimedBids={[overClaim]}
+        teams={mockTeams}
+        nominatedPlayers={[]}
+        draftId={1}
+        ownerHandle="coreschke"
+        ownerBudget={1000}
+      />,
+    );
 
     // price 130, budget 120, diff = +10 → ▲$10
     expect(screen.getByText(/▲\$10/)).toBeInTheDocument();
   });
 
   it('opens the modal when a claimed player row is clicked', () => {
-    render(<AuctionSheet claimedBids={[mockClaim]} teams={mockTeams} nominatedPlayers={[]} />);
+    render(
+      <AuctionSheet
+        claimedBids={[mockClaim]}
+        teams={mockTeams}
+        nominatedPlayers={[]}
+        draftId={1}
+        ownerHandle="coreschke"
+        ownerBudget={1000}
+      />,
+    );
 
     fireEvent.click(screen.getAllByText('Josh Allen')[0]);
 
@@ -103,7 +157,16 @@ describe('AuctionSheet with claimed bids', () => {
   });
 
   it('opens the modal when an unclaimed player row is clicked', () => {
-    render(<AuctionSheet claimedBids={[]} teams={mockTeams} nominatedPlayers={[]} />);
+    render(
+      <AuctionSheet
+        claimedBids={[]}
+        teams={mockTeams}
+        nominatedPlayers={[]}
+        draftId={1}
+        ownerHandle="coreschke"
+        ownerBudget={1000}
+      />,
+    );
 
     fireEvent.click(screen.getByText('Justin Jefferson'));
 
@@ -112,24 +175,60 @@ describe('AuctionSheet with claimed bids', () => {
   });
 
   it('shows LIVE badge for a player in the nominatedPlayers prop', () => {
-    render(<AuctionSheet claimedBids={[]} teams={mockTeams} nominatedPlayers={['Josh Allen']} />);
+    render(
+      <AuctionSheet
+        claimedBids={[]}
+        teams={mockTeams}
+        nominatedPlayers={['Josh Allen']}
+        draftId={1}
+        ownerHandle="coreschke"
+        ownerBudget={1000}
+      />,
+    );
     expect(screen.getByText('LIVE')).toBeInTheDocument();
   });
 
   it('shows Nom button in modal for an unnominated player', () => {
-    render(<AuctionSheet claimedBids={[]} teams={mockTeams} nominatedPlayers={[]} />);
+    render(
+      <AuctionSheet
+        claimedBids={[]}
+        teams={mockTeams}
+        nominatedPlayers={[]}
+        draftId={1}
+        ownerHandle="coreschke"
+        ownerBudget={1000}
+      />,
+    );
     fireEvent.click(screen.getByText('Josh Allen'));
     expect(screen.getByRole('button', { name: /^nom$/i })).toBeInTheDocument();
   });
 
   it('shows In Auction in modal for an already-nominated player', () => {
-    render(<AuctionSheet claimedBids={[]} teams={mockTeams} nominatedPlayers={['Josh Allen']} />);
+    render(
+      <AuctionSheet
+        claimedBids={[]}
+        teams={mockTeams}
+        nominatedPlayers={['Josh Allen']}
+        draftId={1}
+        ownerHandle="coreschke"
+        ownerBudget={1000}
+      />,
+    );
     fireEvent.click(screen.getAllByText('Josh Allen')[0]);
     expect(screen.getByText(/in auction/i)).toBeInTheDocument();
   });
 
-  it('closes modal, shows LIVE badge, and calls /api/nominated after clicking Nom', async () => {
-    render(<AuctionSheet claimedBids={[]} teams={mockTeams} nominatedPlayers={[]} />);
+  it('closes modal, shows LIVE badge, and calls /api/draft/1/nominated after clicking Nom', async () => {
+    render(
+      <AuctionSheet
+        claimedBids={[]}
+        teams={mockTeams}
+        nominatedPlayers={[]}
+        draftId={1}
+        ownerHandle="coreschke"
+        ownerBudget={1000}
+      />,
+    );
 
     fireEvent.click(screen.getByText('Josh Allen'));
     expect(screen.getByRole('dialog')).toBeInTheDocument();
@@ -144,7 +243,7 @@ describe('AuctionSheet with claimed bids', () => {
 
     // API should have been called
     expect(global.fetch).toHaveBeenCalledWith(
-      '/api/nominated',
+      '/api/draft/1/nominated',
       expect.objectContaining({
         method: 'POST',
         body: JSON.stringify({ playerName: 'Josh Allen' }),

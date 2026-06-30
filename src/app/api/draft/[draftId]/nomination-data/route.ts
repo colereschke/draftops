@@ -1,15 +1,19 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/auth';
 import { prisma } from '@/lib/db';
-import { getDraftForUser } from '@/lib/draft';
+import { getDraft } from '@/lib/draft';
 import { ROSTER_SIZE } from '@/lib/teams';
 import type { TeamStats, AuctionResultEntry } from '@/types';
 
-export async function GET() {
+export async function GET(
+  _request: NextRequest,
+  { params }: { params: Promise<{ draftId: string }> },
+) {
   const session = await auth();
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const draft = await getDraftForUser(session.user.id);
+  const draftId = parseInt((await params).draftId, 10);
+  const draft = await getDraft(session.user.id, draftId);
   if (!draft) return NextResponse.json({ error: 'No draft found' }, { status: 404 });
 
   const teams = await prisma.team.findMany({

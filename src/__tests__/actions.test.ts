@@ -7,7 +7,7 @@ const mockNomDeleteMany = jest.fn().mockResolvedValue({});
 const mockTeamFindFirst = jest.fn();
 const mockRevalidatePath = jest.fn();
 const mockAuth = jest.fn();
-const mockGetDraftForUser = jest.fn();
+const mockGetDraft = jest.fn();
 
 jest.mock('@/lib/db', () => ({
   prisma: {
@@ -34,7 +34,7 @@ jest.mock('@/auth', () => ({
 }));
 
 jest.mock('@/lib/draft', () => ({
-  getDraftForUser: (...args: unknown[]) => mockGetDraftForUser(...args),
+  getDraft: (...args: unknown[]) => mockGetDraft(...args),
 }));
 
 const MOCK_SESSION = { user: { id: '123456789', name: 'Cole' } };
@@ -53,19 +53,19 @@ const BID_DATA = {
   price: 120,
   sfRank: 1,
   teamId: 3,
+  draftId: 1,
 };
 
 beforeEach(() => {
   jest.clearAllMocks();
   mockAuth.mockResolvedValue(MOCK_SESSION);
-  mockGetDraftForUser.mockResolvedValue(MOCK_DRAFT);
+  mockGetDraft.mockResolvedValue(MOCK_DRAFT);
   mockTeamFindFirst.mockResolvedValue({ id: 3 });
 });
 
 describe('logBid', () => {
   it('inserts a bid record with all fields including draftId', async () => {
     await logBid(BID_DATA);
-
     expect(mockCreate).toHaveBeenCalledWith({
       data: {
         player: 'Josh Allen',
@@ -79,9 +79,9 @@ describe('logBid', () => {
     });
   });
 
-  it('calls revalidatePath after insert', async () => {
+  it('calls revalidatePath scoped to the draft', async () => {
     await logBid(BID_DATA);
-    expect(mockRevalidatePath).toHaveBeenCalledWith('/');
+    expect(mockRevalidatePath).toHaveBeenCalledWith('/draft/1');
   });
 
   it('clears nomination for the player scoped to the draft', async () => {
@@ -97,7 +97,7 @@ describe('logBid', () => {
   });
 
   it('throws when no draft found for user', async () => {
-    mockGetDraftForUser.mockResolvedValue(null);
+    mockGetDraft.mockResolvedValue(null);
     await expect(logBid(BID_DATA)).rejects.toThrow('No draft found');
   });
 
@@ -109,32 +109,35 @@ describe('logBid', () => {
 
 describe('updateBid', () => {
   it('updates price and teamId scoped to the draft', async () => {
-    await updateBid({ id: 5, price: 95, teamId: 2 });
-
+    await updateBid({ id: 5, price: 95, teamId: 2, draftId: 1 });
     expect(mockUpdateMany).toHaveBeenCalledWith({
       where: { id: 5, draftId: 1 },
       data: { price: 95, teamId: 2 },
     });
   });
 
-  it('calls revalidatePath after update', async () => {
-    await updateBid({ id: 5, price: 95, teamId: 2 });
-    expect(mockRevalidatePath).toHaveBeenCalledWith('/');
+  it('calls revalidatePath scoped to the draft', async () => {
+    await updateBid({ id: 5, price: 95, teamId: 2, draftId: 1 });
+    expect(mockRevalidatePath).toHaveBeenCalledWith('/draft/1');
   });
 
   it('throws when called without a session', async () => {
     mockAuth.mockResolvedValue(null);
-    await expect(updateBid({ id: 5, price: 95, teamId: 2 })).rejects.toThrow('Unauthorized');
+    await expect(updateBid({ id: 5, price: 95, teamId: 2, draftId: 1 })).rejects.toThrow(
+      'Unauthorized',
+    );
   });
 
   it('throws when no draft found for user', async () => {
-    mockGetDraftForUser.mockResolvedValue(null);
-    await expect(updateBid({ id: 5, price: 95, teamId: 2 })).rejects.toThrow('No draft found');
+    mockGetDraft.mockResolvedValue(null);
+    await expect(updateBid({ id: 5, price: 95, teamId: 2, draftId: 1 })).rejects.toThrow(
+      'No draft found',
+    );
   });
 
   it('throws when teamId does not belong to the draft', async () => {
     mockTeamFindFirst.mockResolvedValue(null);
-    await expect(updateBid({ id: 5, price: 95, teamId: 2 })).rejects.toThrow(
+    await expect(updateBid({ id: 5, price: 95, teamId: 2, draftId: 1 })).rejects.toThrow(
       'Team not found in draft',
     );
   });
@@ -142,22 +145,22 @@ describe('updateBid', () => {
 
 describe('deleteBid', () => {
   it('deletes the bid scoped to the draft', async () => {
-    await deleteBid({ id: 7 });
+    await deleteBid({ id: 7, draftId: 1 });
     expect(mockDeleteMany).toHaveBeenCalledWith({ where: { id: 7, draftId: 1 } });
   });
 
-  it('calls revalidatePath after delete', async () => {
-    await deleteBid({ id: 7 });
-    expect(mockRevalidatePath).toHaveBeenCalledWith('/');
+  it('calls revalidatePath scoped to the draft', async () => {
+    await deleteBid({ id: 7, draftId: 1 });
+    expect(mockRevalidatePath).toHaveBeenCalledWith('/draft/1');
   });
 
   it('throws when called without a session', async () => {
     mockAuth.mockResolvedValue(null);
-    await expect(deleteBid({ id: 7 })).rejects.toThrow('Unauthorized');
+    await expect(deleteBid({ id: 7, draftId: 1 })).rejects.toThrow('Unauthorized');
   });
 
   it('throws when no draft found for user', async () => {
-    mockGetDraftForUser.mockResolvedValue(null);
-    await expect(deleteBid({ id: 7 })).rejects.toThrow('No draft found');
+    mockGetDraft.mockResolvedValue(null);
+    await expect(deleteBid({ id: 7, draftId: 1 })).rejects.toThrow('No draft found');
   });
 });

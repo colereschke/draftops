@@ -1,17 +1,17 @@
 /**
  * @jest-environment node
  */
-import { POST, DELETE } from '@/app/api/nominated/route';
+import { POST, DELETE } from '@/app/api/draft/[draftId]/nominated/route';
 import { NextRequest } from 'next/server';
 
 const mockAuth = jest.fn();
-const mockGetDraftForUser = jest.fn();
+const mockGetDraft = jest.fn();
 const mockUpsert = jest.fn();
 const mockDelete = jest.fn();
 
 jest.mock('@/auth', () => ({ auth: () => mockAuth() }));
 jest.mock('@/lib/draft', () => ({
-  getDraftForUser: (...args: unknown[]) => mockGetDraftForUser(...args),
+  getDraft: (...args: unknown[]) => mockGetDraft(...args),
 }));
 jest.mock('@/lib/db', () => ({
   prisma: {
@@ -30,9 +30,10 @@ const MOCK_DRAFT = {
   ownerTeamId: 7,
   ownerTeam: null,
 };
+const MOCK_PARAMS = { params: Promise.resolve({ draftId: '1' }) };
 
 function makeRequest(body: unknown, method = 'POST'): NextRequest {
-  return new NextRequest('http://localhost/api/nominated', {
+  return new NextRequest('http://localhost/api/draft/1/nominated', {
     method,
     body: JSON.stringify(body),
     headers: { 'Content-Type': 'application/json' },
@@ -42,25 +43,25 @@ function makeRequest(body: unknown, method = 'POST'): NextRequest {
 beforeEach(() => {
   jest.clearAllMocks();
   mockAuth.mockResolvedValue(MOCK_SESSION);
-  mockGetDraftForUser.mockResolvedValue(MOCK_DRAFT);
+  mockGetDraft.mockResolvedValue(MOCK_DRAFT);
   mockUpsert.mockResolvedValue({ playerName: 'Josh Allen', draftId: 1 });
 });
 
-describe('POST /api/nominated', () => {
+describe('POST /api/draft/[draftId]/nominated', () => {
   it('returns 401 without session', async () => {
     mockAuth.mockResolvedValue(null);
-    const res = await POST(makeRequest({ playerName: 'Josh Allen' }));
+    const res = await POST(makeRequest({ playerName: 'Josh Allen' }), MOCK_PARAMS);
     expect(res.status).toBe(401);
   });
 
   it('returns 404 when no draft found', async () => {
-    mockGetDraftForUser.mockResolvedValue(null);
-    const res = await POST(makeRequest({ playerName: 'Josh Allen' }));
+    mockGetDraft.mockResolvedValue(null);
+    const res = await POST(makeRequest({ playerName: 'Josh Allen' }), MOCK_PARAMS);
     expect(res.status).toBe(404);
   });
 
   it('upserts nominated entry scoped to draftId', async () => {
-    await POST(makeRequest({ playerName: 'Josh Allen' }));
+    await POST(makeRequest({ playerName: 'Josh Allen' }), MOCK_PARAMS);
     expect(mockUpsert).toHaveBeenCalledWith({
       where: { playerName_draftId: { playerName: 'Josh Allen', draftId: 1 } },
       create: { playerName: 'Josh Allen', draftId: 1 },
@@ -69,16 +70,16 @@ describe('POST /api/nominated', () => {
   });
 });
 
-describe('DELETE /api/nominated', () => {
+describe('DELETE /api/draft/[draftId]/nominated', () => {
   it('returns 401 without session', async () => {
     mockAuth.mockResolvedValue(null);
-    const res = await DELETE(makeRequest({ playerName: 'Josh Allen' }, 'DELETE'));
+    const res = await DELETE(makeRequest({ playerName: 'Josh Allen' }, 'DELETE'), MOCK_PARAMS);
     expect(res.status).toBe(401);
   });
 
   it('returns 404 when no draft found', async () => {
-    mockGetDraftForUser.mockResolvedValue(null);
-    const res = await DELETE(makeRequest({ playerName: 'Josh Allen' }, 'DELETE'));
+    mockGetDraft.mockResolvedValue(null);
+    const res = await DELETE(makeRequest({ playerName: 'Josh Allen' }, 'DELETE'), MOCK_PARAMS);
     expect(res.status).toBe(404);
   });
 });

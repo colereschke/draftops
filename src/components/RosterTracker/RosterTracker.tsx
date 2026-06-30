@@ -20,9 +20,10 @@ function SortIcon({ active, dir }: { active: boolean; dir: 'asc' | 'desc' }) {
 
 interface Props {
   teams: TeamWithRoster[];
+  ownerHandle: string | null;
 }
 
-export default function RosterTracker({ teams }: Props) {
+export default function RosterTracker({ teams, ownerHandle }: Props) {
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
   const [sortBy, setSortBy] = useState<SortKey>('buyingPower');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
@@ -59,7 +60,7 @@ export default function RosterTracker({ teams }: Props) {
     () =>
       sorted.flatMap((team, i) => {
         const isExpanded = expanded.has(team.id);
-        const isMe = team.handle === 'coreschke';
+        const isMe = ownerHandle !== null && team.handle === ownerHandle;
         const rowBg = isMe ? '#0a1020' : i % 2 === 0 ? 'transparent' : '#0a0c10';
 
         const rows = [
@@ -266,7 +267,7 @@ export default function RosterTracker({ teams }: Props) {
 
         return rows;
       }),
-    [sorted, expanded, toggle],
+    [sorted, expanded, toggle, ownerHandle],
   );
 
   return (

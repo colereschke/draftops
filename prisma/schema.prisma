@@ -6,13 +6,19 @@ datasource db {
   provider = "postgresql"
 }
 
+enum DraftStatus {
+  ACTIVE
+  COMPLETE
+}
+
 // A draft is the top-level container for a single auction. One owner, all data scoped here.
 model Draft {
-  id          Int      @id @default(autoincrement())
+  id          Int         @id @default(autoincrement())
   name        String
-  ownerId     String?  @unique // Auth.js userId (Discord snowflake) — nullable until claimed on first sign-in
-  ownerTeamId Int?     // which Team within this draft belongs to the owner; nullable until backfill
-  createdAt   DateTime @default(now())
+  ownerId     String?     // Auth.js userId (Discord snowflake) — nullable until claimed on first sign-in
+  ownerTeamId Int?        // which Team within this draft belongs to the owner; nullable until backfill
+  status      DraftStatus @default(ACTIVE)
+  createdAt   DateTime    @default(now())
 
   teams            Team[]            @relation("DraftTeams")
   ownerTeam        Team?             @relation("DraftOwnerTeam", fields: [ownerTeamId], references: [id])

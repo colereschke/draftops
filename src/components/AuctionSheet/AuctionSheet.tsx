@@ -16,6 +16,9 @@ interface AuctionSheetProps {
   claimedBids: ClaimedBid[];
   teams: LeagueTeam[];
   nominatedPlayers: string[];
+  draftId: number;
+  ownerHandle: string | null;
+  ownerBudget: number;
 }
 
 const POSITIONS: Array<'ALL' | Position> = ['ALL', 'QB', 'RB', 'WR', 'TE', 'PICK', 'PKG'];
@@ -30,13 +33,19 @@ function ageColor(age: number | null): string {
   return '#e05050';
 }
 
-export default function AuctionSheet({ claimedBids, teams, nominatedPlayers }: AuctionSheetProps) {
+export default function AuctionSheet({
+  claimedBids,
+  teams,
+  nominatedPlayers,
+  draftId,
+  ownerHandle,
+  ownerBudget,
+}: AuctionSheetProps) {
   const [posFilter, setPosFilter] = useState<'ALL' | Position>('ALL');
   const [search, setSearch] = useState<string>('');
   const [sortBy, setSortBy] = useState<SortKey>('sfRank');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
   const [showNotes, setShowNotes] = useState<boolean>(false);
-  const [myBudget] = useState<number>(1000);
   const [modalPlayer, setModalPlayer] = useState<(typeof players)[0] | null>(null);
   const [modalError, setModalError] = useState<string>('');
   const [, startTransition] = useTransition();
@@ -64,10 +73,10 @@ export default function AuctionSheet({ claimedBids, teams, nominatedPlayers }: A
   );
 
   const mySpent = useMemo(() => {
-    const myTeam = teams.find((t) => t.handle === 'coreschke');
+    const myTeam = ownerHandle ? teams.find((t) => t.handle === ownerHandle) : null;
     if (!myTeam) return 0;
     return optimisticBids.filter((b) => b.teamId === myTeam.id).reduce((s, b) => s + b.price, 0);
-  }, [teams, optimisticBids]);
+  }, [teams, optimisticBids, ownerHandle]);
 
   const hasClaims = optimisticBids.length > 0;
 
@@ -83,7 +92,7 @@ export default function AuctionSheet({ claimedBids, teams, nominatedPlayers }: A
       startTransition(async () => {
         dispatchOptimistic({ type: 'update', bid: updated });
         try {
-          await updateBid({ id: existingBid.id, price, teamId });
+          await updateBid({ id: existingBid.id, price, teamId, draftId });
           setModalPlayer(null);
         } catch (e) {
           if (e instanceof Error && e.message === 'Unauthorized') {
@@ -117,6 +126,7 @@ export default function AuctionSheet({ claimedBids, teams, nominatedPlayers }: A
             price,
             sfRank: modalPlayer.sfRank,
             teamId,
+            draftId,
           });
           setModalPlayer(null);
         } catch (e) {
@@ -143,7 +153,7 @@ export default function AuctionSheet({ claimedBids, teams, nominatedPlayers }: A
     startTransition(async () => {
       dispatchOptimistic({ type: 'delete', id: existingBid.id });
       try {
-        await deleteBid({ id: existingBid.id });
+        await deleteBid({ id: existingBid.id, draftId });
         setModalPlayer(null);
       } catch (e) {
         if (e instanceof Error && e.message === 'Unauthorized') {
@@ -162,14 +172,22 @@ export default function AuctionSheet({ claimedBids, teams, nominatedPlayers }: A
 
   function handleNominate(playerName: string) {
     setExtraNominated((prev) => [...prev, playerName]);
-    void fetch('/api/nominated', {
+    void fetch(`/api/draft/${draftId}/nominated`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ playerName }),
+    }).then((res) => {
+      if (res.status === 401) {
+        window.location.href = '/sign-in';
+        return;
+      }
+      if (!res.ok) {
+        setExtraNominated((prev) => prev.filter((n) => n !== playerName));
+      }
     });
   }
 
-  const remaining = myBudget - mySpent;
+  const remaining = ownerBudget - mySpent;
 
   const filtered = useMemo<Player[]>(() => {
     let data = [...players];
@@ -308,7 +326,7 @@ export default function AuctionSheet({ claimedBids, teams, nominatedPlayers }: A
                   fontFamily: 'var(--font-mono), monospace',
                 }}
               >
-                ${myBudget}
+                ${ownerBudget}
               </div>
             </div>
             <div style={{ textAlign: 'center' }}>

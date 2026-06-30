@@ -8,7 +8,10 @@ jest.mock('@/auth', () => ({
 
 jest.mock('next/navigation', () => ({
   usePathname: () => '/',
+  useParams: () => ({}),
 }));
+
+global.fetch = jest.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve([]) });
 
 const MOCK_SESSION: Session = {
   user: { id: '123456789', name: 'Cole', email: null, image: null },
@@ -36,8 +39,8 @@ describe('NavBar', () => {
     expect(screen.getByText('DraftOps')).toBeInTheDocument();
   });
 
-  it('always renders the nav links', () => {
+  it('always renders the DraftOps wordmark even without nav links', () => {
     render(<NavBar session={null} />);
-    expect(screen.getByText('Value Sheet')).toBeInTheDocument();
+    expect(screen.getByText('DraftOps')).toBeInTheDocument();
   });
 });

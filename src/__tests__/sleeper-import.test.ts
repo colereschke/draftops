@@ -3,6 +3,7 @@ import type { SleeperLeague, SleeperUser, SleeperRoster, SleeperImportResult } f
 
 // Verified against real payload: league 1360707683916734464
 const FULL_LEAGUE: SleeperLeague = {
+  name: 'Dynasty Warlords',
   total_rosters: 12,
   roster_positions: [
     'QB',
@@ -35,6 +36,7 @@ const FULL_LEAGUE: SleeperLeague = {
 };
 
 const MINIMAL_LEAGUE: SleeperLeague = {
+  name: 'Minimal League',
   total_rosters: 2,
   roster_positions: ['QB', 'SUPER_FLEX', 'BN'],
   scoring_settings: { pass_yd: 0.04, pass_td: 4, pass_int: -2, rec: 1 },
@@ -52,6 +54,13 @@ const FULL_ROSTERS: SleeperRoster[] = Array.from({ length: 12 }, (_, i) => ({
   roster_id: i + 1,
   owner_id: `${i + 1}`,
 }));
+
+describe('mapSleeperLeague — leagueName', () => {
+  it('maps the league name for the draft name field', () => {
+    const result = mapSleeperLeague(FULL_LEAGUE, MOCK_USERS, FULL_ROSTERS);
+    expect(result.leagueName).toBe('Dynasty Warlords');
+  });
+});
 
 describe('mapSleeperLeague — teamCount and rosterSize', () => {
   it('sets teamCount to the number of rosters (one team per roster)', () => {

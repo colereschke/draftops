@@ -15,6 +15,7 @@ jest.mock('@/lib/sleeper-actions', () => ({
 }));
 
 const MOCK_IMPORT_RESULT: SleeperImportResult = {
+  leagueName: 'Dynasty Warlords',
   teamCount: 12,
   rosterSize: 30,
   startingLineup: [
@@ -212,6 +213,40 @@ describe('NewDraftPage — Sleeper import banner', () => {
     await waitFor(() => {
       const rosterSizeInput = screen.getByTestId<HTMLInputElement>('roster-size-input');
       expect(rosterSizeInput.value).toBe('25');
+    });
+  });
+
+  it('populates the draft name from the imported league name', async () => {
+    render(<NewDraftPage />);
+    fireEvent.change(screen.getByTestId('sleeper-league-id'), {
+      target: { value: '1360707683916734464' },
+    });
+    fireEvent.click(screen.getByTestId('sleeper-import-button'));
+    await waitFor(() => {
+      expect(screen.getByTestId<HTMLInputElement>('draft-name-input').value).toBe(
+        'Dynasty Warlords',
+      );
+    });
+  });
+
+  it('accepts off-grid imported scoring values without step validation (step="any")', async () => {
+    // Sleeper pass_yd of 0.05 → 20 yds/pt, which a step={5} input rejected on submit.
+    mockImportFromSleeper.mockResolvedValueOnce({
+      ok: true,
+      data: {
+        ...MOCK_IMPORT_RESULT,
+        scoringSettings: { ...DEFAULT_SCORING_SETTINGS, passYdsPerPoint: 20 },
+      },
+    });
+    render(<NewDraftPage />);
+    fireEvent.change(screen.getByTestId('sleeper-league-id'), {
+      target: { value: '1360707683916734464' },
+    });
+    fireEvent.click(screen.getByTestId('sleeper-import-button'));
+    await waitFor(() => {
+      const input = screen.getByTestId<HTMLInputElement>('scoring-passYdsPerPoint');
+      expect(input.value).toBe('20');
+      expect(input.step).toBe('any');
     });
   });
 });

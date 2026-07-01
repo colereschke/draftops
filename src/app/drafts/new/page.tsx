@@ -104,6 +104,7 @@ export default function NewDraftPage() {
         return;
       }
       const { data } = result;
+      if (data.leagueName) setName(data.leagueName);
       setTeamCount(data.teamCount);
       setRosterSize(data.rosterSize);
       setStartingLineup(data.startingLineup);
@@ -491,7 +492,7 @@ export default function NewDraftPage() {
                   data-testid="scoring-passYdsPerPoint"
                   type="number"
                   min={1}
-                  step={5}
+                  step="any"
                   value={scoringSettings.passYdsPerPoint}
                   onChange={(e) =>
                     updateScoring('passYdsPerPoint', parseFloat(e.target.value) || 25)
@@ -505,7 +506,7 @@ export default function NewDraftPage() {
                   data-testid="scoring-passTD"
                   type="number"
                   min={0}
-                  step={1}
+                  step="any"
                   value={scoringSettings.passTD}
                   onChange={(e) => {
                     const v = parseFloat(e.target.value);
@@ -520,7 +521,7 @@ export default function NewDraftPage() {
                   data-testid="scoring-passInt"
                   type="number"
                   max={0}
-                  step={1}
+                  step="any"
                   value={scoringSettings.passInt}
                   onChange={(e) => updateScoring('passInt', parseFloat(e.target.value) || -2)}
                   style={inputStyle}
@@ -539,7 +540,7 @@ export default function NewDraftPage() {
                   data-testid="scoring-rushAtt"
                   type="number"
                   min={0}
-                  step={0.1}
+                  step="any"
                   value={scoringSettings.rushAtt}
                   onChange={(e) => updateScoring('rushAtt', parseFloat(e.target.value) || 0)}
                   style={inputStyle}
@@ -551,7 +552,7 @@ export default function NewDraftPage() {
                   data-testid="scoring-rushFD"
                   type="number"
                   min={0}
-                  step={0.25}
+                  step="any"
                   value={scoringSettings.rushFD}
                   onChange={(e) => updateScoring('rushFD', parseFloat(e.target.value) || 0)}
                   style={inputStyle}
@@ -577,7 +578,7 @@ export default function NewDraftPage() {
                     data-testid={`scoring-${key}`}
                     type="number"
                     min={0}
-                    step={0.5}
+                    step="any"
                     value={scoringSettings[key]}
                     onChange={(e) => updateScoring(key, parseFloat(e.target.value) || 0)}
                     style={inputStyle}
@@ -605,7 +606,7 @@ export default function NewDraftPage() {
                     data-testid={`scoring-${key}`}
                     type="number"
                     min={0}
-                    step={0.25}
+                    step="any"
                     value={scoringSettings[key]}
                     onChange={(e) => updateScoring(key, parseFloat(e.target.value) || 0)}
                     style={inputStyle}

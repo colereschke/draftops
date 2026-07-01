@@ -279,7 +279,7 @@ The real goal here is classifying whether a team is **competing in Year 1** or *
 - Pick-heavy ratio (`numberOfPickPackagesWon / totalAssetsWon`) feeds in as a third sub-signal: pick-heavy + young + weak lineup → strong rebuilding signal; pick-heavy + strong lineup → ambiguous (aggressive competing team that still holds future assets).
 - Combine all three into a simple posture score. Clear cases (young + pick-heavy + low lineup value, or old + player-heavy + high lineup value) get meaningful adjustment. Ambiguous middle cases get minimal or no adjustment.
 - Only activate this signal once a team has ≥ 5–6 players (too few → noisy).
-- **Sleeper projections** (if #9 is built) could refine this further by providing actual Year 1 projected scores, but the age + auction-value proxy is the V1 implementation and likely good enough for dynasty.
+- Sleeper projections are not available (confirmed) — a projections source for further refinement is TBD (see #9). The age + auction-value proxy is V1 and likely good enough for dynasty use.
 
 **Combining signals:**
 A composite adjustment multiplier is applied to the static PKG baseline:
@@ -299,28 +299,47 @@ Weights and caps need tuning; start conservative (±15% max total adjustment) so
 
 ---
 
-## 9. Sleeper API Integration (Exploratory)
+## 9. Sleeper Roster Sync
 
-**Blocks:** Sleeper-powered Signal 2 in #8b; possibly replaces manual bid logging long-term
-**Blocked by:** nothing technically (API is public); design depends on what the API actually exposes
-**Parallelizable with:** most things — this is an integration layer, not core logic
+**Blocks:** nothing downstream yet
+**Blocked by:** #7 (Player model in DB needs a `sleeperId` field); #3 (league ID needs to live on a Draft)
+**Parallelizable with:** #6, #8a
 
-The Sleeper API ([docs](https://docs.sleeper.com/)) is a public, unauthenticated REST API that exposes league, roster, player, and projection data. Worth exploring as a source for two distinct things:
+The Sleeper API ([docs](https://docs.sleeper.com/)) is a public, unauthenticated REST API. Investigation confirmed:
 
-**Use case A — Live data sync**
-Dynamically populate auction results and team rosters directly from Sleeper instead of (or alongside) manual bid logging. If the league runs its auction through Sleeper, this would let DraftOps stay in sync automatically rather than requiring the operator to log every winning bid. High value, potentially complex to reconcile with manual entries.
+- **Projections are not available** — Sleeper only exposes live in-game points, not preseason or dynasty projections. Signal 2 in #8b remains age + auction-value proxy for now; a projections source is deferred/TBD.
+- **Roster assignments are available** — `GET https://api.sleeper.app/v1/league/{league_id}/rosters` returns each team's current roster as a list of Sleeper player IDs. This is the actionable use case.
 
-**Use case B — Projections to refine posture classification (#8b Signal 2)**
-V1 of Signal 2 uses average roster age + auction values as a proxy for competitive posture. Sleeper projections could sharpen this by providing actual projected Year 1 scoring — a team with an old roster _and_ low projected scoring is definitively competing and losing, not just rebuilding. Needs investigation into what Sleeper exposes for dynasty/startup-auction contexts specifically, since their projections are primarily weekly in-season data.
+### 9a. Sleeper Player IDs on the Player Model (prerequisite)
 
-**Before committing to either use case, investigate:**
+A stable cross-reference between DraftOps players and Sleeper requires a `sleeperId` field on the `Player` model. Add this as part of #7 (when `Player` moves to the DB) — optional, not required.
 
-- Does Sleeper expose auction draft picks and winning prices via the API? (Use case A viability)
-- What projection endpoints exist and at what granularity — weekly, seasonal, dynasty? (Use case B viability)
-- Is the data available for slow/slow-auction formats or only snake drafts?
-- Rate limits and caching strategy — DraftOps is a live-draft tool and can't afford projection fetches slowing down page loads
+`GET https://api.sleeper.app/v1/players/nfl` returns all NFL players with their Sleeper IDs, names, positions, and teams. On player pool import (#7), DraftOps can offer to resolve names → Sleeper IDs via this endpoint (fuzzy match on name + position + team), with the user confirming ambiguous cases. Player name stays the display key; `sleeperId` becomes the cross-reference key for sync.
 
-Design this as an optional enhancement layer, not a hard dependency. The tool should remain fully functional without Sleeper credentials if a user's league isn't on Sleeper.
+### 9b. Catch-Up Roster Sync Flow
+
+The primary use case: a user steps away from DraftOps during the auction and several players are won without being logged. They come back and want to catch up without manually re-entering everything.
+
+**Flow:**
+
+1. User provides their Sleeper league ID in draft settings (stored on `Draft`)
+2. On demand (not automatic), user triggers "Sync with Sleeper"
+3. DraftOps calls the rosters endpoint, maps returned Sleeper player IDs to its own players via `sleeperId`, identifies which are assigned to a Sleeper team but have no `AuctionResult` in the DB
+4. For each gap, DraftOps already knows **which team** won the player (from Sleeper) — it only needs the **price**
+5. Show a catch-up UI: list of unlogged players with their assigned team pre-filled and a price input per row; submit logs all in one batch
+
+**Constraints:**
+
+- Only viable if the league runs its auction through Sleeper (or at minimum adds players to rosters in Sleeper after each win)
+- Sleeper does not expose winning auction prices — price input is always manual
+- Sync is additive only — if DraftOps has a bid logged that Sleeper doesn't show on a roster yet, don't remove the DraftOps entry
+- Design as optional: DraftOps works fully without a Sleeper league ID configured
+
+**Sleeper native auction drafts:**
+Sleeper has a built-in auction draft tool. If a league uses it, rosters update in real-time as players are won — making the sync flow effectively live rather than a catch-up. This would be a significantly better experience and is worth exploring once Sleeper's native auction product matures. The same sync architecture applies; the difference is just how frequently the user triggers it (or whether it can be polled automatically during the draft).
+
+**Projections (deferred):**
+For #8b Signal 2 refinement, a projections source is still TBD. Sleeper is ruled out. Options to explore later: FantasyCalc API (if available), ESPN projections, or a manual projections CSV upload alongside the rankings upload in #7.
 
 ---
 
@@ -342,7 +361,7 @@ Design this as an optional enhancement layer, not a hard dependency. The tool sh
 #6  UI redesign ──────────────────┘  (visual only, no logic overlap)
         ↓
 #7  Custom rankings upload  (replaces ETR seed; re-runs #5b algorithm after import)
-#9  Sleeper API integration  (live data sync + projections — integration layer)
+#9  Sleeper roster sync  (catch-up flow; needs #7 for sleeperId on Player model)
         ↓
 #8a Teams page: aggregate spend delta + avg age
         ↓

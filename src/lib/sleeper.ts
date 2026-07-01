@@ -1,6 +1,7 @@
 import type { StartingSlot, ScoringSettings } from '@/types';
 
 export interface SleeperLeague {
+  name: string;
   total_rosters: number;
   roster_positions: string[];
   scoring_settings: Record<string, number>;
@@ -19,6 +20,7 @@ export interface SleeperRoster {
 }
 
 export interface SleeperImportResult {
+  leagueName: string;
   teamCount: number;
   rosterSize: number;
   startingLineup: StartingSlot[];
@@ -118,6 +120,7 @@ export function mapSleeperLeague(
   }
 
   return {
+    leagueName: league.name ?? '',
     teamCount: teams.length,
     rosterSize: league.roster_positions.length,
     startingLineup,

@@ -16,6 +16,7 @@ jest.mock('@/lib/sleeper', () => {
 });
 
 const MOCK_LEAGUE: SleeperLeague = {
+  name: 'Dynasty Warlords',
   total_rosters: 2,
   roster_positions: ['QB', 'SUPER_FLEX', 'BN'],
   scoring_settings: { pass_yd: 0.04, pass_td: 4, pass_int: -2, rec: 1 },

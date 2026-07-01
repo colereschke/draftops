@@ -198,4 +198,20 @@ describe('NewDraftPage — Sleeper import banner', () => {
     fireEvent.click(screen.getByTestId('sleeper-import-button'));
     await waitFor(() => expect(screen.getByTestId('sleeper-import-error')).toBeInTheDocument());
   });
+
+  it('updates roster size and team count from non-default import values', async () => {
+    mockImportFromSleeper.mockResolvedValueOnce({
+      ok: true,
+      data: { ...MOCK_IMPORT_RESULT, rosterSize: 25, teamCount: 8 },
+    });
+    render(<NewDraftPage />);
+    fireEvent.change(screen.getByTestId('sleeper-league-id'), {
+      target: { value: '1360707683916734464' },
+    });
+    fireEvent.click(screen.getByTestId('sleeper-import-button'));
+    await waitFor(() => {
+      const rosterSizeInput = screen.getByTestId<HTMLInputElement>('roster-size-input');
+      expect(rosterSizeInput.value).toBe('25');
+    });
+  });
 });

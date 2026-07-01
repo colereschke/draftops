@@ -65,17 +65,17 @@ describe('NewDraftPage — scoring settings', () => {
     expect(input.value).toBe('25');
   });
 
-  it('renders passing TD select with default 4', () => {
+  it('renders passing TD input with default 4', () => {
     render(<NewDraftPage />);
-    const select = screen.getByTestId<HTMLSelectElement>('scoring-passTD');
-    expect(select.value).toBe('4');
+    const input = screen.getByTestId<HTMLInputElement>('scoring-passTD');
+    expect(input.value).toBe('4');
   });
 
-  it('renders all PPR selects defaulting to 1', () => {
+  it('renders all PPR inputs defaulting to 1', () => {
     render(<NewDraftPage />);
-    expect(screen.getByTestId<HTMLSelectElement>('scoring-pprRB').value).toBe('1');
-    expect(screen.getByTestId<HTMLSelectElement>('scoring-pprWR').value).toBe('1');
-    expect(screen.getByTestId<HTMLSelectElement>('scoring-pprTE').value).toBe('1');
+    expect(screen.getByTestId<HTMLInputElement>('scoring-pprRB').value).toBe('1');
+    expect(screen.getByTestId<HTMLInputElement>('scoring-pprWR').value).toBe('1');
+    expect(screen.getByTestId<HTMLInputElement>('scoring-pprTE').value).toBe('1');
   });
 });
 

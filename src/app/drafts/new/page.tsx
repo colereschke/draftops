@@ -358,15 +358,18 @@ export default function NewDraftPage() {
               </label>
               <label style={labelStyle}>
                 Passing TD
-                <select
+                <input
                   data-testid="scoring-passTD"
+                  type="number"
+                  min={0}
+                  step={1}
                   value={scoringSettings.passTD}
-                  onChange={(e) => updateScoring('passTD', parseFloat(e.target.value))}
+                  onChange={(e) => {
+                    const v = parseFloat(e.target.value);
+                    updateScoring('passTD', Number.isNaN(v) ? 4 : v);
+                  }}
                   style={inputStyle}
-                >
-                  <option value={4}>4</option>
-                  <option value={6}>6</option>
-                </select>
+                />
               </label>
               <label style={labelStyle}>
                 Interception
@@ -420,25 +423,22 @@ export default function NewDraftPage() {
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.5rem' }}>
               {(
                 [
-                  { pos: 'RB', key: 'pprRB', opts: [0, 0.5, 1] },
-                  { pos: 'WR', key: 'pprWR', opts: [0, 0.5, 1] },
-                  { pos: 'TE', key: 'pprTE', opts: [0, 0.5, 1, 1.5, 2] },
+                  { pos: 'RB', key: 'pprRB' },
+                  { pos: 'WR', key: 'pprWR' },
+                  { pos: 'TE', key: 'pprTE' },
                 ] as const
-              ).map(({ pos, key, opts }) => (
+              ).map(({ pos, key }) => (
                 <label key={pos} style={labelStyle}>
                   {pos}
-                  <select
+                  <input
                     data-testid={`scoring-${key}`}
+                    type="number"
+                    min={0}
+                    step={0.5}
                     value={scoringSettings[key]}
-                    onChange={(e) => updateScoring(key, parseFloat(e.target.value))}
+                    onChange={(e) => updateScoring(key, parseFloat(e.target.value) || 0)}
                     style={inputStyle}
-                  >
-                    {opts.map((v) => (
-                      <option key={v} value={v}>
-                        {v}
-                      </option>
-                    ))}
-                  </select>
+                  />
                 </label>
               ))}
             </div>

@@ -58,8 +58,7 @@
   }
   interface SleeperUser {
     user_id: string;
-    user_name: string;
-    display_name: string;
+    display_name: string; // Sleeper's public username (e.g. "coreschke") — no separate user_name field
     metadata?: { team_name?: string };
   }
   interface SleeperImportResult {
@@ -87,10 +86,10 @@ Create `src/__tests__/sleeper-import.test.ts`:
 
 ```typescript
 import { mapSleeperLeague } from '@/lib/sleeper';
-import type { SleeperImportResult } from '@/lib/sleeper';
-import { DEFAULT_SCORING_SETTINGS } from '@/types';
+import type { SleeperLeague, SleeperUser, SleeperImportResult } from '@/lib/sleeper';
 
-const FULL_LEAGUE = {
+// Verified against real payload: league 1360707683916734464
+const FULL_LEAGUE: SleeperLeague = {
   total_rosters: 12,
   roster_positions: [
     'QB',
@@ -111,32 +110,27 @@ const FULL_LEAGUE = {
     pass_td: 4,
     pass_int: -2,
     rec: 1,
-    bonus_rec_rb: 0,
+    // bonus_rec_rb absent (= 0) — Sleeper omits 0-value fields
     bonus_rec_wr: 0,
     bonus_rec_te: 0.5,
     rec_fd: 0,
-    bonus_fd_rb: 0,
-    bonus_fd_wr: 0,
+    // bonus_fd_rb, bonus_fd_wr absent (= 0)
     bonus_fd_te: 0.25,
     rush_att: 0,
     rush_fd: 0,
   },
 };
 
-const MINIMAL_LEAGUE = {
+const MINIMAL_LEAGUE: SleeperLeague = {
   total_rosters: 2,
   roster_positions: ['QB', 'SUPER_FLEX', 'BN'],
   scoring_settings: { pass_yd: 0.04, pass_td: 4, pass_int: -2, rec: 1 },
 };
 
-const MOCK_USERS = [
-  {
-    user_id: '1',
-    user_name: 'coreschke',
-    display_name: 'Cole',
-    metadata: { team_name: "Cole's Team" },
-  },
-  { user_id: '2', user_name: 'rival', display_name: 'Rival', metadata: undefined },
+// display_name IS the Sleeper username — no separate user_name field in /users response
+const MOCK_USERS: SleeperUser[] = [
+  { user_id: '1', display_name: 'coreschke', metadata: { team_name: "Cole's Team" } },
+  { user_id: '2', display_name: 'rival' },
 ];
 
 describe('mapSleeperLeague — teamCount and rosterSize', () => {
@@ -226,7 +220,7 @@ describe('mapSleeperLeague — scoring settings', () => {
 });
 
 describe('mapSleeperLeague — teams', () => {
-  it('maps user_name to handle', () => {
+  it('maps display_name to handle', () => {
     const result = mapSleeperLeague(FULL_LEAGUE, MOCK_USERS);
     expect(result.teams[0].handle).toBe('coreschke');
     expect(result.teams[1].handle).toBe('rival');
@@ -239,12 +233,26 @@ describe('mapSleeperLeague — teams', () => {
 
   it('falls back to display_name when metadata.team_name is absent', () => {
     const result = mapSleeperLeague(FULL_LEAGUE, MOCK_USERS);
-    expect(result.teams[1].displayName).toBe('Rival');
+    expect(result.teams[1].displayName).toBe('rival');
+  });
+});
+
+describe('mapSleeperLeague — teams truncated to teamCount', () => {
+  it('truncates teams to total_rosters when users outnumber rosters (co-owner scenario)', () => {
+    // Real league 1360707683916734464 has 13 users for 12 rosters (one pair of co-owners)
+    const thirteenUsers: SleeperUser[] = [
+      ...MOCK_USERS,
+      ...Array.from({ length: 11 }, (_, i) => ({ user_id: `${i + 3}`, display_name: `extra${i}` })),
+    ];
+    const result = mapSleeperLeague(FULL_LEAGUE, thirteenUsers);
+    expect(result.teams).toHaveLength(12);
+    expect(result.teamCount).toBe(12);
   });
 });
 
 describe('mapSleeperLeague — ownerIndex', () => {
-  it('returns correct ownerIndex when username matches (case-insensitive)', () => {
+  it('returns correct ownerIndex when display_name matches (case-insensitive)', () => {
+    // 'CoreSchke' should match display_name 'coreschke' case-insensitively
     const result = mapSleeperLeague(FULL_LEAGUE, MOCK_USERS, 'CoreSchke');
     expect(result.ownerIndex).toBe(0);
   });
@@ -282,8 +290,7 @@ export interface SleeperLeague {
 
 export interface SleeperUser {
   user_id: string;
-  user_name: string;
-  display_name: string;
+  display_name: string; // Sleeper's public username — no separate user_name field in /users response
   metadata?: { team_name?: string };
 }
 
@@ -346,15 +353,18 @@ export function mapSleeperLeague(
     .filter((pos) => VALID_SLOTS.has(pos))
     .map((pos) => pos as StartingSlot);
 
-  const teams = users.map((u) => ({
-    handle: u.user_name,
+  // Sleeper leagues can have co-owners (extra users sharing a roster), so truncate to total_rosters
+  const capped = users.slice(0, league.total_rosters);
+
+  const teams = capped.map((u) => ({
+    handle: u.display_name,
     displayName: u.metadata?.team_name || u.display_name,
   }));
 
   let ownerIndex: number | null = null;
   if (ownerUsername) {
     const lower = ownerUsername.toLowerCase();
-    const idx = users.findIndex((u) => u.user_name.toLowerCase() === lower);
+    const idx = capped.findIndex((u) => u.display_name.toLowerCase() === lower);
     if (idx !== -1) ownerIndex = idx;
   }
 
@@ -415,6 +425,7 @@ Create `src/__tests__/sleeper-actions.test.ts`:
 
 ```typescript
 import { importFromSleeper } from '@/lib/sleeper-actions';
+import type { SleeperLeague, SleeperUser } from '@/lib/sleeper';
 
 const mockFetchLeague = jest.fn();
 const mockFetchUsers = jest.fn();
@@ -428,15 +439,15 @@ jest.mock('@/lib/sleeper', () => {
   };
 });
 
-const MOCK_LEAGUE = {
+const MOCK_LEAGUE: SleeperLeague = {
   total_rosters: 2,
   roster_positions: ['QB', 'SUPER_FLEX', 'BN'],
   scoring_settings: { pass_yd: 0.04, pass_td: 4, pass_int: -2, rec: 1 },
 };
 
-const MOCK_USERS = [
-  { user_id: '1', user_name: 'coreschke', display_name: 'Cole' },
-  { user_id: '2', user_name: 'rival', display_name: 'Rival' },
+const MOCK_USERS: SleeperUser[] = [
+  { user_id: '1', display_name: 'coreschke' },
+  { user_id: '2', display_name: 'rival' },
 ];
 
 beforeEach(() => {
@@ -496,8 +507,6 @@ Expected: FAIL — `Cannot find module '@/lib/sleeper-actions'`
 
 import { fetchSleeperLeague, fetchSleeperLeagueUsers, mapSleeperLeague } from '@/lib/sleeper';
 import type { SleeperImportResult } from '@/lib/sleeper';
-
-export type { SleeperImportResult };
 
 type ImportResponse = { ok: true; data: SleeperImportResult } | { ok: false; error: string };
 
@@ -622,7 +631,7 @@ Find the `passTD` block in the Passing section (the `<select>` with options 4 an
   min={0}
   step={1}
   value={scoringSettings.passTD}
-  onChange={(e) => updateScoring('passTD', parseFloat(e.target.value) || 4)}
+  onChange={(e) => { const v = parseFloat(e.target.value); updateScoring('passTD', Number.isNaN(v) ? 4 : v); }}
   style={inputStyle}
 />
 ```
@@ -705,7 +714,7 @@ Add the Sleeper import widget to `drafts/new/page.tsx` and tests for the new beh
 Add these to `src/__tests__/drafts-new-form.test.tsx`. Add the mock and import at the top of the file (alongside the existing `createDraft` mock):
 
 ```typescript
-import type { SleeperImportResult } from '@/lib/sleeper-actions';
+import type { SleeperImportResult } from '@/lib/sleeper';
 import { DEFAULT_SCORING_SETTINGS } from '@/types';
 
 const mockImportFromSleeper = jest.fn();
@@ -843,7 +852,7 @@ At the top of the file, add to the existing imports:
 
 ```typescript
 import { importFromSleeper } from '@/lib/sleeper-actions';
-import type { SleeperImportResult } from '@/lib/sleeper-actions';
+import type { SleeperImportResult } from '@/lib/sleeper';
 ```
 
 Inside `NewDraftPage`, add after the existing `useTransition` call:

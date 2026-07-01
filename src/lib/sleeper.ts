@@ -12,6 +12,12 @@ export interface SleeperUser {
   metadata?: { team_name?: string };
 }
 
+export interface SleeperRoster {
+  roster_id: number;
+  owner_id: string | null; // primary owner's user_id; null for an unowned/commissioner-held roster
+  co_owners?: string[] | null; // additional user_ids sharing the roster (best-effort; absent in some responses)
+}
+
 export interface SleeperImportResult {
   teamCount: number;
   rosterSize: number;
@@ -43,9 +49,17 @@ export async function fetchSleeperLeagueUsers(leagueId: string): Promise<Sleeper
   return res.json() as Promise<SleeperUser[]>;
 }
 
+export async function fetchSleeperLeagueRosters(leagueId: string): Promise<SleeperRoster[]> {
+  const res = await fetch(`${SLEEPER_BASE}/league/${leagueId}/rosters`);
+  if (res.status === 404) throw new Error('NOT_FOUND');
+  if (!res.ok) throw new Error(`SLEEPER_ERROR:${res.status}`);
+  return res.json() as Promise<SleeperRoster[]>;
+}
+
 export function mapSleeperLeague(
   league: SleeperLeague,
   users: SleeperUser[],
+  rosters: SleeperRoster[],
   ownerUsername?: string,
 ): SleeperImportResult {
   const s = league.scoring_settings;
@@ -71,23 +85,40 @@ export function mapSleeperLeague(
     .filter((pos) => VALID_SLOTS.has(pos))
     .map((pos) => pos as StartingSlot);
 
-  // Sleeper leagues can have co-owners (extra users sharing a roster), so truncate to total_rosters
-  const capped = users.slice(0, league.total_rosters);
+  // Build exactly one team per roster (keyed by roster_id for stable order), resolving each
+  // roster's primary owner_id to a user. This is the only reliable one-team-per-roster mapping:
+  // /users returns co-owners as extra entries in an unspecified order, so slicing it would drop
+  // real managers and duplicate co-owned rosters. Orphan rosters (owner_id null) get a placeholder.
+  const usersById = new Map(users.map((u) => [u.user_id, u]));
+  const orderedRosters = [...rosters].sort((a, b) => a.roster_id - b.roster_id);
 
-  const teams = capped.map((u) => ({
-    handle: u.display_name,
-    displayName: u.metadata?.team_name || u.display_name,
-  }));
+  const teams = orderedRosters.map((roster) => {
+    const owner = roster.owner_id ? usersById.get(roster.owner_id) : undefined;
+    if (!owner) {
+      return { handle: `roster-${roster.roster_id}`, displayName: `Roster ${roster.roster_id}` };
+    }
+    return {
+      handle: owner.display_name,
+      displayName: owner.metadata?.team_name || owner.display_name,
+    };
+  });
 
   let ownerIndex: number | null = null;
   if (ownerUsername) {
     const lower = ownerUsername.toLowerCase();
-    const idx = capped.findIndex((u) => u.display_name.toLowerCase() === lower);
-    if (idx !== -1) ownerIndex = idx;
+    // Match against the full users list (owners and co-owners), then locate the roster the
+    // matched user belongs to — as primary owner or co-owner — so co-owned imports resolve too.
+    const me = users.find((u) => u.display_name.toLowerCase() === lower);
+    if (me) {
+      const idx = orderedRosters.findIndex(
+        (r) => r.owner_id === me.user_id || (r.co_owners ?? []).includes(me.user_id),
+      );
+      if (idx !== -1) ownerIndex = idx;
+    }
   }
 
   return {
-    teamCount: league.total_rosters,
+    teamCount: teams.length,
     rosterSize: league.roster_positions.length,
     startingLineup,
     scoringSettings,

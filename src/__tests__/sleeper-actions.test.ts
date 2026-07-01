@@ -1,8 +1,9 @@
 import { importFromSleeper } from '@/lib/sleeper-actions';
-import type { SleeperLeague, SleeperUser } from '@/lib/sleeper';
+import type { SleeperLeague, SleeperUser, SleeperRoster } from '@/lib/sleeper';
 
 const mockFetchLeague = jest.fn();
 const mockFetchUsers = jest.fn();
+const mockFetchRosters = jest.fn();
 
 jest.mock('@/lib/sleeper', () => {
   const actual = jest.requireActual('@/lib/sleeper') as typeof import('@/lib/sleeper');
@@ -10,6 +11,7 @@ jest.mock('@/lib/sleeper', () => {
     ...actual,
     fetchSleeperLeague: (...args: unknown[]) => mockFetchLeague(...args),
     fetchSleeperLeagueUsers: (...args: unknown[]) => mockFetchUsers(...args),
+    fetchSleeperLeagueRosters: (...args: unknown[]) => mockFetchRosters(...args),
   };
 });
 
@@ -24,17 +26,24 @@ const MOCK_USERS: SleeperUser[] = [
   { user_id: '2', display_name: 'rival' },
 ];
 
+const MOCK_ROSTERS: SleeperRoster[] = [
+  { roster_id: 1, owner_id: '1' },
+  { roster_id: 2, owner_id: '2' },
+];
+
 beforeEach(() => {
   jest.clearAllMocks();
   mockFetchLeague.mockResolvedValue(MOCK_LEAGUE);
   mockFetchUsers.mockResolvedValue(MOCK_USERS);
+  mockFetchRosters.mockResolvedValue(MOCK_ROSTERS);
 });
 
 describe('importFromSleeper', () => {
-  it('calls fetchSleeperLeague and fetchSleeperLeagueUsers with the provided leagueId', async () => {
+  it('calls fetchSleeperLeague, fetchSleeperLeagueUsers, and fetchSleeperLeagueRosters with the provided leagueId', async () => {
     await importFromSleeper('1360707683916734464');
     expect(mockFetchLeague).toHaveBeenCalledWith('1360707683916734464');
     expect(mockFetchUsers).toHaveBeenCalledWith('1360707683916734464');
+    expect(mockFetchRosters).toHaveBeenCalledWith('1360707683916734464');
   });
 
   it('returns ok:true with mapped data on success', async () => {

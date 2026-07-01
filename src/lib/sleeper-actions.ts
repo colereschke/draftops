@@ -1,6 +1,11 @@
 'use server';
 
-import { fetchSleeperLeague, fetchSleeperLeagueUsers, mapSleeperLeague } from '@/lib/sleeper';
+import {
+  fetchSleeperLeague,
+  fetchSleeperLeagueUsers,
+  fetchSleeperLeagueRosters,
+  mapSleeperLeague,
+} from '@/lib/sleeper';
 import type { SleeperImportResult } from '@/lib/sleeper';
 
 type ImportResponse = { ok: true; data: SleeperImportResult } | { ok: false; error: string };
@@ -10,11 +15,12 @@ export async function importFromSleeper(
   ownerUsername?: string,
 ): Promise<ImportResponse> {
   try {
-    const [league, users] = await Promise.all([
+    const [league, users, rosters] = await Promise.all([
       fetchSleeperLeague(leagueId),
       fetchSleeperLeagueUsers(leagueId),
+      fetchSleeperLeagueRosters(leagueId),
     ]);
-    const data = mapSleeperLeague(league, users, ownerUsername);
+    const data = mapSleeperLeague(league, users, rosters, ownerUsername);
     return { ok: true, data };
   } catch (err) {
     const message = err instanceof Error ? err.message : '';

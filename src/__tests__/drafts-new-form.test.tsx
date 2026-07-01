@@ -1,10 +1,41 @@
 import React from 'react';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import NewDraftPage from '@/app/drafts/new/page';
+import type { SleeperImportResult } from '@/lib/sleeper';
+import { DEFAULT_SCORING_SETTINGS } from '@/types';
 
 jest.mock('@/lib/actions', () => ({
   createDraft: jest.fn(),
 }));
+
+const mockImportFromSleeper = jest.fn();
+
+jest.mock('@/lib/sleeper-actions', () => ({
+  importFromSleeper: (...args: unknown[]) => mockImportFromSleeper(...args),
+}));
+
+const MOCK_IMPORT_RESULT: SleeperImportResult = {
+  teamCount: 12,
+  rosterSize: 30,
+  startingLineup: [
+    'QB',
+    'RB',
+    'WR',
+    'WR',
+    'TE',
+    'FLEX',
+    'SUPER_FLEX',
+    'FLEX',
+    'FLEX',
+    'SUPER_FLEX',
+  ],
+  scoringSettings: { ...DEFAULT_SCORING_SETTINGS },
+  teams: Array.from({ length: 12 }, (_, i) => ({
+    handle: `team-${i + 1}`,
+    displayName: `Team ${i + 1}`,
+  })),
+  ownerIndex: 0,
+};
 
 describe('NewDraftPage — roster settings and lineup', () => {
   it('renders the roster size input with default 30', () => {
@@ -65,17 +96,17 @@ describe('NewDraftPage — scoring settings', () => {
     expect(input.value).toBe('25');
   });
 
-  it('renders passing TD select with default 4', () => {
+  it('renders passing TD input with default 4', () => {
     render(<NewDraftPage />);
-    const select = screen.getByTestId<HTMLSelectElement>('scoring-passTD');
-    expect(select.value).toBe('4');
+    const input = screen.getByTestId<HTMLInputElement>('scoring-passTD');
+    expect(input.value).toBe('4');
   });
 
-  it('renders all PPR selects defaulting to 1', () => {
+  it('renders all PPR inputs defaulting to 1', () => {
     render(<NewDraftPage />);
-    expect(screen.getByTestId<HTMLSelectElement>('scoring-pprRB').value).toBe('1');
-    expect(screen.getByTestId<HTMLSelectElement>('scoring-pprWR').value).toBe('1');
-    expect(screen.getByTestId<HTMLSelectElement>('scoring-pprTE').value).toBe('1');
+    expect(screen.getByTestId<HTMLInputElement>('scoring-pprRB').value).toBe('1');
+    expect(screen.getByTestId<HTMLInputElement>('scoring-pprWR').value).toBe('1');
+    expect(screen.getByTestId<HTMLInputElement>('scoring-pprTE').value).toBe('1');
   });
 });
 
@@ -92,5 +123,95 @@ describe('NewDraftPage — lineup validation', () => {
     });
     fireEvent.submit(screen.getByTestId('new-draft-form'));
     expect(screen.getByText(/at least one QB or SUPER_FLEX/i)).toBeInTheDocument();
+  });
+});
+
+describe('NewDraftPage — Sleeper import banner', () => {
+  beforeEach(() => {
+    mockImportFromSleeper.mockResolvedValue({ ok: true, data: MOCK_IMPORT_RESULT });
+  });
+
+  it('renders the league ID input and username input', () => {
+    render(<NewDraftPage />);
+    expect(screen.getByTestId('sleeper-league-id')).toBeInTheDocument();
+    expect(screen.getByTestId('sleeper-owner-username')).toBeInTheDocument();
+  });
+
+  it('import button is disabled when league ID is empty', () => {
+    render(<NewDraftPage />);
+    expect(screen.getByTestId<HTMLButtonElement>('sleeper-import-button').disabled).toBe(true);
+  });
+
+  it('import button is enabled after typing a league ID', () => {
+    render(<NewDraftPage />);
+    fireEvent.change(screen.getByTestId('sleeper-league-id'), {
+      target: { value: '1360707683916734464' },
+    });
+    expect(screen.getByTestId<HTMLButtonElement>('sleeper-import-button').disabled).toBe(false);
+  });
+
+  it('calls importFromSleeper with entered league ID on button click', async () => {
+    render(<NewDraftPage />);
+    fireEvent.change(screen.getByTestId('sleeper-league-id'), {
+      target: { value: '1360707683916734464' },
+    });
+    fireEvent.click(screen.getByTestId('sleeper-import-button'));
+    await waitFor(() =>
+      expect(mockImportFromSleeper).toHaveBeenCalledWith('1360707683916734464', undefined),
+    );
+  });
+
+  it('shows confirm message after successful import', async () => {
+    render(<NewDraftPage />);
+    fireEvent.change(screen.getByTestId('sleeper-league-id'), {
+      target: { value: '1360707683916734464' },
+    });
+    fireEvent.click(screen.getByTestId('sleeper-import-button'));
+    await waitFor(() => expect(screen.getByTestId('sleeper-import-confirm')).toBeInTheDocument());
+  });
+
+  it('shows username warning when ownerIndex is null and username was entered', async () => {
+    mockImportFromSleeper.mockResolvedValueOnce({
+      ok: true,
+      data: { ...MOCK_IMPORT_RESULT, ownerIndex: null },
+    });
+    render(<NewDraftPage />);
+    fireEvent.change(screen.getByTestId('sleeper-league-id'), {
+      target: { value: '1360707683916734464' },
+    });
+    fireEvent.change(screen.getByTestId('sleeper-owner-username'), {
+      target: { value: 'coreschke' },
+    });
+    fireEvent.click(screen.getByTestId('sleeper-import-button'));
+    await waitFor(() => expect(screen.getByTestId('sleeper-import-warning')).toBeInTheDocument());
+  });
+
+  it('shows error message when importFromSleeper returns ok:false', async () => {
+    mockImportFromSleeper.mockResolvedValueOnce({
+      ok: false,
+      error: 'League not found. Check your Sleeper league ID.',
+    });
+    render(<NewDraftPage />);
+    fireEvent.change(screen.getByTestId('sleeper-league-id'), {
+      target: { value: 'bad-id' },
+    });
+    fireEvent.click(screen.getByTestId('sleeper-import-button'));
+    await waitFor(() => expect(screen.getByTestId('sleeper-import-error')).toBeInTheDocument());
+  });
+
+  it('updates roster size and team count from non-default import values', async () => {
+    mockImportFromSleeper.mockResolvedValueOnce({
+      ok: true,
+      data: { ...MOCK_IMPORT_RESULT, rosterSize: 25, teamCount: 8 },
+    });
+    render(<NewDraftPage />);
+    fireEvent.change(screen.getByTestId('sleeper-league-id'), {
+      target: { value: '1360707683916734464' },
+    });
+    fireEvent.click(screen.getByTestId('sleeper-import-button'));
+    await waitFor(() => {
+      const rosterSizeInput = screen.getByTestId<HTMLInputElement>('roster-size-input');
+      expect(rosterSizeInput.value).toBe('25');
+    });
   });
 });

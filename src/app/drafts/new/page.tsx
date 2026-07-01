@@ -2,6 +2,8 @@
 
 import { useState, useTransition } from 'react';
 import { createDraft } from '@/lib/actions';
+import { importFromSleeper } from '@/lib/sleeper-actions';
+import type { SleeperImportResult } from '@/lib/sleeper';
 import type { StartingSlot, ScoringSettings } from '@/types';
 import { DEFAULT_STARTING_LINEUP, DEFAULT_TARGET_ROSTER, DEFAULT_SCORING_SETTINGS } from '@/types';
 
@@ -10,6 +12,11 @@ interface TeamRow {
   displayName: string;
   isMine: boolean;
 }
+
+type ImportState =
+  | { status: 'idle' }
+  | { status: 'error'; message: string }
+  | { status: 'success'; confirm: string; warning: string | null };
 
 function defaultTeams(count: number): TeamRow[] {
   return Array.from({ length: count }, (_, i) => ({
@@ -26,6 +33,10 @@ export default function NewDraftPage() {
   const [teams, setTeams] = useState<TeamRow[]>(() => defaultTeams(12));
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+  const [isImporting, startImportTransition] = useTransition();
+  const [leagueId, setLeagueId] = useState('');
+  const [ownerUsername, setOwnerUsername] = useState('');
+  const [importState, setImportState] = useState<ImportState>({ status: 'idle' });
   const [rosterSize, setRosterSize] = useState(30);
   const [targetRoster, setTargetRoster] = useState<Record<'QB' | 'RB' | 'WR' | 'TE', number>>({
     QB: DEFAULT_TARGET_ROSTER.QB ?? 4,
@@ -82,6 +93,40 @@ export default function NewDraftPage() {
     setStartingLineup((prev) => prev.map((s, i) => (i === index ? slot : s)));
   }
 
+  function handleImport() {
+    if (!leagueId.trim()) return;
+    setImportState({ status: 'idle' });
+    const trimmedUsername = ownerUsername.trim();
+    startImportTransition(async () => {
+      const result = await importFromSleeper(leagueId.trim(), trimmedUsername || undefined);
+      if (!result.ok) {
+        setImportState({ status: 'error', message: result.error });
+        return;
+      }
+      const { data } = result;
+      setTeamCount(data.teamCount);
+      setRosterSize(data.rosterSize);
+      setStartingLineup(data.startingLineup);
+      setScoringSettings(data.scoringSettings);
+      setTeams(
+        data.teams.map((t: SleeperImportResult['teams'][number], i: number) => ({
+          handle: t.handle,
+          displayName: t.displayName,
+          isMine: data.ownerIndex !== null ? i === data.ownerIndex : i === 0,
+        })),
+      );
+      const warning =
+        trimmedUsername && data.ownerIndex === null
+          ? `Couldn't match '${trimmedUsername}' to a team in this league — select yours manually.`
+          : null;
+      setImportState({
+        status: 'success',
+        confirm: `Imported from Sleeper · ${data.teamCount} teams · ${data.startingLineup.length} starting slots`,
+        warning,
+      });
+    });
+  }
+
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
@@ -134,6 +179,104 @@ export default function NewDraftPage() {
       >
         New Draft
       </h1>
+
+      {/* --- Import from Sleeper --- */}
+      <div
+        style={{
+          background: 'var(--bg-surface)',
+          borderRadius: '6px',
+          padding: '1.25rem',
+          marginBottom: '1.5rem',
+        }}
+      >
+        <div style={sectionHeaderStyle}>Import from Sleeper</div>
+        <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '0.75rem' }}>
+          <label style={{ ...labelStyle, flex: 1 }}>
+            League ID
+            <input
+              data-testid="sleeper-league-id"
+              type="text"
+              value={leagueId}
+              onChange={(e) => setLeagueId(e.target.value)}
+              placeholder="e.g. 1360707683916734464"
+              style={inputStyle}
+            />
+          </label>
+          <label style={{ ...labelStyle, flex: 1 }}>
+            Your Sleeper username (optional)
+            <input
+              data-testid="sleeper-owner-username"
+              type="text"
+              value={ownerUsername}
+              onChange={(e) => setOwnerUsername(e.target.value)}
+              placeholder="e.g. coreschke"
+              style={inputStyle}
+            />
+          </label>
+        </div>
+        <button
+          type="button"
+          data-testid="sleeper-import-button"
+          onClick={handleImport}
+          disabled={isImporting || !leagueId.trim()}
+          style={{
+            background: isImporting ? 'var(--text-secondary)' : 'var(--pos-te)',
+            color: '#fff',
+            border: 'none',
+            borderRadius: '4px',
+            padding: '0.4rem 1rem',
+            fontFamily: 'var(--font-barlow)',
+            fontSize: '0.875rem',
+            cursor: isImporting || !leagueId.trim() ? 'not-allowed' : 'pointer',
+          }}
+        >
+          {isImporting ? 'Importing…' : 'Import'}
+        </button>
+        {importState.status === 'error' && (
+          <p
+            data-testid="sleeper-import-error"
+            style={{
+              color: '#e05050',
+              fontFamily: 'var(--font-barlow)',
+              fontSize: '0.8rem',
+              marginTop: '0.5rem',
+              marginBottom: 0,
+            }}
+          >
+            {importState.message}
+          </p>
+        )}
+        {importState.status === 'success' && (
+          <>
+            <p
+              data-testid="sleeper-import-confirm"
+              style={{
+                color: 'var(--pos-rb)',
+                fontFamily: 'var(--font-barlow)',
+                fontSize: '0.8rem',
+                marginTop: '0.5rem',
+                marginBottom: 0,
+              }}
+            >
+              {importState.confirm}
+            </p>
+            {importState.warning && (
+              <p
+                data-testid="sleeper-import-warning"
+                style={{
+                  color: 'var(--age-aging)',
+                  fontFamily: 'var(--font-barlow)',
+                  fontSize: '0.8rem',
+                  marginTop: '0.25rem',
+                  marginBottom: 0,
+                }}
+              >
+                {importState.warning}
+              </p>
+            )}
+          </>
+        )}
+      </div>
 
       <form data-testid="new-draft-form" onSubmit={handleSubmit}>
         {/* --- Draft Settings --- */}
@@ -358,15 +501,18 @@ export default function NewDraftPage() {
               </label>
               <label style={labelStyle}>
                 Passing TD
-                <select
+                <input
                   data-testid="scoring-passTD"
+                  type="number"
+                  min={0}
+                  step={1}
                   value={scoringSettings.passTD}
-                  onChange={(e) => updateScoring('passTD', parseFloat(e.target.value))}
+                  onChange={(e) => {
+                    const v = parseFloat(e.target.value);
+                    updateScoring('passTD', Number.isNaN(v) ? 4 : v);
+                  }}
                   style={inputStyle}
-                >
-                  <option value={4}>4</option>
-                  <option value={6}>6</option>
-                </select>
+                />
               </label>
               <label style={labelStyle}>
                 Interception
@@ -420,25 +566,22 @@ export default function NewDraftPage() {
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.5rem' }}>
               {(
                 [
-                  { pos: 'RB', key: 'pprRB', opts: [0, 0.5, 1] },
-                  { pos: 'WR', key: 'pprWR', opts: [0, 0.5, 1] },
-                  { pos: 'TE', key: 'pprTE', opts: [0, 0.5, 1, 1.5, 2] },
+                  { pos: 'RB', key: 'pprRB' },
+                  { pos: 'WR', key: 'pprWR' },
+                  { pos: 'TE', key: 'pprTE' },
                 ] as const
-              ).map(({ pos, key, opts }) => (
+              ).map(({ pos, key }) => (
                 <label key={pos} style={labelStyle}>
                   {pos}
-                  <select
+                  <input
                     data-testid={`scoring-${key}`}
+                    type="number"
+                    min={0}
+                    step={0.5}
                     value={scoringSettings[key]}
-                    onChange={(e) => updateScoring(key, parseFloat(e.target.value))}
+                    onChange={(e) => updateScoring(key, parseFloat(e.target.value) || 0)}
                     style={inputStyle}
-                  >
-                    {opts.map((v) => (
-                      <option key={v} value={v}>
-                        {v}
-                      </option>
-                    ))}
-                  </select>
+                  />
                 </label>
               ))}
             </div>

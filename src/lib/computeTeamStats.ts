@@ -1,6 +1,5 @@
-import type { TeamWithRoster, RosterEntry } from '@/types';
+import type { Player, TeamWithRoster, RosterEntry } from '@/types';
 import { ROSTER_SIZE } from '@/lib/teams';
-import { players } from '@/data/players';
 
 interface TeamInput {
   id: number;
@@ -18,7 +17,7 @@ interface TeamInput {
   }>;
 }
 
-export function computeTeamStats(teams: TeamInput[]): TeamWithRoster[] {
+export function computeTeamStats(teams: TeamInput[], players: Player[]): TeamWithRoster[] {
   return teams.map((team) => {
     const spent = team.results.reduce((sum, r) => sum + r.price, 0);
     const remaining = team.budget - spent;

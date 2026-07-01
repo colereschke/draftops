@@ -1,4 +1,5 @@
 import { createDraft } from '@/lib/actions';
+import type { StartingSlot } from '@/types';
 
 const mockAuth = jest.fn();
 const mockTransaction = jest.fn();
@@ -9,6 +10,7 @@ const mockRedirect = jest.fn();
 const mockTxDraftCreate = jest.fn();
 const mockTxDraftUpdate = jest.fn();
 const mockTxTeamCreate = jest.fn();
+const mockTxPlayerCreateMany = jest.fn().mockResolvedValue({ count: 270 });
 
 jest.mock('@/auth', () => ({ auth: () => mockAuth() }));
 jest.mock('next/navigation', () => ({ redirect: (...args: unknown[]) => mockRedirect(...args) }));
@@ -26,6 +28,34 @@ const MOCK_SESSION = { user: { id: '123456789', name: 'Cole' } };
 const VALID_INPUT = {
   name: "Cole's Draft 2025",
   budgetPerTeam: 1000,
+  rosterSize: 30,
+  targetRoster: { QB: 4, RB: 9, WR: 11, TE: 3 },
+  startingLineup: [
+    'QB',
+    'RB',
+    'RB',
+    'WR',
+    'WR',
+    'TE',
+    'FLEX',
+    'FLEX',
+    'FLEX',
+    'SUPER_FLEX',
+  ] as StartingSlot[],
+  scoringSettings: {
+    passYdsPerPoint: 25,
+    passTD: 4,
+    passInt: -2,
+    rushAtt: 0,
+    rushFD: 0,
+    pprRB: 1,
+    pprWR: 1,
+    pprTE: 1,
+    recFD: 0,
+    rbFDBonus: 0,
+    wrFDBonus: 0,
+    teFDBonus: 0,
+  },
   teams: [
     { handle: 'coreschke', displayName: 'Cole', isMine: true },
     { handle: 'team2', displayName: 'Team Two', isMine: false },
@@ -44,6 +74,7 @@ beforeEach(() => {
     callback({
       draft: { create: mockTxDraftCreate, update: mockTxDraftUpdate },
       team: { create: mockTxTeamCreate },
+      player: { createMany: mockTxPlayerCreateMany },
     }),
   );
 });
@@ -78,7 +109,17 @@ describe('createDraft', () => {
   it('creates the draft inside the transaction', async () => {
     await createDraft(VALID_INPUT);
     expect(mockTxDraftCreate).toHaveBeenCalledWith({
-      data: { name: "Cole's Draft 2025", ownerId: '123456789', status: 'ACTIVE' },
+      data: {
+        name: "Cole's Draft 2025",
+        ownerId: '123456789',
+        status: 'ACTIVE',
+        teamCount: 2,
+        rosterSize: 30,
+        budget: 1000,
+        startingLineup: VALID_INPUT.startingLineup,
+        scoringSettings: VALID_INPUT.scoringSettings,
+        targetRoster: VALID_INPUT.targetRoster,
+      },
     });
   });
 
@@ -114,5 +155,20 @@ describe('createDraft', () => {
   it('redirects to /draft/[id] after creation', async () => {
     await createDraft(VALID_INPUT);
     expect(mockRedirect).toHaveBeenCalledWith('/draft/5');
+  });
+
+  it('seeds players from base ETR data into the Player table', async () => {
+    await createDraft(VALID_INPUT);
+    expect(mockTxPlayerCreateMany).toHaveBeenCalledTimes(1);
+    const { data } = mockTxPlayerCreateMany.mock.calls[0][0] as { data: unknown[] };
+    expect(data.length).toBeGreaterThan(200);
+    expect(data[0]).toMatchObject({
+      nflTeam: expect.any(String),
+      pos: expect.any(String),
+      draftId: 5,
+      budget: expect.any(Number),
+      ceiling: expect.any(Number),
+      floor: expect.any(Number),
+    });
   });
 });

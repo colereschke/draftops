@@ -1,8 +1,35 @@
+import { notFound } from 'next/navigation';
+import { auth } from '@/auth';
+import { prisma } from '@/lib/db';
+import { getDraft } from '@/lib/draft';
 import NominationHelper from '@/components/NominationHelper';
+import type { Player, Position } from '@/types';
 
 export const metadata = { title: 'Nominate — DraftOps' };
 
 export default async function NominatePage({ params }: { params: Promise<{ draftId: string }> }) {
   const draftId = parseInt((await params).draftId, 10);
-  return <NominationHelper draftId={draftId} />;
+  const session = await auth();
+  if (!session) notFound();
+  const draft = await getDraft(session.user.id, draftId);
+  if (!draft) notFound();
+
+  const dbPlayers = await prisma.player.findMany({
+    where: { draftId },
+    orderBy: { sfRank: 'asc' },
+  });
+
+  const players: Player[] = dbPlayers.map((p) => ({
+    player: p.name,
+    team: p.nflTeam,
+    pos: p.pos as Position,
+    age: p.age,
+    sfRank: p.sfRank,
+    budget: p.budget,
+    ceiling: p.ceiling,
+    floor: p.floor,
+    notes: p.notes,
+  }));
+
+  return <NominationHelper draftId={draftId} players={players} />;
 }

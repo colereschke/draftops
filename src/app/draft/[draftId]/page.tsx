@@ -1,7 +1,7 @@
 import { notFound } from 'next/navigation';
 import { prisma } from '@/lib/db';
 import AuctionSheet from '@/components/AuctionSheet/AuctionSheet';
-import type { ClaimedBid, LeagueTeam } from '@/types';
+import type { ClaimedBid, LeagueTeam, Player, Position } from '@/types';
 import { auth } from '@/auth';
 import { getDraft } from '@/lib/draft';
 
@@ -12,7 +12,7 @@ export default async function DraftHomePage({ params }: { params: Promise<{ draf
   const draft = await getDraft(session.user.id, draftId);
   if (!draft) notFound();
 
-  const [rawBids, teams, nominatedEntries] = await Promise.all([
+  const [rawBids, teams, nominatedEntries, dbPlayers] = await Promise.all([
     prisma.auctionResult.findMany({
       where: { draftId },
       select: {
@@ -33,6 +33,7 @@ export default async function DraftHomePage({ params }: { params: Promise<{ draf
       where: { draftId },
       select: { playerName: true },
     }),
+    prisma.player.findMany({ where: { draftId }, orderBy: { sfRank: 'asc' } }),
   ]);
 
   const claimedBids: ClaimedBid[] = rawBids.map((r) => ({
@@ -44,8 +45,21 @@ export default async function DraftHomePage({ params }: { params: Promise<{ draf
     teamHandle: r.team.handle,
   }));
 
+  const players: Player[] = dbPlayers.map((p) => ({
+    player: p.name,
+    team: p.nflTeam,
+    pos: p.pos as Position,
+    age: p.age,
+    sfRank: p.sfRank,
+    budget: p.budget,
+    ceiling: p.ceiling,
+    floor: p.floor,
+    notes: p.notes,
+  }));
+
   return (
     <AuctionSheet
+      players={players}
       claimedBids={claimedBids}
       teams={teams as LeagueTeam[]}
       nominatedPlayers={nominatedEntries.map((e) => e.playerName)}

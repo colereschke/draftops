@@ -54,14 +54,16 @@ src/
 ├── data/
 │   └── players.ts                    # ~267 ETR dynasty players — server-only seed source (NOT imported by client components)
 ├── lib/
-│   ├── actions.ts                    # Server actions: createDraft (seeds Player table), logBid, updateBid, deleteBid
-│   ├── budget.ts                     # computeTeamStats for /budget page
-│   ├── computeTeamStats.ts           # computeTeamStats(teams, players) for /teams page (players param, no static import)
+│   ├── actions.ts                    # Server actions: createDraft (seeds Player table w/ adjusted+base values), logBid, updateBid, deleteBid
+│   ├── budget.ts                     # computeTeamStats(teams, rosterSize) for /budget page
+│   ├── computeTeamStats.ts           # computeTeamStats(teams, players, rosterSize) for /teams page
 │   ├── db.ts                         # Prisma singleton using PrismaPg adapter (pg Pool)
 │   ├── draft.ts                      # getDraft(userId, draftId) — auth-gated draft lookup
-│   ├── nominationScoring.ts          # computeNominationScores — core nomination logic
+│   ├── nominationScoring.ts          # computeNominationScores(..., targetRoster) — core nomination logic
 │   ├── posColors.ts                  # POS_COLORS map (bg, accent, badge, badgeText per position)
-│   └── teams.ts                      # LEAGUE_TEAMS, ROSTER_SIZE = 30, TARGET_ROSTER (ROSTER_SIZE used as fallback until #5b)
+│   ├── valueAdjustment.ts            # adjustPlayerValues — #5b algorithm (scoring/scarcity/concentration multipliers)
+│   ├── valueAdjustment.constants.ts  # tunable calibration constants for the value adjustment algorithm (backend-only)
+│   └── teams.ts                      # LEAGUE_TEAMS, ROSTER_SIZE, TARGET_ROSTER — form defaults only; runtime reads draft settings (#5b)
 └── types/
     └── index.ts                      # Player, Position, StartingSlot, ScoringSettings, DEFAULT_* constants,
                                       # TeamStats, AuctionResultEntry, RosterEntry, TeamWithRoster, ClaimedBid, LeagueTeam
@@ -234,6 +236,7 @@ OWNER_DISCORD_ID=      # Your Discord user ID — seeds ownerId on the default d
 - **Multi-draft schema** — `Draft` model with `ownerId` + `ownerTeamId`; all data scoped to `draftId`; expand/contract migration complete (non-nullable, composite uniques)
 - **League settings** — `Draft` stores `teamCount`, `rosterSize`, `budget`, `startingLineup Json?`, `scoringSettings Json?`, `targetRoster Json?`; form has Roster Settings, Starting Lineup builder, and Scoring sections; QB/SUPER_FLEX lineup validation (PR #20)
 - **Per-draft Player table** — `Player` model scoped to `draftId`, seeded from ETR base values at draft creation; `age Float?`; `@@unique([name, draftId])`; `prisma/seed-players.ts` backfills existing drafts (PR #20)
+- **Value adjustment algorithm (#5b Phase 1)** — at draft creation, `adjustPlayerValues` (`src/lib/valueAdjustment.ts`) tunes each player's `budget`/`ceiling`/`floor` from base ETR values via three multipliers: per-position **scoring** (TE-premium is the dominant case; TE band widened), per-position **lineup-scarcity** (FLEX/SF demand flows to the scoring-favored position), and rank-based **concentration** tilt (teamCount × lineup size). `Player` now stores `baseBudget`/`baseCeiling`/`baseFloor` (untouched) alongside the adjusted trio. Only new drafts are adjusted — existing/live drafts keep `base = adjusted`, no recompute trigger yet. Runtime now reads `draft.rosterSize`/`draft.targetRoster` instead of the `ROSTER_SIZE`/`TARGET_ROSTER` constants. Calibration lives in `src/lib/valueAdjustment.constants.ts` (backend-only, TUNABLE). Phase 2 (Mike Clay projection dual-scoring, first-down historical rates, VOR concentration) is the fast-follow.
 - `/` — Value sheet with full player list (from DB), filters, search, sort, bid logging modal, budget tracker
 - `/teams` — Team roster tracker with expandable rows, spend/remaining/buying power per team, delta vs. target per player (players from DB)
 - `/budget` — Budget pressure view sorted by buying power with auto-refresh
@@ -251,7 +254,7 @@ Source: ETR dynasty rankings CSV (~267 players). Values scaled ×5 for $1,000 bu
 
 **Longer term** (see `ROADMAP.md`):
 
-- #5b Value adjustment algorithm — tunes player budget/ceiling/floor based on league settings delta from baseline. `rosterSize` is stored on `Draft` but `computeTeamStats` still uses the `ROSTER_SIZE` constant — #5b wires those together.
+- #5b Value adjustment algorithm — **Phase 1 (position-level) done**: settings→value plumbing + scoring/scarcity/concentration multipliers + `rosterSize`/`targetRoster` rewiring. Spec: `docs/superpowers/specs/2026-07-06-value-adjustment-algorithm-design.md`. **Phase 2** (fast-follow) layers per-player Mike Clay projection dual-scoring on top, adds first-down historical rates, and swaps the concentration median pivot for value-over-replacement.
 - #5c Sleeper league import — auto-populate draft settings from a Sleeper league ID
 - #6 UI redesign (Linear/Vercel aesthetic, shadcn/ui shortlisted) — after deploy milestone
 - #7 Custom rankings upload CSV — adds upload UI on top of the Player model from #5a

@@ -63,7 +63,7 @@ src/
 │   ├── posColors.ts                  # POS_COLORS map (bg, accent, badge, badgeText per position)
 │   ├── valueAdjustment.ts            # adjustPlayerValues — #5b algorithm (scoring/scarcity/concentration multipliers)
 │   ├── valueAdjustment.constants.ts  # tunable calibration constants for the value adjustment algorithm (backend-only)
-│   └── teams.ts                      # LEAGUE_TEAMS, ROSTER_SIZE, TARGET_ROSTER — form defaults only; runtime reads draft settings (#5b)
+│   └── teams.ts                      # LEAGUE_TEAMS — seed default only (prisma/seed.ts); runtime reads per-draft settings (#5b)
 └── types/
     └── index.ts                      # Player, Position, StartingSlot, ScoringSettings, DEFAULT_* constants,
                                       # TeamStats, AuctionResultEntry, RosterEntry, TeamWithRoster, ClaimedBid, LeagueTeam
@@ -105,16 +105,14 @@ Derived values (computed at query time, not stored):
 - `spent = SUM(results.price)`
 - `remaining = budget - spent`
 - `rosterCount = COUNT(results)`
-- `buyingPower = remaining - (ROSTER_SIZE - rosterCount)` — classic auction math
+- `buyingPower = remaining - (draft.rosterSize - rosterCount)` — classic auction math
 - `delta = result.price - player.budget` — on each roster entry, how much over/under target
 
 ## Key Library Files
 
 **`src/lib/teams.ts`**
 
-- `LEAGUE_TEAMS` — 12 teams with handles + display names
-- `ROSTER_SIZE = 30`
-- `TARGET_ROSTER = { QB: 4, RB: 9, WR: 11, TE: 3 }` — used by nomination scoring
+- `LEAGUE_TEAMS` — 12 teams with handles + display names; used only by `prisma/seed.ts` to seed the default draft. Runtime roster size / position targets come from `draft.rosterSize` and `draft.targetRoster` (see `DEFAULT_TARGET_ROSTER` in `src/types`).
 
 **`src/lib/draft.ts`**
 

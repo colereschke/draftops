@@ -7,6 +7,9 @@ import {
   POSITION_STARTABILITY,
   POSITION_ELASTICITY,
   SCARCITY_BAND,
+  BASELINE_STARTERS,
+  CONCENTRATION_C,
+  CONCENTRATION_BAND,
 } from '@/lib/valueAdjustment.constants';
 
 type AdjPos = 'QB' | 'RB' | 'WR' | 'TE';
@@ -84,4 +87,11 @@ export function computeScarcityMultipliers(
   }
 
   return result;
+}
+
+export function computeConcentrationFactor(rankPercentile: number, totalStarters: number): number {
+  const k = (BASELINE_STARTERS - totalStarters) / BASELINE_STARTERS;
+  const factor = 1 + k * CONCENTRATION_C * (0.5 - rankPercentile);
+  const [lo, hi] = CONCENTRATION_BAND;
+  return clamp(factor, lo, hi);
 }

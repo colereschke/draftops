@@ -1,4 +1,8 @@
-import { computeScoringMultipliers, computeScarcityMultipliers } from '@/lib/valueAdjustment';
+import {
+  computeScoringMultipliers,
+  computeScarcityMultipliers,
+  computeConcentrationFactor,
+} from '@/lib/valueAdjustment';
 import {
   DEFAULT_SCORING_SETTINGS,
   DEFAULT_STARTING_LINEUP,
@@ -81,5 +85,32 @@ describe('computeScarcityMultipliers', () => {
   it('never exceeds the scarcity band ceiling', () => {
     const manyTE: StartingSlot[] = [...DEFAULT_STARTING_LINEUP, 'TE', 'TE', 'TE'];
     expect(computeScarcityMultipliers(manyTE, ONES).TE).toBeLessThanOrEqual(1.6);
+  });
+});
+
+describe('computeConcentrationFactor', () => {
+  it('is 1.0 at the baseline of 120 starters, at any rank', () => {
+    expect(computeConcentrationFactor(0, 120)).toBeCloseTo(1);
+    expect(computeConcentrationFactor(1, 120)).toBeCloseTo(1);
+  });
+
+  it('lifts the top and lowers the bottom in a shallower league', () => {
+    const top = computeConcentrationFactor(0, 90); // 10-team start-9
+    const bottom = computeConcentrationFactor(1, 90);
+    expect(top).toBeGreaterThan(1);
+    expect(bottom).toBeLessThan(1);
+  });
+
+  it('leaves the median (pivot) player ~unchanged', () => {
+    expect(computeConcentrationFactor(0.5, 90)).toBeCloseTo(1);
+  });
+
+  it('flattens (top down) in a deeper league', () => {
+    expect(computeConcentrationFactor(0, 150)).toBeLessThan(1);
+  });
+
+  it('clamps to the concentration band', () => {
+    expect(computeConcentrationFactor(0, 1)).toBeLessThanOrEqual(1.25);
+    expect(computeConcentrationFactor(1, 1)).toBeGreaterThanOrEqual(0.8);
   });
 });

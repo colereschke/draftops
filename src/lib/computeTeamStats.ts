@@ -1,5 +1,4 @@
 import type { Player, TeamWithRoster, RosterEntry } from '@/types';
-import { ROSTER_SIZE } from '@/lib/teams';
 
 interface TeamInput {
   id: number;
@@ -17,12 +16,16 @@ interface TeamInput {
   }>;
 }
 
-export function computeTeamStats(teams: TeamInput[], players: Player[]): TeamWithRoster[] {
+export function computeTeamStats(
+  teams: TeamInput[],
+  players: Player[],
+  rosterSize: number,
+): TeamWithRoster[] {
   return teams.map((team) => {
     const spent = team.results.reduce((sum, r) => sum + r.price, 0);
     const remaining = team.budget - spent;
     const rosterCount = team.results.length;
-    const rosterRemaining = ROSTER_SIZE - rosterCount;
+    const rosterRemaining = rosterSize - rosterCount;
     const buyingPower = remaining - rosterRemaining;
     const pkgCount = team.results.filter((r) => r.position === 'PKG').length;
 

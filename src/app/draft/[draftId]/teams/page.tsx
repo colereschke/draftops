@@ -38,7 +38,7 @@ export default async function TeamsPage({ params }: { params: Promise<{ draftId:
 
   return (
     <RosterTracker
-      teams={computeTeamStats(rawTeams, players)}
+      teams={computeTeamStats(rawTeams, players, draft.rosterSize)}
       ownerHandle={draft.ownerTeam?.handle ?? null}
     />
   );

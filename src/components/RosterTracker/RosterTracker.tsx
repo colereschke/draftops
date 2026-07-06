@@ -3,7 +3,6 @@
 import { useState, useMemo, useCallback } from 'react';
 import type { TeamWithRoster, Position } from '@/types';
 import { POS_COLORS } from '@/lib/posColors';
-import { LEAGUE_TEAMS, ROSTER_SIZE } from '@/lib/teams';
 
 type SortKey = 'buyingPower' | 'spent' | 'remaining' | 'rosterCount';
 
@@ -101,7 +100,7 @@ export default function RosterTracker({ teams, ownerHandle }: Props) {
                 color: '#8892a4',
               }}
             >
-              {team.rosterCount} / {ROSTER_SIZE}
+              {team.rosterCount} / {team.rosterCount + team.rosterRemaining}
             </td>
             <td style={{ padding: '10px 10px', textAlign: 'center' }}>
               {team.pkgCount > 0 && (
@@ -297,8 +296,8 @@ export default function RosterTracker({ teams, ownerHandle }: Props) {
             fontFamily: 'var(--font-barlow), sans-serif',
           }}
         >
-          {LEAGUE_TEAMS.length}-Team · Superflex · TE Premium · $1,000 Budget · {ROSTER_SIZE}-Man
-          Rosters
+          {teams.length}-Team · Superflex · TE Premium · $1,000 Budget ·{' '}
+          {teams[0] ? teams[0].rosterCount + teams[0].rosterRemaining : 0}-Man Rosters
         </div>
         <h1
           style={{

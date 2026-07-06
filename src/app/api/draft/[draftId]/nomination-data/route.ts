@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/auth';
 import { prisma } from '@/lib/db';
 import { getDraft } from '@/lib/draft';
-import { ROSTER_SIZE } from '@/lib/teams';
 import type { TeamStats, AuctionResultEntry } from '@/types';
 
 export async function GET(
@@ -25,7 +24,7 @@ export async function GET(
     const spent = team.results.reduce((sum: number, r) => sum + r.price, 0);
     const remaining = team.budget - spent;
     const rosterCount = team.results.length;
-    const rosterRemaining = ROSTER_SIZE - rosterCount;
+    const rosterRemaining = draft.rosterSize - rosterCount;
     const buyingPower = remaining - rosterRemaining;
     const pkgCount = team.results.filter((r) => r.position === 'PKG').length;
     return {

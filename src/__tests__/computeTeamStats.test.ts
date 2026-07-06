@@ -41,7 +41,7 @@ const makeTeam = (
 
 describe('computeTeamStats', () => {
   it('computes zero stats for a team with no results', () => {
-    const [stats] = computeTeamStats([makeTeam()], []);
+    const [stats] = computeTeamStats([makeTeam()], [], 30);
     expect(stats.spent).toBe(0);
     expect(stats.remaining).toBe(1000);
     expect(stats.rosterCount).toBe(0);
@@ -50,11 +50,18 @@ describe('computeTeamStats', () => {
     expect(stats.pkgCount).toBe(0);
   });
 
+  it('uses the draft rosterSize for buying power', () => {
+    const [stats] = computeTeamStats([makeTeam()], [], 25);
+    // 0 spent, budget 1000, rosterRemaining = 25 → buyingPower = 1000 - 25
+    expect(stats.rosterRemaining).toBe(25);
+    expect(stats.buyingPower).toBe(975);
+  });
+
   it('computes spent from the sum of result prices', () => {
     const team = makeTeam({
       results: [makeResult({ price: 150 }), makeResult({ id: 2, price: 100 })],
     });
-    const [stats] = computeTeamStats([team], []);
+    const [stats] = computeTeamStats([team], [], 30);
     expect(stats.spent).toBe(250);
     expect(stats.remaining).toBe(750);
   });
@@ -63,14 +70,14 @@ describe('computeTeamStats', () => {
     const team = makeTeam({
       results: [makeResult(), makeResult({ id: 2 }), makeResult({ id: 3 })],
     });
-    const [stats] = computeTeamStats([team], []);
+    const [stats] = computeTeamStats([team], [], 30);
     expect(stats.rosterCount).toBe(3);
     expect(stats.rosterRemaining).toBe(27);
   });
 
   it('computes buyingPower as remaining minus rosterRemaining', () => {
     const team = makeTeam({ results: [makeResult({ price: 100 })] });
-    const [stats] = computeTeamStats([team], []);
+    const [stats] = computeTeamStats([team], [], 30);
     // remaining=900, rosterRemaining=29, buyingPower=871
     expect(stats.buyingPower).toBe(871);
   });
@@ -83,13 +90,13 @@ describe('computeTeamStats', () => {
         makeResult({ id: 3, position: 'PKG', price: 72 }),
       ],
     });
-    const [stats] = computeTeamStats([team], []);
+    const [stats] = computeTeamStats([team], [], 30);
     expect(stats.pkgCount).toBe(2);
   });
 
   it('maps results to RosterEntry shape and injects teamHandle', () => {
     const team = makeTeam({ handle: 'coreschke', results: [makeResult()] });
-    const [stats] = computeTeamStats([team], []);
+    const [stats] = computeTeamStats([team], [], 30);
     expect(stats.results[0]).toMatchObject({
       id: 1,
       player: 'Patrick Mahomes',
@@ -107,7 +114,7 @@ describe('computeTeamStats', () => {
       makeTeam({ id: 1, handle: 'a', results: [makeResult({ price: 300, teamId: 1 })] }),
       makeTeam({ id: 2, handle: 'b', results: [] }),
     ];
-    const stats = computeTeamStats(teams, []);
+    const stats = computeTeamStats(teams, [], 30);
     expect(stats[0].spent).toBe(300);
     expect(stats[1].spent).toBe(0);
   });
@@ -127,13 +134,13 @@ describe('computeTeamStats', () => {
       },
     ];
     const team = makeTeam({ results: [makeResult({ price: 200 })] });
-    const [stats] = computeTeamStats([team], mockPlayers);
+    const [stats] = computeTeamStats([team], mockPlayers, 30);
     expect(stats.results[0].delta).toBe(50); // 200 paid - 150 target
   });
 
   it('sets delta to null when player is not in the players list', () => {
     const team = makeTeam({ results: [makeResult({ player: 'Unknown Player' })] });
-    const [stats] = computeTeamStats([team], []);
+    const [stats] = computeTeamStats([team], [], 30);
     expect(stats.results[0].delta).toBeNull();
   });
 });

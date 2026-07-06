@@ -1,4 +1,4 @@
-import { render, screen, waitFor, act } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import NavLinks from '@/components/NavBar/NavLinks';
 
@@ -77,8 +77,8 @@ describe('NavLinks — with draftId', () => {
     await waitFor(() => {
       const active = screen.getByText('Team Rosters').closest('a');
       const inactive = screen.getByText('Value Sheet').closest('a');
-      expect(active).toHaveStyle({ color: '#e8eaf0' });
-      expect(inactive).toHaveStyle({ color: '#4a5168' });
+      expect(active).toHaveClass('text-foreground');
+      expect(inactive).toHaveClass('text-muted-foreground');
     });
   });
 
@@ -100,9 +100,12 @@ describe('NavLinks — with draftId', () => {
     });
     render(<NavLinks />);
     await waitFor(() => screen.getByText(/Cole's Draft 2025/));
-    await act(async () => {
-      await user.click(screen.getByRole('button'));
-    });
+    const trigger = screen.getByRole('button');
+    await user.click(trigger);
+
+    // MenuTrigger opens on mousedown and commits the state change on the next
+    // animation frame, so the popup content isn't available synchronously after click.
+    await waitFor(() => expect(trigger).toHaveAttribute('aria-expanded', 'true'));
     expect(screen.getByText('Other Draft')).toBeInTheDocument();
     expect(screen.getByText('All Drafts')).toBeInTheDocument();
     // Current draft should NOT appear in the dropdown

@@ -32,6 +32,22 @@ export default function NavBar({ session }: { session: Session | null }) {
       </span>
       <div style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
         <NavLinks />
+        <a
+          href="https://github.com/colereschke/draftops/issues/new?template=feedback.yml"
+          target="_blank"
+          rel="noopener noreferrer"
+          style={{
+            fontSize: 13,
+            fontWeight: 700,
+            letterSpacing: 1,
+            textTransform: 'uppercase',
+            fontFamily: 'var(--font-barlow), sans-serif',
+            textDecoration: 'none',
+            color: '#4a5168',
+          }}
+        >
+          Feedback
+        </a>
         {session && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             <span

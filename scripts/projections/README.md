@@ -37,6 +37,20 @@ data/generated/projection_match_report.csv
 data/generated/unmatched_players.csv
 ```
 
+## Match ETR Values to Sleeper
+
+After generating/refreshing Sleeper player data, match the original ETR dynasty values to Sleeper
+IDs so rankings values can be joined to projection values:
+
+```bash
+.venv/bin/python -m draftops_projections.match_etr_values \
+  --etr-csv existing_project_docs/auction-tool/src/Dynasty_Rankings.csv \
+  --sleeper-json data/raw/sleeper_players.json \
+  --output-csv data/generated/etr_sleeper_matches.csv
+```
+
+`data/generated/etr_sleeper_matches.csv` is generated output and should not be edited manually.
+
 ## Checks
 
 ```bash

@@ -86,21 +86,33 @@ model NominatedPlayer {
 }
 
 model Player {
-  id      Int    @id @default(autoincrement())
-  name    String
-  nflTeam String
-  pos     String
-  age     Float?
-  sfRank  Int
-  budget  Int
-  ceiling Int
-  floor   Int
-  baseBudget  Int
-  baseCeiling Int
-  baseFloor   Int
-  notes   String @default("")
-  draftId Int
-  draft   Draft  @relation(fields: [draftId], references: [id])
+  id                     Int      @id @default(autoincrement())
+  name                   String
+  nflTeam                String
+  pos                    String
+  age                    Float?
+  sfRank                 Int
+  budget                 Int
+  ceiling                Int
+  floor                  Int
+  baseBudget             Int
+  baseCeiling            Int
+  baseFloor              Int
+  sleeperId              String?
+  projectedPoints        Float?
+  replacementPoints      Float?
+  vor                    Float?
+  projectionAuctionValue Int?
+  fallbackAuctionValue   Int
+  activeAuctionValue     Int
+  valueSource            String   @default("fallback")
+  projectionSource       String?
+  projectionDate         DateTime?
+  projectionSeason       Int?
+  notes                  String   @default("")
+  draftId                Int
+  draft                  Draft    @relation(fields: [draftId], references: [id])
 
   @@unique([name, draftId])
+  @@index([sleeperId])
 }

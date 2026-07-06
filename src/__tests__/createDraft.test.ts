@@ -197,4 +197,23 @@ describe('createDraft', () => {
     const te = payload.find((r) => r.pos === 'TE')!;
     expect(te.budget).toBeGreaterThan(te.baseBudget);
   });
+
+  it('initializes fallback value metadata for seeded players', async () => {
+    await createDraft(VALID_INPUT);
+
+    const payload = mockTxPlayerCreateMany.mock.calls[0][0].data as Array<{
+      budget: number;
+      fallbackAuctionValue: number;
+      activeAuctionValue: number;
+      valueSource: string;
+      sleeperId?: string | null;
+      projectionAuctionValue?: number | null;
+    }>;
+
+    expect(payload[0].fallbackAuctionValue).toBe(payload[0].budget);
+    expect(payload[0].activeAuctionValue).toBe(payload[0].budget);
+    expect(payload[0].valueSource).toBe('fallback');
+    expect(payload[0].sleeperId ?? null).toBeNull();
+    expect(payload[0].projectionAuctionValue ?? null).toBeNull();
+  });
 });

@@ -10,6 +10,17 @@ export interface Player {
   ceiling: number;
   floor: number;
   notes: string;
+  sleeperId?: string | null;
+  projectedPoints?: number | null;
+  replacementPoints?: number | null;
+  vor?: number | null;
+  projectionAuctionValue?: number | null;
+  fallbackAuctionValue?: number | null;
+  activeAuctionValue?: number | null;
+  valueSource?: 'fallback' | 'projection' | 'blend';
+  projectionSource?: string | null;
+  projectionDate?: Date | string | null;
+  projectionSeason?: number | null;
 }
 
 export interface TeamStats {

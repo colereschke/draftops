@@ -34,6 +34,17 @@ export default async function TeamsPage({ params }: { params: Promise<{ draftId:
     ceiling: p.ceiling,
     floor: p.floor,
     notes: p.notes,
+    sleeperId: p.sleeperId,
+    projectedPoints: p.projectedPoints,
+    replacementPoints: p.replacementPoints,
+    vor: p.vor,
+    projectionAuctionValue: p.projectionAuctionValue,
+    fallbackAuctionValue: p.fallbackAuctionValue,
+    activeAuctionValue: p.activeAuctionValue,
+    valueSource: p.valueSource as Player['valueSource'],
+    projectionSource: p.projectionSource,
+    projectionDate: p.projectionDate,
+    projectionSeason: p.projectionSeason,
   }));
 
   return (

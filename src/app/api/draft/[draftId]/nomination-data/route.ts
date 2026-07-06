@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/auth';
 import { prisma } from '@/lib/db';
 import { getDraft } from '@/lib/draft';
-import type { TeamStats, AuctionResultEntry } from '@/types';
+import { DEFAULT_TARGET_ROSTER } from '@/types';
+import type { TeamStats, AuctionResultEntry, Position } from '@/types';
 
 export async function GET(
   _request: NextRequest,
@@ -72,5 +73,7 @@ export async function GET(
     watchlist: watchlistEntries.map((e) => e.playerName),
     nominated: nominatedEntries.map((e) => e.playerName),
     ownerHandle: draft.ownerTeam?.handle ?? null,
+    targetRoster:
+      (draft.targetRoster as Partial<Record<Position, number>> | null) ?? DEFAULT_TARGET_ROSTER,
   });
 }

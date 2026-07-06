@@ -14,6 +14,7 @@ interface NomData {
   watchlist: string[];
   nominated: string[];
   ownerHandle: string | null;
+  targetRoster: Partial<Record<Position, number>>;
 }
 
 export default function NominationHelper({
@@ -86,6 +87,7 @@ export default function NominationHelper({
       data.nominated,
       // null ownerHandle → no owner team excluded from rival demand scoring (correct for unclaimed draft)
       data.ownerHandle ?? '',
+      data.targetRoster,
     );
   }, [data]);
 

@@ -1,5 +1,4 @@
-import type { Player, TeamStats, AuctionResultEntry } from '@/types';
-import { TARGET_ROSTER } from '@/lib/teams';
+import type { Player, TeamStats, AuctionResultEntry, Position } from '@/types';
 
 export interface RivalContribution {
   handle: string;
@@ -20,6 +19,7 @@ export function computeNominationScores(
   watchlist: string[],
   nominated: string[],
   myHandle: string,
+  targetRoster: Partial<Record<Position, number>>,
 ): ScoredPlayer[] {
   const wonPlayerNames = new Set(auctionResults.map((r) => r.player));
   const watchlistSet = new Set(watchlist);
@@ -39,7 +39,7 @@ export function computeNominationScores(
   );
 
   const scored: ScoredPlayer[] = available.map((player) => {
-    const target = TARGET_ROSTER[player.pos];
+    const target = targetRoster[player.pos];
     if (target === undefined) {
       return { player, nominationScore: 0, rivalContributions: [] };
     }

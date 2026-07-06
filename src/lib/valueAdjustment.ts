@@ -1,4 +1,4 @@
-import type { Position, ScoringSettings, StartingSlot } from '@/types';
+import type { Player, Position, ScoringSettings, StartingSlot } from '@/types';
 import { DEFAULT_SCORING_SETTINGS, DEFAULT_STARTING_LINEUP } from '@/types';
 import {
   SCORING_COEF,
@@ -94,4 +94,66 @@ export function computeConcentrationFactor(rankPercentile: number, totalStarters
   const factor = 1 + k * CONCENTRATION_C * (0.5 - rankPercentile);
   const [lo, hi] = CONCENTRATION_BAND;
   return clamp(factor, lo, hi);
+}
+
+export interface DraftValueSettings {
+  startingLineup: StartingSlot[];
+  scoringSettings: ScoringSettings;
+  teamCount: number;
+}
+
+export interface ValuedPlayer extends Player {
+  baseBudget: number;
+  baseCeiling: number;
+  baseFloor: number;
+}
+
+function isAdjustable(pos: Position): pos is AdjPos {
+  return pos === 'QB' || pos === 'RB' || pos === 'WR' || pos === 'TE';
+}
+
+export function adjustPlayerValues(
+  basePlayers: Player[],
+  settings: DraftValueSettings,
+): ValuedPlayer[] {
+  const lineup = settings.startingLineup ?? [...DEFAULT_STARTING_LINEUP];
+  const scoring = settings.scoringSettings ?? { ...DEFAULT_SCORING_SETTINGS };
+
+  const scoringMults = computeScoringMultipliers(scoring);
+  const scarcityMults = computeScarcityMultipliers(lineup, scoringMults);
+  const totalStarters = settings.teamCount * lineup.length;
+
+  // Rank percentile is computed over adjustable players only, ordered by sfRank.
+  const adjustable = basePlayers
+    .filter((p) => isAdjustable(p.pos))
+    .slice()
+    .sort((a, b) => a.sfRank - b.sfRank);
+  const rankIndex = new Map<string, number>();
+  adjustable.forEach((p, i) => rankIndex.set(p.player, i));
+  const n = adjustable.length;
+
+  return basePlayers.map((p) => {
+    if (!isAdjustable(p.pos)) {
+      // PICK/PKG pass through verbatim — no re-derivation.
+      return { ...p, baseBudget: p.budget, baseCeiling: p.ceiling, baseFloor: p.floor };
+    }
+    const idx = rankIndex.get(p.player) ?? 0;
+    const percentile = n > 1 ? idx / (n - 1) : 0;
+    const conc = computeConcentrationFactor(percentile, totalStarters);
+    const mult = scarcityMults[p.pos] * scoringMults[p.pos] * conc;
+
+    const budget = Math.max(1, Math.round(p.budget * mult));
+    const ceiling = Math.round(budget * 1.15);
+    const floor = Math.max(5, Math.round(budget * 0.87));
+
+    return {
+      ...p,
+      budget,
+      ceiling,
+      floor,
+      baseBudget: p.budget,
+      baseCeiling: p.ceiling,
+      baseFloor: p.floor,
+    };
+  });
 }

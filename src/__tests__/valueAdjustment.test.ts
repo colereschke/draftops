@@ -2,7 +2,10 @@ import {
   computeScoringMultipliers,
   computeScarcityMultipliers,
   computeConcentrationFactor,
+  adjustPlayerValues,
+  type DraftValueSettings,
 } from '@/lib/valueAdjustment';
+import type { Player } from '@/types';
 import {
   DEFAULT_SCORING_SETTINGS,
   DEFAULT_STARTING_LINEUP,
@@ -112,5 +115,95 @@ describe('computeConcentrationFactor', () => {
   it('clamps to the concentration band', () => {
     expect(computeConcentrationFactor(0, 1)).toBeLessThanOrEqual(1.25);
     expect(computeConcentrationFactor(1, 1)).toBeGreaterThanOrEqual(0.8);
+  });
+});
+
+const P = (over: Partial<Player>): Player => ({
+  player: 'X',
+  team: 'FA',
+  pos: 'WR',
+  age: 25,
+  sfRank: 50,
+  budget: 100,
+  ceiling: 115,
+  floor: 87,
+  notes: '',
+  ...over,
+});
+
+// Mirror the base-data derivation (src/data/players.ts) so fixtures stay self-consistent
+// with the re-derivation the algorithm performs — otherwise float rounding breaks identity.
+const ceil = (b: number): number => Math.round(b * 1.15);
+const flr = (b: number): number => Math.max(5, Math.round(b * 0.87));
+const A = (player: string, pos: Player['pos'], sfRank: number, budget: number): Player =>
+  P({ player, pos, sfRank, budget, ceiling: ceil(budget), floor: flr(budget) });
+
+const DEFAULT_SETTINGS: DraftValueSettings = {
+  startingLineup: [...DEFAULT_STARTING_LINEUP],
+  scoringSettings: { ...DEFAULT_SCORING_SETTINGS },
+  teamCount: 12,
+};
+
+const POOL: Player[] = [
+  A('QB1', 'QB', 1, 50),
+  A('RB1', 'RB', 8, 40),
+  A('WR1', 'WR', 3, 45),
+  A('TE1', 'TE', 20, 30),
+  A('TE2', 'TE', 120, 8),
+  // PKG stores non-formula values on purpose — it must pass through verbatim.
+  P({ player: 'Kicker Pkg', pos: 'PKG', sfRank: 999, budget: 109, ceiling: 131, floor: 75 }),
+];
+
+describe('adjustPlayerValues', () => {
+  it('is the identity under default settings (adjusted == base)', () => {
+    const out = adjustPlayerValues(POOL, DEFAULT_SETTINGS);
+    for (let i = 0; i < POOL.length; i++) {
+      expect(out[i].budget).toBe(POOL[i].budget);
+      expect(out[i].ceiling).toBe(POOL[i].ceiling);
+      expect(out[i].floor).toBe(POOL[i].floor);
+    }
+  });
+
+  it('always records base values verbatim', () => {
+    const out = adjustPlayerValues(POOL, {
+      ...DEFAULT_SETTINGS,
+      scoringSettings: { ...DEFAULT_SCORING_SETTINGS, pprTE: 2 },
+    });
+    const te1 = out.find((p) => p.player === 'TE1')!;
+    expect(te1.baseBudget).toBe(30);
+    expect(te1.baseCeiling).toBe(ceil(30));
+    expect(te1.baseFloor).toBe(flr(30));
+  });
+
+  it('raises TE budgets under a 2x TE premium and re-derives ceiling/floor', () => {
+    const out = adjustPlayerValues(POOL, {
+      ...DEFAULT_SETTINGS,
+      scoringSettings: { ...DEFAULT_SCORING_SETTINGS, pprTE: 2 },
+    });
+    const te1 = out.find((p) => p.player === 'TE1')!;
+    expect(te1.budget).toBeGreaterThan(30);
+    expect(te1.ceiling).toBe(Math.round(te1.budget * 1.15));
+    expect(te1.floor).toBe(Math.max(5, Math.round(te1.budget * 0.87)));
+  });
+
+  it('leaves PKG/PICK verbatim even under aggressive settings', () => {
+    const out = adjustPlayerValues(POOL, {
+      startingLineup: [...DEFAULT_STARTING_LINEUP, 'TE'],
+      scoringSettings: { ...DEFAULT_SCORING_SETTINGS, pprTE: 2 },
+      teamCount: 10,
+    });
+    const pkg = out.find((p) => p.player === 'Kicker Pkg')!;
+    expect(pkg.budget).toBe(109);
+    expect(pkg.ceiling).toBe(131);
+    expect(pkg.floor).toBe(75);
+  });
+
+  it('enforces budget ≥ 1 and floor ≥ 5', () => {
+    const out = adjustPlayerValues([P({ player: 'Deep', pos: 'WR', sfRank: 300, budget: 1 })], {
+      ...DEFAULT_SETTINGS,
+      teamCount: 20,
+    });
+    expect(out[0].budget).toBeGreaterThanOrEqual(1);
+    expect(out[0].floor).toBeGreaterThanOrEqual(5);
   });
 });

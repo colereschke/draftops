@@ -126,7 +126,7 @@ export default function BidModal({
 
         {/* Actions */}
         <div className="gap-sm flex items-center justify-end">
-          <div className="mr-auto flex items-center gap-2">
+          <div className="mr-auto flex items-center gap-sm">
             {isEdit && onDelete && (
               <Button variant="destructive" size="sm" onClick={onDelete}>
                 Remove

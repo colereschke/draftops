@@ -95,6 +95,9 @@ model Player {
   budget  Int
   ceiling Int
   floor   Int
+  baseBudget  Int
+  baseCeiling Int
+  baseFloor   Int
   notes   String @default("")
   draftId Int
   draft   Draft  @relation(fields: [draftId], references: [id])

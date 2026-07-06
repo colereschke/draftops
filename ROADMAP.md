@@ -4,6 +4,19 @@ Goal: make DraftOps shareable with the ETR dynasty Discord — let anyone sign i
 
 **Product model: single-operator.** A draft is owned and run by one person. That person observes their real auction, logs winning bids for all teams, and uses the tool's intelligence (values, budget pressure, nomination scoring) to optimize their own picks. DraftOps does **not** run the live auction or coordinate multiple managers — there is one `ownerId` per draft and no multi-user membership. One consequence: each draft must record **which of its teams belongs to the owner**, so nomination scoring knows whose perspective to optimize (this replaces the hardcoded `'coreschke'` handle and becomes a draft-creation setting — see #4).
 
+### Data Layer Principle
+
+DraftOps should keep identity, projections, rankings, league settings, and draft state separate.
+
+- Sleeper answers: who is this player?
+- Rankings answer: what does the market think this player is worth?
+- Projections answer: what is this player expected to produce?
+- League settings answer: how much does that production matter here?
+- Draft state answers: how valuable is this player right now, given the auction so far?
+
+Avoid collapsing these into one static value too early. The app may display one active value to
+the user, but internally it should preserve the components that produced that value.
+
 ## How to read this roadmap
 
 Each item lists:
@@ -123,7 +136,7 @@ Vercel + Neon PostgreSQL. At this point the app is shareable with ETR Discord fo
 
 ## 5a. Configurable League Settings — Model + Player Table
 
-**Blocks:** #5b (wiring); #5c (Sleeper import); #8 (custom rankings)
+**Blocks:** #5b (wiring); #5c (Sleeper import); #5d (projection ETL); #7 (custom rankings); #8 (dynamic pick valuation)
 **Blocked by:** #3 (settings live on a `Draft`)
 **Parallelizable with:** #4
 
@@ -144,9 +157,10 @@ Expands significantly from the original roadmap item — collapses #7 (custom ra
 
 ---
 
-## 5b. Configurable League Settings — Value Adjustment Algorithm
+## 5b. Configurable League Settings — Fallback Value Adjustment Algorithm
 
-**Blocks:** #8 (custom rankings benefits from algorithm being in place)
+**Blocks:** #5e (projection-aware values share league-settings utilities); #7 and #8 benefit from
+the fallback model being in place
 **Blocked by:** #5a
 **Parallelizable with:** nothing (depends directly on 5a's Player table)
 
@@ -163,6 +177,12 @@ Replace all hardcoded league assumptions with values pulled from the draft's set
 - `ROSTER_SIZE` → `draft.rosterSize`
 - `TARGET_ROSTER` → `draft.targetRoster`
 - Kicker/PKG rules → remove Cole-specific team-to-manager mappings; make PKG association configurable or document as a manual entry
+
+This milestone intentionally builds the non-projection fallback valuation model. DraftOps must
+remain useful even when no projection source is available. Projection-aware valuation will be
+handled separately in #5e, using the normalized projection data from #5d. The two systems should
+share common league-settings utilities where possible, but they should remain separable so users
+can operate DraftOps with rankings-only, projections-only, or blended values later.
 
 ---
 
@@ -196,11 +216,147 @@ Allow users to populate the draft creation form automatically by entering a Slee
 
 ---
 
+## 5d. Projection ETL + Sleeper Identity Mapping
+
+**Blocks:** #5e Projection-Aware VOR Engine; improves #7 Custom Rankings Upload; improves #9
+Sleeper Roster Sync
+**Blocked by:** #5a (per-draft Player model exists there)
+**Parallelizable with:** #6 UI Redesign
+
+Build a reusable projection ETL pipeline that normalizes external player projections and links
+them to Sleeper player IDs. The first source is Mike Clay's 2026 NFL Projection Guide PDF, matched
+against Sleeper `/players/nfl` JSON. The point is not just to import one PDF; it is to establish a
+projection data layer that future sources can plug into.
+
+**Status:** initial ETL complete. `master_projections.csv` is generated and ready to use. Next step
+is deciding whether projection data is imported into the `Player` model directly, stored in a
+separate projection table, or used as a generated seed file for the upcoming VOR engine.
+
+**Initial inputs:**
+
+- Mike Clay 2026 NFL Projection Guide PDF
+- Sleeper `/players/nfl` JSON
+
+**Generated outputs:**
+
+```text
+data/generated/master_projections.csv
+data/generated/projection_match_report.csv
+data/generated/unmatched_players.csv
+```
+
+**Deliverables:**
+
+- Local script or command to generate projection CSVs reproducibly
+- Raw input folder for source files
+- Generated output folder for normalized CSVs
+- Sleeper player normalization
+- Mike Clay projection extraction
+- Projection-to-Sleeper matching
+- Match confidence reporting
+- Unmatched player reporting
+- Validation summary with counts by position, match rate, duplicate checks, and parsing warnings
+
+**Design rules:**
+
+- Sleeper is the canonical player identity source.
+- Do not manually edit generated projection CSVs.
+- If a match is uncertain, surface it in `unmatched_players.csv` instead of silently forcing it.
+- Keep the parser source-specific, but keep the normalized output schema source-agnostic.
+- Include `projection_source`, `projection_date`, and `season` in generated data.
+
+### Open Decision: Projection Storage Model
+
+Before wiring projections into app valuation, decide whether to:
+
+1. Store projection fields directly on the per-draft `Player` model
+2. Store canonical projections separately and join them to per-draft player values
+3. Keep projections as generated CSV input for now and only persist calculated values
+
+Recommended direction: use separate projection data long-term, but allow a CSV-driven
+implementation short-term. Avoid bloating the per-draft `Player` model with raw projection stats
+unless that is clearly the fastest safe bridge.
+
+---
+
+## 5e. Projection-Aware VOR Engine
+
+**Blocks:** #8 Dynamic Pick Valuation; improves #5b Fallback Value Adjustment Algorithm; improves
+#7 Custom Rankings Upload
+**Blocked by:** #5b and #5d
+**Parallelizable with:** #6 UI Redesign, depending on implementation surface
+
+Use normalized projections to calculate league-specific fantasy points, replacement levels, VOR,
+and projection-based auction values.
+
+DraftOps should remain fully usable without projections. When projections exist, they provide a
+sharper valuation layer that coexists with the fallback value adjustment model.
+
+**Inputs:**
+
+- Draft league settings
+- Team count
+- Roster size
+- Starting lineup
+- Flex and Superflex slots
+- Scoring settings
+- Budget
+- Normalized player projections
+- Sleeper player IDs
+
+**Outputs:**
+
+- League-specific projected fantasy points
+- Replacement level by position
+- Value over replacement
+- Projection-based auction value
+- Optional tier breaks
+- Optional position scarcity indicators
+
+**Initial algorithm:**
+
+1. Calculate fantasy points from raw projected stats using the draft's scoring settings.
+2. Determine replacement level by position using league size, starting lineup, flex slots,
+   Superflex slots, and target roster construction.
+3. Calculate VOR:
+
+```text
+vor = projected_points - replacement_points_for_position
+```
+
+4. Clamp negative VOR to zero for auction value allocation.
+5. Allocate auction dollars across positive VOR players after reserving minimum-bid roster dollars.
+6. Store projection-aware values separately from fallback values.
+
+**Recommended fields:**
+
+```text
+projected_points
+replacement_points
+vor
+projection_auction_value
+fallback_auction_value
+active_auction_value
+value_source
+```
+
+**Design principle:**
+
+- The fallback model answers: "What should this player be worth based on baseline market/ranking
+  value and league settings?"
+- The projection-aware model answers: "What should this player be worth based on projected
+  production above replacement in this exact league?"
+
+Do not fully replace the fallback model immediately. First expose projection values as a parallel
+value source, then decide whether to blend, override, or let users choose.
+
+---
+
 ## 6. UI Redesign
 
 **Blocks:** nothing (visual layer only)
 **Blocked by:** Deploy milestone (want real user feedback before committing to a direction)
-**Parallelizable with:** #7
+**Parallelizable with:** #5d, #5e, #7 where it does not touch valuation logic
 
 Target aesthetic: Linear / Vercel — modern, dark, intentional. The current design has solid bones (design token system in `globals.css`, position accent colors, JetBrains Mono for numbers) but needs a more polished, progressive feel overall.
 
@@ -219,22 +375,40 @@ Key areas:
 
 **Blocks:** nothing (final major feature)
 **Blocked by:** #5a (`Player` model already ships there — this adds upload on top)
-**Parallelizable with:** #5b (different surfaces — upload pipeline vs. algorithm)
+**Parallelizable with:** #5b and #5e where the upload pipeline does not touch valuation internals
 
 The `Player` model and per-draft player table land in #5a. This item adds the ability for users to replace the default ETR seed with their own rankings CSV.
+
+Custom rankings are a market/value input, not the same thing as projections. After #5d and #5e,
+DraftOps may have both ranking-based values and projection-based values available for the same
+player. The upload flow should preserve that distinction instead of overwriting projection data.
 
 - CSV upload UI targeting ETR dynasty export format
 - Parsing + scaling logic (currently `× 5` for $1,000 budget, ceiling/floor derivation)
 - Validate uploaded CSV has expected columns; show parse errors clearly
 - On upload, replace existing `Player` rows for the draft (re-run adjustment algorithm from #5b after import)
 - Fallback: default ETR pool remains for new drafts; label it clearly as dynasty-Superflex-specific
+- Preserve `sleeperId` where possible when importing custom rankings
+- Re-run fallback value adjustment from #5b after upload
+- Optionally re-run projection-aware VOR from #5e if the uploaded file also includes projection stats
+- Track value source metadata so the UI can distinguish ETR baseline, custom rankings, Mike Clay
+  projections, and future projection sources
+
+**Suggested future fields:**
+
+```text
+valueSource
+rankingSource
+projectionSource
+lastValueUpdateAt
+```
 
 ---
 
 ## 8. Dynamic Pick Valuation
 
 **Blocks:** nothing downstream yet
-**Blocked by:** #7 (needs per-player values in DB to compute market-relative spend), #5b (needs roster targets and budget from draft settings)
+**Blocked by:** #7, #5b, and optionally enhanced by #5e projection-aware VOR
 **Parallelizable with:** #6 (UI-only)
 
 Pick package values in the current tool are static (hardcoded `PKG_VALUES` in `players.ts`). This item makes them dynamic — each team's 2027 pick package value adjusts based on observable signals about that team's draft, replacing or overriding the static baseline at query time.
@@ -275,11 +449,17 @@ The goal is to replace the static pick package valuations with a per-team score 
 The real goal here is classifying whether a team is **competing in Year 1** or **tanking/rebuilding**. Two sub-signals combine for this:
 
 - **Average roster age** (from 8a): young average age → rebuilding; older → competing now. Age is already in the player data — no external source needed.
-- **Starting lineup value** (proxy: auction values): take the top-N players by `budget` from a team's roster (N ≈ 8–9 starting slots). High aggregate value → likely competing; low → rebuilding. Use `player.budget` from the DB (#7) as the proxy — it's projection-derived from FantasyCalc.
+- **Starting lineup value** (proxy: auction values): take the top-N players by `budget` from a team's roster (N ≈ 8–9 starting slots). High aggregate value → likely competing; low → rebuilding. Use `player.budget` from the DB (#7) as the initial market-derived proxy.
+- Once #5e exists, starting lineup value should prefer projection-aware VOR or projection auction
+  value over static ranking value when available. This gives the posture classifier a better signal
+  for redraft competitiveness while still allowing dynasty market values to inform longer-term pick
+  value.
 - Pick-heavy ratio (`numberOfPickPackagesWon / totalAssetsWon`) feeds in as a third sub-signal: pick-heavy + young + weak lineup → strong rebuilding signal; pick-heavy + strong lineup → ambiguous (aggressive competing team that still holds future assets).
 - Combine all three into a simple posture score. Clear cases (young + pick-heavy + low lineup value, or old + player-heavy + high lineup value) get meaningful adjustment. Ambiguous middle cases get minimal or no adjustment.
 - Only activate this signal once a team has ≥ 5–6 players (too few → noisy).
-- Sleeper projections are not available (confirmed) — a projections source for further refinement is TBD (see #9). The age + auction-value proxy is V1 and likely good enough for dynasty use.
+- Projection-aware team strength and dynasty market strength are not identical. A team can be strong
+  in projected 2026 points but weak in dynasty value, or vice versa. The model should keep these
+  signals separate before combining them into a pick-value adjustment.
 
 **Combining signals:**
 A composite adjustment multiplier is applied to the static PKG baseline:
@@ -302,17 +482,25 @@ Weights and caps need tuning; start conservative (±15% max total adjustment) so
 ## 9. Sleeper Roster Sync
 
 **Blocks:** nothing downstream yet
-**Blocked by:** #7 (Player model in DB needs a `sleeperId` field); #3 (league ID needs to live on a Draft)
+**Blocked by:** #5d or #7 for `sleeperId` availability; #3 because league ID needs to live on a Draft
 **Parallelizable with:** #6, #8a
 
 The Sleeper API ([docs](https://docs.sleeper.com/)) is a public, unauthenticated REST API. Investigation confirmed:
 
-- **Projections are not available** — Sleeper only exposes live in-game points, not preseason or dynasty projections. Signal 2 in #8b remains age + auction-value proxy for now; a projections source is deferred/TBD.
+- **Projections are not available from Sleeper** — Sleeper only exposes live in-game points, not
+  preseason or dynasty projections. Projection data comes from #5d's external-source ETL instead.
 - **Roster assignments are available** — `GET https://api.sleeper.app/v1/league/{league_id}/rosters` returns each team's current roster as a list of Sleeper player IDs. This is the actionable use case.
+
+The projection ETL in #5d creates the first reusable Sleeper ID mapping layer. #9 should reuse that
+matching logic rather than creating a separate player-resolution system. Any manual aliases or
+fuzzy-match fixes discovered during projection import should be shared with roster sync and custom
+ranking import.
 
 ### 9a. Sleeper Player IDs on the Player Model (prerequisite)
 
-A stable cross-reference between DraftOps players and Sleeper requires a `sleeperId` field on the `Player` model. Add this as part of #7 (when `Player` moves to the DB) — optional, not required.
+A stable cross-reference between DraftOps players and Sleeper requires a `sleeperId` field or
+equivalent mapping table. This can come from #5d's projection matching layer or #7's rankings import
+flow.
 
 `GET https://api.sleeper.app/v1/players/nfl` returns all NFL players with their Sleeper IDs, names, positions, and teams. On player pool import (#7), DraftOps can offer to resolve names → Sleeper IDs via this endpoint (fuzzy match on name + position + team), with the user confirming ambiguous cases. Player name stays the display key; `sleeperId` becomes the cross-reference key for sync.
 
@@ -338,8 +526,10 @@ The primary use case: a user steps away from DraftOps during the auction and sev
 **Sleeper native auction drafts:**
 Sleeper has a built-in auction draft tool. If a league uses it, rosters update in real-time as players are won — making the sync flow effectively live rather than a catch-up. This would be a significantly better experience and is worth exploring once Sleeper's native auction product matures. The same sync architecture applies; the difference is just how frequently the user triggers it (or whether it can be polled automatically during the draft).
 
-**Projections (deferred):**
-For #8b Signal 2 refinement, a projections source is still TBD. Sleeper is ruled out. Options to explore later: FantasyCalc API (if available), ESPN projections, or a manual projections CSV upload alongside the rankings upload in #7.
+**Projection reuse:**
+Sleeper remains ruled out as a projections source, but #5d supplies external projections linked to
+Sleeper IDs. #9 should consume the shared identity layer and should not duplicate projection import
+or player matching logic.
 
 ---
 
@@ -356,14 +546,20 @@ For #8b Signal 2 refinement, a projections source is still TBD. Sleeper is ruled
         ↓
 [DEPLOY]  (needs #1–4; #5a optional before deploy)
         ↓
-#5b Value adjustment algorithm ──┐  (parallel)
-#5c Sleeper league import ────────┤  (parallel — touches only creation form)
-#6  UI redesign ──────────────────┘  (visual only, no logic overlap)
+#5b Fallback value adjustment algorithm
         ↓
-#7  Custom rankings upload  (replaces ETR seed; re-runs #5b algorithm after import)
-#9  Sleeper roster sync  (catch-up flow; needs #7 for sleeperId on Player model)
+#5c Sleeper league import
+        ↓
+#5d Projection ETL + Sleeper identity mapping
+        ↓
+#5e Projection-aware VOR engine
+        ↓
+#7  Custom rankings upload
+#9  Sleeper roster sync
         ↓
 #8a Teams page: aggregate spend delta + avg age
         ↓
-#8b Dynamic pick valuation  (needs #8a signals + #5b settings; enhanced by #9)
+#8b Dynamic pick valuation
+
+#6 UI redesign runs in parallel where it does not touch valuation logic.
 ```

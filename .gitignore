@@ -12,6 +12,7 @@
 
 # testing
 /coverage
+.pytest_cache/
 
 # next.js
 /.next/
@@ -41,11 +42,22 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
+# Python
+__pycache__/
+*.egg-info/
+.mypy_cache/
+.ruff_cache/
+.venv/
+
 # Database
 prisma/dev.db
 prisma/dev.db-journal
 *.db
 *.db-journal
+
+# Projection ETL local data
+data/raw/
+data/generated/
 
 # Env overrides
 .env.local

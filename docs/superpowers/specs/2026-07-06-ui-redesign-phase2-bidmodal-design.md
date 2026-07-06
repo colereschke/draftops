@@ -34,7 +34,7 @@ Phasing recap:
 
 **Dialog content structure:** Use `Dialog`, `DialogContent` (with `showCloseButton={false}` — the existing Cancel button already covers this, an extra X would be redundant), and `DialogTitle` (visually hidden via `sr-only` if we don't want it duplicating the existing "Edit Bid"/"Log Bid" eyebrow label — Base UI requires an accessible title on every dialog). Skip `DialogHeader`/`DialogFooter` — their shipped styling (`bg-muted/50` footer bar, border-top) doesn't match the current flat single-surface card. Build header/body/footer sections as plain `div`s with Tailwind spacing tokens (`gap-md`, `p-lg`, etc. from Phase 1), preserving today's visual layout.
 
-**Select data binding:** Base UI's `Select` works on string values, not native `onChange`. `teamId` (a `number` in `BidModalProps`/state) binds as `value={String(teamId)}` / `onValueChange={(v) => setTeamId(Number(v))}`. `SelectItem` values are `String(t.id)`, `SelectValue` renders the resolved label.
+**Select data binding:** Corrected after inspecting `@base-ui/react`'s shipped type declarations (`node_modules/@base-ui/react/select/root/SelectRoot.d.ts`): `Select.Root` is generic over `Value` and does **not** require string coercion — `value`/`onValueChange`/`SelectItem`'s `value` all accept the same type. `teamId` (already a `number`) binds directly: `value={teamId}` / `onValueChange={(value) => setTeamId(value)}`, and `SelectItem value={t.id}` (no `String()` conversion needed anywhere).
 
 **Button variants:**
 

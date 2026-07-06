@@ -2,7 +2,17 @@
 
 import Link from 'next/link';
 import { useParams, usePathname } from 'next/navigation';
-import { useState, useEffect, useRef } from 'react';
+import { useEffect, useState } from 'react';
+import { ChevronDownIcon } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { cn } from '@/lib/utils';
 
 interface DraftInfo {
   id: number;
@@ -18,8 +28,6 @@ export default function NavLinks() {
 
   const [activeDrafts, setActiveDrafts] = useState<DraftInfo[]>([]);
   const [currentDraftName, setCurrentDraftName] = useState<string | null>(null);
-  const [dropdownOpen, setDropdownOpen] = useState(false);
-  const dropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!hasDraftId) return;
@@ -41,16 +49,6 @@ export default function NavLinks() {
     })();
   }, [draftId, hasDraftId]);
 
-  useEffect(() => {
-    function handleClickOutside(e: MouseEvent) {
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
-        setDropdownOpen(false);
-      }
-    }
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
-
   const LINKS = hasDraftId
     ? [
         { href: `/draft/${draftId}`, label: 'Value Sheet' },
@@ -63,24 +61,17 @@ export default function NavLinks() {
   const otherDrafts = activeDrafts.filter((d) => d.id !== draftId);
 
   return (
-    <nav style={{ display: 'flex', gap: 20, flexWrap: 'wrap', alignItems: 'center' }}>
+    <nav className="gap-lg flex flex-wrap items-center">
       {LINKS.map(({ href, label }) => {
         const active = pathname === href;
         return (
           <Link
             key={href}
             href={href}
-            className="nav-link"
-            style={{
-              padding: '0 4px',
-              fontSize: 13,
-              fontWeight: 700,
-              letterSpacing: 1,
-              textTransform: 'uppercase',
-              fontFamily: 'var(--font-barlow), sans-serif',
-              textDecoration: 'none',
-              color: active ? '#e8eaf0' : '#4a5168',
-            }}
+            className={cn(
+              'nav-link font-label text-label-md px-1 font-bold tracking-wide uppercase no-underline',
+              active ? 'text-foreground' : 'text-muted-foreground',
+            )}
           >
             {label}
           </Link>
@@ -88,75 +79,38 @@ export default function NavLinks() {
       })}
 
       {hasDraftId && currentDraftName && (
-        <div ref={dropdownRef} style={{ position: 'relative' }}>
-          <button
-            onClick={() => setDropdownOpen((o) => !o)}
-            style={{
-              background: '#1e2433',
-              border: '1px solid #2a2f3e',
-              borderRadius: '4px',
-              color: '#e8eaf0',
-              fontFamily: 'var(--font-barlow), sans-serif',
-              fontSize: 12,
-              fontWeight: 700,
-              letterSpacing: 1,
-              textTransform: 'uppercase',
-              padding: '2px 8px',
-              cursor: 'pointer',
-            }}
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            render={
+              <Button
+                variant="secondary"
+                size="sm"
+                className="font-label text-label-sm border-border gap-1 border font-bold tracking-wide uppercase"
+              />
+            }
           >
-            <span>{currentDraftName}</span> ▾
-          </button>
-
-          {dropdownOpen && (
-            <div
-              style={{
-                position: 'absolute',
-                top: '100%',
-                right: 0,
-                marginTop: 4,
-                background: '#1e2433',
-                border: '1px solid #2a2f3e',
-                borderRadius: '4px',
-                minWidth: 160,
-                zIndex: 100,
-              }}
-            >
-              {otherDrafts.map((d) => (
-                <Link
-                  key={d.id}
-                  href={`/draft/${d.id}`}
-                  onClick={() => setDropdownOpen(false)}
-                  style={{
-                    display: 'block',
-                    padding: '6px 12px',
-                    color: '#e8eaf0',
-                    fontFamily: 'var(--font-barlow), sans-serif',
-                    fontSize: 12,
-                    textDecoration: 'none',
-                  }}
-                >
-                  {d.name}
-                </Link>
-              ))}
-              <Link
-                href="/drafts"
-                onClick={() => setDropdownOpen(false)}
-                style={{
-                  display: 'block',
-                  padding: '6px 12px',
-                  color: '#4a5168',
-                  fontFamily: 'var(--font-barlow), sans-serif',
-                  fontSize: 12,
-                  textDecoration: 'none',
-                  borderTop: '1px solid #2a2f3e',
-                }}
+            {currentDraftName}
+            <ChevronDownIcon className="size-3.5" />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="min-w-40">
+            {otherDrafts.map((d) => (
+              <DropdownMenuItem
+                key={d.id}
+                render={<Link href={`/draft/${d.id}`} />}
+                className="font-label text-label-sm"
               >
-                All Drafts
-              </Link>
-            </div>
-          )}
-        </div>
+                {d.name}
+              </DropdownMenuItem>
+            ))}
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              render={<Link href="/drafts" />}
+              className="font-label text-label-sm text-muted-foreground"
+            >
+              All Drafts
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       )}
     </nav>
   );

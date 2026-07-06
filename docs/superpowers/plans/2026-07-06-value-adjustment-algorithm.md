@@ -789,39 +789,42 @@ await tx.player.createMany({
 
 - [ ] **Step 3: Add a failing test for base+adjusted persistence**
 
-In `src/__tests__/createDraft.test.ts`, add a test that captures the `createMany` payload under a TE-premium setting and asserts base is preserved while adjusted TE budget rises. Use the existing mocks; capture args via `mockTxPlayerCreateMany`:
+In `src/__tests__/createDraft.test.ts`, add a test that captures the `createMany` payload under a TE-premium setting and asserts (a) base values are recorded verbatim and (b) the adjusted TE budget rises. The file's existing `beforeEach` already wires `mockTransaction`, `mockTxPlayerCreateMany` (resolves `{ count }`), and the two `mockTxTeamCreate` results — **reuse it; do not re-wire the mocks inside the test.** Add this import at the top of the file:
 
 ```ts
-it('persists base values verbatim and adjusts TE budgets under a TE premium', async () => {
-  mockAuth.mockResolvedValue(MOCK_SESSION);
-  mockTxDraftCreate.mockResolvedValue({ id: 7 });
-  mockTxTeamCreate.mockResolvedValue({ id: 1 });
-  mockTransaction.mockImplementation(async (cb: (tx: unknown) => Promise<unknown>) =>
-    cb({
-      draft: { create: mockTxDraftCreate, update: mockTxDraftUpdate },
-      team: { create: mockTxTeamCreate },
-      player: { createMany: mockTxPlayerCreateMany },
-    }),
-  );
+import { players as BASE_PLAYERS } from '@/data/players';
+```
 
+Then add the test:
+
+```ts
+it('records base values verbatim and lifts TE budgets under a TE premium', async () => {
   await createDraft({
     ...VALID_INPUT,
     scoringSettings: { ...VALID_INPUT.scoringSettings, pprTE: 2 },
   });
 
   const payload = mockTxPlayerCreateMany.mock.calls[0][0].data as Array<{
+    name: string;
     pos: string;
     budget: number;
     baseBudget: number;
+    baseCeiling: number;
+    baseFloor: number;
   }>;
+
+  // Row order mirrors BASE_PLAYERS — base columns are the untouched source values.
+  expect(payload[0].baseBudget).toBe(BASE_PLAYERS[0].budget);
+  expect(payload[0].baseCeiling).toBe(BASE_PLAYERS[0].ceiling);
+  expect(payload[0].baseFloor).toBe(BASE_PLAYERS[0].floor);
+
+  // A 2x TE premium unambiguously lifts adjusted TE budgets above their base.
   const te = payload.find((r) => r.pos === 'TE')!;
   expect(te.budget).toBeGreaterThan(te.baseBudget);
-  const qb = payload.find((r) => r.pos === 'QB')!;
-  expect(qb.budget).toBe(qb.baseBudget); // QB untouched by a TE premium
 });
 ```
 
-> Note: match the exact `mockTransaction` wiring already used by the other tests in this file — reuse their `tx` mock shape rather than the sketch above if it differs.
+> **Do NOT assert `qb.budget === qb.baseBudget`.** A TE premium _does_ move QB: the SUPER_FLEX slot is allocated by `startability × scoringMult`, so a richer TE shrinks QB's share of that slot (`scarcityMult[QB] < 1`) — that coupling is the intended §2a behavior. Also `VALID_INPUT` has only 2 teams (`totalStarters = 20`), so the concentration tilt clamps top players to 1.25×. Both effects change QB's budget. The base-preservation + TE-direction assertions above are the correct, robust checks.
 
 - [ ] **Step 4: Run the test**
 
@@ -910,7 +913,7 @@ In `src/__tests__/lib/budget.test.ts`, update each `computeTeamStats(teams)` cal
 
 - [ ] **Step 7: Update display components to derive size from data**
 
-- `src/components/RosterTracker/RosterTracker.tsx`: replace `import { LEAGUE_TEAMS, ROSTER_SIZE } from '@/lib/teams';` with `import { LEAGUE_TEAMS } from '@/lib/teams';`. At line ~104 replace `{team.rosterCount} / {ROSTER_SIZE}` with `{team.rosterCount} / {team.rosterCount + team.rosterRemaining}`. In the header string (~line 300) replace `{LEAGUE_TEAMS.length}-Team` with `{teams.length}-Team` and `{ROSTER_SIZE}-Man` with `{(teams[0] ? teams[0].rosterCount + teams[0].rosterRemaining : 0)}-Man`. Leave the static `Superflex · TE Premium · $1,000 Budget` descriptor as-is (out of scope — not derivable from passed props).
+- `src/components/RosterTracker/RosterTracker.tsx`: **remove the `import { LEAGUE_TEAMS, ROSTER_SIZE } from '@/lib/teams';` line entirely** — after this task neither symbol is used, and an unused import is an ESLint _error_ here (fails pre-commit + CI). `LEAGUE_TEAMS.length` (line ~300) is the only use of `LEAGUE_TEAMS`, replaced below. At line ~104 replace `{team.rosterCount} / {ROSTER_SIZE}` with `{team.rosterCount} / {team.rosterCount + team.rosterRemaining}`. In the header string (~line 300) replace `{LEAGUE_TEAMS.length}-Team` with `{teams.length}-Team` and `{ROSTER_SIZE}-Man` with `{(teams[0] ? teams[0].rosterCount + teams[0].rosterRemaining : 0)}-Man`. Leave the static `Superflex · TE Premium · $1,000 Budget` descriptor as-is (out of scope — not derivable from passed props).
 - `src/components/BudgetPressure/BudgetPressureView.tsx`: remove the `ROSTER_SIZE` import; at line ~170 replace `{team.rosterCount} / {ROSTER_SIZE}` with `{team.rosterCount} / {team.rosterCount + team.rosterRemaining}`.
 
 - [ ] **Step 8: Run tests + typecheck**
@@ -942,20 +945,23 @@ git commit -m "feat(settings): buying-power + roster displays honor draft.roster
 
 - [ ] **Step 1: Update the failing test**
 
-In `src/__tests__/nominationScoring.test.ts`, update all `computeNominationScores(...)` calls to pass a target-roster argument last (e.g. `{ QB: 4, RB: 9, WR: 11, TE: 3 }`), and add a test proving the parameter is honored:
+In `src/__tests__/nominationScoring.test.ts`, first update **every** existing `computeNominationScores(...)` call to append a target-roster argument last: `{ QB: 4, RB: 9, WR: 11, TE: 3 }`. (Every current call ends with the `myHandle` string; add the object after it.) Then add a self-contained test — built with the file's existing `makePlayer` / `makeTeamStat` helpers — that proves the parameter is honored, with a WR positive control so it can't pass vacuously:
 
 ```ts
-it('uses the provided targetRoster (a position with 0 target scores 0)', () => {
-  const scored = computeNominationScores(
-    players,
-    teamStats,
-    auctionResults,
-    [],
-    [],
-    'me',
-    { QB: 4, RB: 9, WR: 11 }, // no TE target
-  );
-  expect(scored.every((s) => s.player.pos !== 'TE')).toBe(true);
+it('honors the provided targetRoster — a position with no target scores 0', () => {
+  const te = makePlayer({ player: 'Star TE', pos: 'TE', sfRank: 10, ceiling: 60 });
+  const wr = makePlayer({ player: 'Star WR', pos: 'WR', sfRank: 5, ceiling: 65 });
+  // A rival with buying power and unmet need — TE would score if it had a target.
+  const rival = makeTeamStat({ id: 2, handle: 'rival1', buyingPower: 500 });
+
+  const scored = computeNominationScores([te, wr], [rival], [], [], [], 'me', {
+    QB: 4,
+    RB: 9,
+    WR: 11,
+  }); // no TE key → TE target is undefined → TE scores 0 and is filtered out
+
+  expect(scored.some((s) => s.player.pos === 'WR')).toBe(true); // control: WR still scores
+  expect(scored.some((s) => s.player.pos === 'TE')).toBe(false); // TE excluded
 });
 ```
 

@@ -177,7 +177,7 @@ scarcityMult[P] = clamp( (demand[P] / baselineDemand[P]) ^ elasticity[P], SCARCI
 totalStarters   = teamCount × startingLineup.length
 BASELINE_STARTERS = 12 × 10 = 120
 k               = (BASELINE_STARTERS − totalStarters) / BASELINE_STARTERS   // >0 ⇒ shallower ⇒ top-heavy
-rankPercentile  = (ordinal position of player by sfRank within the draft's pool) / poolSize   // 0 = best
+rankPercentile  = idx / (N − 1)   // idx = ordinal by sfRank among adjustable (QB/RB/WR/TE) players; N = their count; spans [0,1], 0 = best
 concentrationFactor = clamp( 1 + k × CONCENTRATION_C × (0.5 − rankPercentile), CONCENTRATION_BAND )
 ```
 

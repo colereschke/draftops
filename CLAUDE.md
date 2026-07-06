@@ -69,7 +69,8 @@ middleware.ts                         # Auth.js middleware — redirects unauthe
 prisma/
 ├── schema.prisma                     # Draft + Team + AuctionResult + PlayerWatchlist + NominatedPlayer + Player
 ├── seed.ts                           # Upserts default draft + 12 teams (idempotent)
-├── seed-players.ts                   # Backfill script: seeds Player rows for existing drafts (run via pnpm tsx)
+├── seed-players.ts                   # Full-seed script: seeds Player rows for drafts with zero players (skips drafts that already have any)
+├── sync-players.ts                   # Backfill script: inserts src/data/players.ts entries missing (by name) from each draft's Player table; idempotent, safe to re-run after adding new players
 └── migrations/                       # Postgres migration history
 prisma.config.ts                      # Prisma v7 config — DATABASE_URL from env
 existing_project_docs/                # Original reference files — do not delete

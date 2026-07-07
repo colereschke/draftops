@@ -138,7 +138,7 @@ export default function RosterTable({
                 <TableCell className="text-center">
                   {team.pkgCount > 0 && (
                     <span
-                      className="rounded font-mono text-[11px] font-bold"
+                      className="rounded font-mono text-[11px] font-bold tabular-nums"
                       style={{ color: 'var(--pos-pkg)', background: '#2a2010', padding: '2px 6px' }}
                     >
                       {team.pkgCount}×

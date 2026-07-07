@@ -20,15 +20,18 @@ projection-derived values.**
 This means #5e should:
 
 - Store only `sleeperId` on the per-draft `Player` row.
-- Store source-specific projected points in `PlayerProjection`.
-- Store draft-specific replacement/VOR/auction outputs in `DraftPlayerValue`.
-- Keep raw projection stats in ignored generated CSVs for this phase.
+- Store source projection stats in `PlayerProjection`.
+- Store draft-specific projected points/replacement/VOR/auction outputs in `DraftPlayerValue`.
+- Keep raw projection stats off `Player`.
 - Avoid adding raw stat columns such as `passYds`, `rushTd`, or `receptions` to app tables.
 
 This is the long-term shape now, not a bridge that intentionally needs a follow-up schema reversal.
 
 `Player.budget`, `Player.ceiling`, and `Player.floor` remain the fallback rankings-derived values
 from #5b.
+
+The storage correction tasks in this section supersede the earlier implementation tasks below where
+they still mention projection-derived columns on `Player`.
 
 ## Storage Correction Plan
 
@@ -97,7 +100,22 @@ model PlayerProjection {
   id                 Int    @id @default(autoincrement())
   sleeperId          String
   position           String
-  projectedPoints    Float
+  games              Float
+  passAtt            Float
+  passCmp            Float
+  passYds            Float
+  passTd             Float
+  passInt            Float
+  passSacks          Float
+  rushAtt            Float
+  rushYds            Float
+  rushTd             Float
+  targets            Float
+  receptions         Float
+  recYds             Float
+  recTd              Float
+  baseFantasyPoints  Float
+  projectionRank     Int?
   projectionSourceId Int
 
   source ProjectionSource @relation(fields: [projectionSourceId], references: [id])
@@ -178,8 +196,8 @@ calculate VOR values, and upsert `DraftPlayerValue`.
 
 - [ ] **Step 3: Update docs**
 
-Document that raw stats remain CSV-only, projection points live in `PlayerProjection`, and
-draft-specific VOR values live in `DraftPlayerValue`.
+Document that source stats live in `PlayerProjection`, while draft-specific projected points and VOR
+values live in `DraftPlayerValue`.
 
 - [ ] **Step 4: Full verification**
 

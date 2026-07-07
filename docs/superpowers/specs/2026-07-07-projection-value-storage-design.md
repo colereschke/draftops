@@ -18,13 +18,13 @@ Move projection-derived data out of `Player`.
 by projection import, custom ranking import, and Sleeper roster sync.
 
 Normalized projection rows are stored in `PlayerProjection`, keyed by Sleeper player ID and
-projection source. These rows store the source-agnostic projected fantasy points that DraftOps
-calculates from raw generated CSV stats using a draft's scoring settings.
+projection source. These rows store source projection stats such as passing, rushing, and receiving
+volume. They do not store draft-scored fantasy points because scoring settings vary by draft.
 
 Draft-specific valuation outputs are stored in `DraftPlayerValue`, keyed by draft, player, and
-projection source. Replacement points, VOR, projection auction value, fallback auction value, active
-auction value, and value source are league/draft-specific, so they do not belong on canonical
-projection rows.
+projection source. Projected fantasy points, replacement points, VOR, projection auction value,
+fallback auction value, active auction value, and value source are league/draft-specific, so they do
+not belong on canonical projection rows.
 
 ## Schema Shape
 
@@ -47,7 +47,22 @@ model PlayerProjection {
   id                 Int    @id @default(autoincrement())
   sleeperId          String
   position           String
-  projectedPoints    Float
+  games              Float
+  passAtt            Float
+  passCmp            Float
+  passYds            Float
+  passTd             Float
+  passInt            Float
+  passSacks          Float
+  rushAtt            Float
+  rushYds            Float
+  rushTd             Float
+  targets            Float
+  receptions         Float
+  recYds             Float
+  recTd              Float
+  baseFantasyPoints  Float
+  projectionRank     Int?
   projectionSourceId Int
 
   source ProjectionSource @relation(fields: [projectionSourceId], references: [id])
@@ -88,7 +103,7 @@ model DraftPlayerValue {
 1. Read `data/generated/etr_sleeper_matches.csv` and update `Player.sleeperId`.
 2. Read `data/generated/master_projections.csv`.
 3. Upsert one `ProjectionSource` per source/season/date combination.
-4. Upsert `PlayerProjection` rows by `sleeperId + projectionSourceId`.
+4. Upsert source-stat `PlayerProjection` rows by `sleeperId + projectionSourceId`.
 5. Join draft players to projections through `Player.sleeperId`.
 6. Calculate replacement levels, VOR, and projection auction values for the draft.
 7. Upsert `DraftPlayerValue` rows by `draftId + playerId + projectionSourceId`.
@@ -108,7 +123,7 @@ This logic belongs in the VOR/value calculation layer, not in the persistence sc
 
 ## Non-Goals
 
-- Do not persist raw stat columns such as pass yards, rush yards, receptions, and touchdowns.
+- Do not persist raw projection stat columns on `Player`.
 - Do not add UI value-source switching in this correction.
 - Do not replace #5b fallback values.
 - Do not create ranking-source tables in this PR; that belongs with #7 custom rankings upload.

@@ -4,9 +4,12 @@ export interface ProjectionStats {
   sleeperId: string;
   position: Position;
   games: number;
+  passAtt: number;
+  passCmp: number;
   passYds: number;
   passTd: number;
   passInt: number;
+  passSacks: number;
   rushAtt: number;
   rushYds: number;
   rushTd: number;

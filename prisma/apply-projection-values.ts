@@ -42,13 +42,16 @@ interface EtrMatchRow {
   sleeperId: string;
 }
 
-interface CsvProjectionRow {
+export interface CsvProjectionRow {
   sleeperId: string;
   position: VorPosition;
   games: number;
+  passAtt: number;
+  passCmp: number;
   passYds: number;
   passTd: number;
   passInt: number;
+  passSacks: number;
   rushAtt: number;
   rushYds: number;
   rushTd: number;
@@ -56,11 +59,24 @@ interface CsvProjectionRow {
   receptions: number;
   recYds: number;
   recTd: number;
+  baseFantasyPoints: number;
+  projectionRank: number | null;
   projectedPoints: number;
   isRookie: boolean;
   projectionSource: string;
   projectionDate: Date | null;
   projectionSeason: number | null;
+}
+
+export interface ProjectionSourceInput {
+  name: string;
+  season: number;
+  projectionDate: Date | null;
+}
+
+export interface ProjectionSourceGroup {
+  source: ProjectionSourceInput;
+  rows: CsvProjectionRow[];
 }
 
 export function joinPlayersToProjectionRows(
@@ -103,9 +119,12 @@ export function readProjectionRows(path: string, scoring: ScoringSettings): CsvP
       sleeperId: row.sleeper_id,
       position,
       games: toNumber(row.games),
+      passAtt: toNumber(row.pass_att),
+      passCmp: toNumber(row.pass_cmp),
       passYds: toNumber(row.pass_yds),
       passTd: toNumber(row.pass_td),
       passInt: toNumber(row.pass_int),
+      passSacks: toNumber(row.pass_sacks),
       rushAtt: toNumber(row.rush_att),
       rushYds: toNumber(row.rush_yds),
       rushTd: toNumber(row.rush_td),
@@ -120,9 +139,12 @@ export function readProjectionRows(path: string, scoring: ScoringSettings): CsvP
         sleeperId: row.sleeper_id,
         position,
         games: stats.games,
+        passAtt: stats.passAtt,
+        passCmp: stats.passCmp,
         passYds: stats.passYds,
         passTd: stats.passTd,
         passInt: stats.passInt,
+        passSacks: stats.passSacks,
         rushAtt: stats.rushAtt,
         rushYds: stats.rushYds,
         rushTd: stats.rushTd,
@@ -130,9 +152,11 @@ export function readProjectionRows(path: string, scoring: ScoringSettings): CsvP
         receptions: stats.receptions,
         recYds: stats.recYds,
         recTd: stats.recTd,
+        baseFantasyPoints: toNumber(row.base_fantasy_points),
+        projectionRank: row.projection_rank ? toNumber(row.projection_rank) : null,
         projectedPoints: calculateProjectedPoints(stats, scoring),
         isRookie: toNumber(row.years_exp) === 0,
-        projectionSource: row.projection_source,
+        projectionSource: row.projection_source || 'unknown',
         projectionDate: row.projection_date
           ? new Date(`${row.projection_date}T00:00:00.000Z`)
           : null,
@@ -140,6 +164,25 @@ export function readProjectionRows(path: string, scoring: ScoringSettings): CsvP
       },
     ];
   });
+}
+
+export function groupProjectionRowsBySource(rows: CsvProjectionRow[]): ProjectionSourceGroup[] {
+  const groups = new Map<string, ProjectionSourceGroup>();
+  for (const row of rows) {
+    const source: ProjectionSourceInput = {
+      name: row.projectionSource,
+      season: row.projectionSeason ?? 0,
+      projectionDate: row.projectionDate,
+    };
+    const key = sourceKey(source);
+    const existing = groups.get(key);
+    if (existing) {
+      existing.rows.push(row);
+    } else {
+      groups.set(key, { source, rows: [row] });
+    }
+  }
+  return Array.from(groups.values());
 }
 
 async function main(): Promise<void> {
@@ -177,17 +220,7 @@ async function main(): Promise<void> {
       readEtrMatchRows(args.etrMatchesCsv).map((row) => [row.name, row.sleeperId]),
     );
     const projectionRows = readProjectionRows(args.projectionsCsv, scoringSettings);
-    const projectionsBySleeperId = new Map(
-      projectionRows.map((row) => [
-        row.sleeperId,
-        {
-          sleeperId: row.sleeperId,
-          position: row.position,
-          projectedPoints: row.projectedPoints,
-          isRookie: row.isRookie,
-        },
-      ]),
-    );
+    const projectionGroups = groupProjectionRowsBySource(projectionRows);
 
     const players = await prisma.player.findMany({
       where: { draftId: draft.id },
@@ -197,30 +230,7 @@ async function main(): Promise<void> {
       ...player,
       sleeperId: player.sleeperId ?? etrMatches.get(player.name) ?? null,
     }));
-
-    const joined = joinPlayersToProjectionRows(
-      playersWithSleeperIds,
-      Array.from(projectionsBySleeperId.values()),
-    );
-    const projectionInputs: ProjectionValueInput[] = joined.map((row) => ({
-      sleeperId: row.sleeperId,
-      name: String(row.playerId),
-      position: row.position,
-      projectedPoints: row.projectedPoints,
-      fallbackAuctionValue: row.fallbackAuctionValue,
-      isRookie: row.isRookie,
-    }));
-    const values = calculateProjectionValues({
-      players: projectionInputs,
-      teamCount: draft.teamCount,
-      rosterSize: draft.rosterSize,
-      budget: draft.budget,
-      startingLineup: toStartingLineup(draft.startingLineup),
-      targetRoster: toTargetRoster(draft.targetRoster),
-      scoringSettings,
-      activateProjectionValues: false,
-    });
-    const valuesBySleeperId = new Map(values.map((value) => [value.sleeperId, value]));
+    let appliedCount = 0;
 
     await prisma.$transaction(async (tx) => {
       for (const player of playersWithSleeperIds) {
@@ -231,15 +241,69 @@ async function main(): Promise<void> {
         });
       }
 
-      for (const row of joined) {
-        const value = valuesBySleeperId.get(row.sleeperId);
-        const projection = projectionRows.find(
-          (candidate) => candidate.sleeperId === row.sleeperId,
+      for (const group of projectionGroups) {
+        const source =
+          (await tx.projectionSource.findFirst({
+            where: {
+              name: group.source.name,
+              season: group.source.season,
+              projectionDate: group.source.projectionDate,
+            },
+          })) ??
+          (await tx.projectionSource.create({
+            data: {
+              name: group.source.name,
+              season: group.source.season,
+              projectionDate: group.source.projectionDate,
+            },
+          }));
+
+        for (const projection of group.rows) {
+          await tx.playerProjection.upsert({
+            where: {
+              sleeperId_projectionSourceId: {
+                sleeperId: projection.sleeperId,
+                projectionSourceId: source.id,
+              },
+            },
+            create: playerProjectionData(projection, source.id),
+            update: playerProjectionData(projection, source.id),
+          });
+        }
+
+        const joined = joinPlayersToProjectionRows(
+          playersWithSleeperIds,
+          group.rows.map((row) => ({
+            sleeperId: row.sleeperId,
+            position: row.position,
+            projectedPoints: row.projectedPoints,
+            isRookie: row.isRookie,
+          })),
         );
-        if (!value || !projection) continue;
-        await tx.player.update({
-          where: { id: row.playerId },
-          data: {
+        const projectionInputs: ProjectionValueInput[] = joined.map((row) => ({
+          sleeperId: row.sleeperId,
+          name: String(row.playerId),
+          position: row.position,
+          projectedPoints: row.projectedPoints,
+          fallbackAuctionValue: row.fallbackAuctionValue,
+          isRookie: row.isRookie,
+        }));
+        const values = calculateProjectionValues({
+          players: projectionInputs,
+          teamCount: draft.teamCount,
+          rosterSize: draft.rosterSize,
+          budget: draft.budget,
+          startingLineup: toStartingLineup(draft.startingLineup),
+          targetRoster: toTargetRoster(draft.targetRoster),
+          scoringSettings,
+          activateProjectionValues: false,
+        });
+        const valuesBySleeperId = new Map(values.map((value) => [value.sleeperId, value]));
+
+        for (const row of joined) {
+          const value = valuesBySleeperId.get(row.sleeperId);
+          if (!value) continue;
+          const data = {
             projectedPoints: row.projectedPoints,
             replacementPoints: value.replacementPoints,
             vor: value.vor,
@@ -247,15 +311,29 @@ async function main(): Promise<void> {
             fallbackAuctionValue: row.fallbackAuctionValue,
             activeAuctionValue: value.activeAuctionValue,
             valueSource: 'fallback',
-            projectionSource: projection.projectionSource,
-            projectionDate: projection.projectionDate,
-            projectionSeason: projection.projectionSeason,
-          },
-        });
+          };
+          await tx.draftPlayerValue.upsert({
+            where: {
+              draftId_playerId_projectionSourceId: {
+                draftId: draft.id,
+                playerId: row.playerId,
+                projectionSourceId: source.id,
+              },
+            },
+            create: {
+              draftId: draft.id,
+              playerId: row.playerId,
+              projectionSourceId: source.id,
+              ...data,
+            },
+            update: data,
+          });
+        }
+        appliedCount += joined.length;
       }
     });
 
-    console.log(`Applied projection values to ${joined.length} player(s).`);
+    console.log(`Applied projection values to ${appliedCount} player-source row(s).`);
   } finally {
     await prisma.$disconnect();
     await pool.end();
@@ -321,6 +399,38 @@ function parseCsvLine(line: string): string[] {
   }
   values.push(value);
   return values;
+}
+
+function sourceKey(source: ProjectionSourceInput): string {
+  return [
+    source.name,
+    source.season,
+    source.projectionDate ? source.projectionDate.toISOString() : '',
+  ].join('|');
+}
+
+function playerProjectionData(projection: CsvProjectionRow, projectionSourceId: number) {
+  return {
+    sleeperId: projection.sleeperId,
+    position: projection.position,
+    games: projection.games,
+    passAtt: projection.passAtt,
+    passCmp: projection.passCmp,
+    passYds: projection.passYds,
+    passTd: projection.passTd,
+    passInt: projection.passInt,
+    passSacks: projection.passSacks,
+    rushAtt: projection.rushAtt,
+    rushYds: projection.rushYds,
+    rushTd: projection.rushTd,
+    targets: projection.targets,
+    receptions: projection.receptions,
+    recYds: projection.recYds,
+    recTd: projection.recTd,
+    baseFantasyPoints: projection.baseFantasyPoints,
+    projectionRank: projection.projectionRank,
+    projectionSourceId,
+  };
 }
 
 function toNumber(value: string): number {

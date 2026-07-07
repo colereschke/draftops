@@ -76,23 +76,41 @@ pnpm tsx prisma/apply-projection-values.ts \
   --etr-matches-csv data/generated/etr_sleeper_matches.csv
 ```
 
-The script stores Sleeper identity plus calculated value outputs on `Player`:
+The script stores Sleeper identity on `Player`, normalized source stats on `PlayerProjection`, and
+draft-specific calculated value outputs on `DraftPlayerValue`.
 
 ```text
-sleeperId
-projectedPoints
-replacementPoints
-vor
-projectionAuctionValue
-fallbackAuctionValue
-activeAuctionValue
-valueSource
-projectionSource
-projectionDate
-projectionSeason
+Player.sleeperId
+
+PlayerProjection.sleeperId
+PlayerProjection.position
+PlayerProjection.games
+PlayerProjection.passAtt
+PlayerProjection.passCmp
+PlayerProjection.passYds
+PlayerProjection.passTd
+PlayerProjection.passInt
+PlayerProjection.passSacks
+PlayerProjection.rushAtt
+PlayerProjection.rushYds
+PlayerProjection.rushTd
+PlayerProjection.targets
+PlayerProjection.receptions
+PlayerProjection.recYds
+PlayerProjection.recTd
+PlayerProjection.baseFantasyPoints
+PlayerProjection.projectionRank
+
+DraftPlayerValue.projectedPoints
+DraftPlayerValue.replacementPoints
+DraftPlayerValue.vor
+DraftPlayerValue.projectionAuctionValue
+DraftPlayerValue.fallbackAuctionValue
+DraftPlayerValue.activeAuctionValue
+DraftPlayerValue.valueSource
 ```
 
-Raw projection stats remain CSV input for now. Do not manually edit generated CSVs.
+Do not manually edit generated CSVs.
 
 ## Checks
 

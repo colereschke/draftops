@@ -94,6 +94,8 @@
   --spacing-md: 12px;
   --spacing-lg: 20px;
   --spacing-xl: 32px;
+  --color-secondary-fg: var(--text-secondary);
+  --color-border-subtle: var(--border-subtle);
 }
 
 @layer base {

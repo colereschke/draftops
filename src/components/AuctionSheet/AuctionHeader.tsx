@@ -19,6 +19,8 @@ export default function AuctionHeader({
   grandTotal,
   totalPlayerCount,
 }: AuctionHeaderProps) {
+  const safeGrandTotal = grandTotal || 1;
+
   return (
     <div className="border-b border-border bg-card px-5 pt-[18px] pb-3.5">
       <div className="font-label mb-1 text-[10px] tracking-[3px] text-muted-foreground uppercase">
@@ -81,7 +83,7 @@ export default function AuctionHeader({
         </div>
         <div className="flex h-1.5 gap-px overflow-hidden rounded-[3px]">
           {MARKET_POSITIONS.map((pos) => {
-            const pct = ((posStats[pos].total / grandTotal) * 100).toFixed(1);
+            const pct = ((posStats[pos].total / safeGrandTotal) * 100).toFixed(1);
             return (
               <div
                 key={pos}
@@ -92,7 +94,7 @@ export default function AuctionHeader({
         </div>
         <div className="mt-[5px] flex gap-3.5">
           {MARKET_POSITIONS.map((pos) => {
-            const pct = ((posStats[pos].total / grandTotal) * 100).toFixed(0);
+            const pct = ((posStats[pos].total / safeGrandTotal) * 100).toFixed(0);
             return (
               <div key={pos} className="flex items-center gap-1 text-[10px]">
                 <div

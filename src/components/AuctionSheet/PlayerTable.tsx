@@ -81,7 +81,7 @@ export default function PlayerTable({
               <TableHead
                 key={col.key}
                 onClick={() => onSort(col.key)}
-                className="font-label cursor-pointer border-none py-2 text-[10px] font-semibold tracking-wide whitespace-nowrap uppercase select-none"
+                className="font-label cursor-pointer border-none py-2 text-[10px] font-semibold tracking-wide whitespace-nowrap uppercase select-none text-muted-foreground"
                 style={{
                   textAlign: col.key === 'player' ? 'left' : 'center',
                   color: sortBy === col.key ? 'var(--pos-wr)' : undefined,
@@ -196,7 +196,7 @@ export default function PlayerTable({
                   ${p.ceiling}
                 </TableCell>
                 {showNotes && (
-                  <TableCell className="max-w-[220px] text-[10px] text-muted-foreground">
+                  <TableCell className="max-w-[220px] whitespace-normal text-[10px] text-muted-foreground">
                     {p.notes || '—'}
                   </TableCell>
                 )}

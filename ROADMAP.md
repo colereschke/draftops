@@ -454,6 +454,18 @@ lastValueUpdateAt
 
 ---
 
+## Engineering Hardening Backlog
+
+**Not a product feature.** Track repo-quality work that should happen opportunistically after the active UI/schema arcs settle, or as cleanup work before a broad public deploy.
+
+- Move client server-state polling/mutations to SWR where it reduces manual fetch/effect logic, starting with `NominationHelper`'s nomination-data polling and optimistic watchlist/nominated mutations.
+- Standardize component exports toward named exports instead of default exports for easier refactoring and clearer imports.
+- Reduce barrel-style `index.ts` component re-exports where they obscure dependency edges or hurt tree-shaking; prefer direct imports for larger client components.
+- Add focused accessibility regression tests for interactive data tables and icon-only controls whenever a page is re-skinned.
+- Revisit long-list rendering costs on the main auction and nomination tables after real draft data sizes are in Postgres-backed flows.
+
+---
+
 ## 8. Dynamic Pick Valuation
 
 **Blocks:** nothing downstream yet

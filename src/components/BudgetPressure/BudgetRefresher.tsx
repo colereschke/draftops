@@ -2,6 +2,7 @@
 
 import { useRouter } from 'next/navigation';
 import { useEffect, useState, useCallback, useRef } from 'react';
+import { Button } from '@/components/ui/button';
 
 interface BudgetRefresherProps {
   intervalMs?: number;
@@ -39,30 +40,11 @@ export default function BudgetRefresher({ intervalMs = 20000 }: BudgetRefresherP
   }, [intervalSecs]);
 
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-      <span
-        style={{
-          fontSize: 10,
-          color: '#4a5168',
-          fontFamily: 'var(--font-mono), monospace',
-        }}
-      >
-        Updated {elapsed}s ago
-      </span>
-      <button
-        onClick={doRefresh}
-        style={{
-          padding: '3px 8px',
-          fontSize: 10,
-          background: 'transparent',
-          border: '1px solid #2a3048',
-          borderRadius: 4,
-          color: '#4a5168',
-          cursor: 'pointer',
-        }}
-      >
+    <div className="flex items-center gap-2">
+      <span className="font-mono text-[10px] text-muted-foreground">Updated {elapsed}s ago</span>
+      <Button variant="outline" size="sm" onClick={doRefresh}>
         Refresh
-      </button>
+      </Button>
     </div>
   );
 }

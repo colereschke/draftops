@@ -1,5 +1,5 @@
-import React from 'react';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import BidModal from '@/components/BidModal/BidModal';
 import type { Player, ClaimedBid, LeagueTeam } from '@/types';
 
@@ -39,39 +39,48 @@ describe('BidModal — add mode', () => {
     expect(screen.getByText('QB')).toBeInTheDocument();
   });
 
-  it('calls onSubmit with price and teamId when submitted', () => {
+  it('calls onSubmit with price and teamId when submitted', async () => {
+    const user = userEvent.setup();
     const onSubmit = jest.fn();
     render(
       <BidModal player={mockPlayer} teams={mockTeams} onClose={jest.fn()} onSubmit={onSubmit} />,
     );
 
-    fireEvent.change(screen.getByLabelText('Price'), { target: { value: '110' } });
-    fireEvent.change(screen.getByLabelText('Won By'), { target: { value: '2' } });
-    fireEvent.click(screen.getByRole('button', { name: /log bid/i }));
+    await user.clear(screen.getByLabelText('Price'));
+    await user.type(screen.getByLabelText('Price'), '110');
+
+    const trigger = screen.getByRole('combobox', { name: /won by/i });
+    await user.click(trigger);
+    await waitFor(() => expect(trigger).toHaveAttribute('aria-expanded', 'true'));
+    await user.click(screen.getByRole('option', { name: /chappy72/i }));
+
+    await user.click(screen.getByRole('button', { name: /log bid/i }));
 
     expect(onSubmit).toHaveBeenCalledWith({ price: 110, teamId: 2 });
   });
 
-  it('calls onClose when Cancel is clicked', () => {
+  it('calls onClose when Cancel is clicked', async () => {
+    const user = userEvent.setup();
     const onClose = jest.fn();
     render(
       <BidModal player={mockPlayer} teams={mockTeams} onClose={onClose} onSubmit={jest.fn()} />,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: /cancel/i }));
+    await user.click(screen.getByRole('button', { name: /cancel/i }));
 
     expect(onClose).toHaveBeenCalled();
   });
 
-  it('calls onClose when Escape is pressed', () => {
+  it('calls onClose when Escape is pressed', async () => {
+    const user = userEvent.setup();
     const onClose = jest.fn();
     render(
       <BidModal player={mockPlayer} teams={mockTeams} onClose={onClose} onSubmit={jest.fn()} />,
     );
 
-    fireEvent.keyDown(document, { key: 'Escape' });
+    await user.keyboard('{Escape}');
 
-    expect(onClose).toHaveBeenCalled();
+    await waitFor(() => expect(onClose).toHaveBeenCalled());
   });
 
   it('does not show a Remove button in add mode', () => {
@@ -113,7 +122,8 @@ describe('BidModal — edit mode', () => {
     expect(screen.getByRole('button', { name: /remove/i })).toBeInTheDocument();
   });
 
-  it('calls onDelete when Remove is clicked', () => {
+  it('calls onDelete when Remove is clicked', async () => {
+    const user = userEvent.setup();
     const onDelete = jest.fn();
     render(
       <BidModal
@@ -126,7 +136,7 @@ describe('BidModal — edit mode', () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: /remove/i }));
+    await user.click(screen.getByRole('button', { name: /remove/i }));
 
     expect(onDelete).toHaveBeenCalled();
   });
@@ -161,7 +171,8 @@ describe('BidModal — nomination', () => {
     expect(screen.getByRole('button', { name: /^nom$/i })).toBeInTheDocument();
   });
 
-  it('calls onNominate and onClose when Nom is clicked', () => {
+  it('calls onNominate and onClose when Nom is clicked', async () => {
+    const user = userEvent.setup();
     const onNominate = jest.fn();
     const onClose = jest.fn();
     render(
@@ -174,7 +185,7 @@ describe('BidModal — nomination', () => {
         isNominated={false}
       />,
     );
-    fireEvent.click(screen.getByRole('button', { name: /^nom$/i }));
+    await user.click(screen.getByRole('button', { name: /^nom$/i }));
     expect(onNominate).toHaveBeenCalled();
     expect(onClose).toHaveBeenCalled();
   });
@@ -200,5 +211,21 @@ describe('BidModal — nomination', () => {
     );
     expect(screen.queryByRole('button', { name: /^nom$/i })).not.toBeInTheDocument();
     expect(screen.queryByText(/in auction/i)).not.toBeInTheDocument();
+  });
+});
+
+describe('BidModal — team select', () => {
+  it('opens the Won By select and lists both teams as options', async () => {
+    const user = userEvent.setup();
+    render(
+      <BidModal player={mockPlayer} teams={mockTeams} onClose={jest.fn()} onSubmit={jest.fn()} />,
+    );
+
+    const trigger = screen.getByRole('combobox', { name: /won by/i });
+    await user.click(trigger);
+    await waitFor(() => expect(trigger).toHaveAttribute('aria-expanded', 'true'));
+
+    expect(screen.getByRole('option', { name: /coreschke/i })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: /chappy72/i })).toBeInTheDocument();
   });
 });

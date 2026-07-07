@@ -20,7 +20,7 @@ This phase also adds one new feature: an "Available Only" filter to hide already
 - Split `AuctionSheet.tsx` into an orchestrator (state, optimistic updates, server-action handlers) plus three subcomponents: `AuctionHeader`, `FilterControls`, `PlayerTable`
 - Replace native `<table>` with shadcn `Table` family, native filter `<button>` pills with shadcn `ToggleGroup`, the Show Notes `<button>` with shadcn `Toggle`, the search `<input>` with shadcn `Input`
 - Replace hand-rolled unicode sort arrows (↑↓↕) with `lucide-react` icons (`ArrowUp`/`ArrowDown`/`ArrowUpDown`)
-- Extend `globals.css`'s `@theme inline` with two new Tailwind utility tokens (`text-secondary`, `border-subtle`) to avoid pervasive inline-style exceptions in a component this size
+- Extend `globals.css`'s `@theme inline` with two new Tailwind utility tokens (`text-secondary-fg`, `border-border-subtle`) to avoid pervasive inline-style exceptions in a component this size
 - Apply `font-variant-numeric: tabular-nums` to all numeric table columns (deferred from Phase 1 for lack of numeric content at the time)
 - Add a new "Available Only" filter toggle that hides players with a claimed bid, and suppress the `Claimed` table column while it's active
 - Preserve all existing behavior: filtering, search, sorting, notes toggle, bid logging/editing/deleting via `BidModal`, nomination, optimistic updates, claimed-bid diff display
@@ -131,11 +131,11 @@ Active-state position coloring uses the same inline-override pattern as Phase 2'
 **Token extension (`globals.css`):** Add two entries to the existing `@theme inline` block:
 
 ```css
---color-text-secondary: var(--text-secondary);
+--color-secondary-fg: var(--text-secondary);
 --color-border-subtle: var(--border-subtle);
 ```
 
-This generates real Tailwind utilities (`text-secondary`, `border-subtle`) alongside the existing `text-muted-foreground`/`border-border`. Justification: BidModal needed exactly one inline exception for `--text-secondary`; AuctionSheet uses both `--text-secondary` and `--border-subtle` dozens of times across the header, controls, legend, and table. Sanctioned by Phase 1's own rule ("extend/refine this layer, don't replace it").
+This generates real Tailwind utilities `text-secondary-fg` and `border-border-subtle` (Tailwind v4 strips only the `--color-` prefix, not the full property name, when deriving a utility — confirmed by this file's own existing `--color-border: var(--border)` → `border-border`). The alias is named `secondary-fg`, not `text-secondary`, because `--color-secondary` already exists in this file mapped to a _background_ token (shadcn's semantic "secondary" = `--bg-elevated`) — reusing that name would silently resolve to near-invisible dark text instead of erroring. Both new utilities sit alongside the existing `text-muted-foreground`/`border-border`. Justification: BidModal needed exactly one inline exception for `--text-secondary`; AuctionSheet uses both `--text-secondary` and `--border-subtle` dozens of times across the header, controls, legend, and table. Sanctioned by Phase 1's own rule ("extend/refine this layer, don't replace it").
 
 **Colors staying literal (not promoted to any token):**
 

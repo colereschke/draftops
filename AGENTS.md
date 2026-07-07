@@ -264,6 +264,8 @@ Source: ETR dynasty rankings CSV (~267 players). Values scaled ×5 for $1,000 bu
 
 **Keep PRs clean.** Don't let extraneous files (scratch notes, generated docs, debug artifacts, unrelated changes) into PRs. This can be overridden if explicitly requested, but the default is a clean diff that contains only what the PR describes.
 
+**PR creation workflow.** The GitHub connector may be able to read PRs but fail to create them with `403 Resource not accessible by integration`, and sandboxed `gh` may not be authenticated. After pushing the branch, try `gh auth status` and `gh pr create` with elevated/outside-sandbox permissions; this repo has worked with the local authenticated `gh` token in that mode. Use the intended base branch explicitly for stacked PRs, for example `gh pr create --draft --base worktree-value-adjustment-algorithm --head projection-aware-vor-engine`.
+
 **No author attribution in commits.** Do not add `Co-Authored-By`, `Author:`, or any other authorship lines to commit messages.
 
 **Don't be a sycophant!** The last thing I want in development is a yes man. If you agree with me on something that's fine, but please please think critically about my choices in development and if you have questions or concerns bring them up and challenge me if need be.

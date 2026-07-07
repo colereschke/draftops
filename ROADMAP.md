@@ -265,17 +265,21 @@ data/generated/unmatched_players.csv
 - Keep the parser source-specific, but keep the normalized output schema source-agnostic.
 - Include `projection_source`, `projection_date`, and `season` in generated data.
 
-### Open Decision: Projection Storage Model
+### Projection Storage Model Decision
 
-Before wiring projections into app valuation, decide whether to:
+Decision: use the long-term separated data model now.
 
-1. Store projection fields directly on the per-draft `Player` model
-2. Store canonical projections separately and join them to per-draft player values
-3. Keep projections as generated CSV input for now and only persist calculated values
+- `Player` keeps only `sleeperId` from the projection work. This is identity data shared by
+  projection import, custom ranking import, and Sleeper roster sync.
+- `ProjectionSource` stores source metadata such as source name, season, and projection date.
+- `PlayerProjection` stores normalized source projection stats keyed by Sleeper ID and projection
+  source.
+- `DraftPlayerValue` stores draft-specific projected points, replacement points, VOR, projection
+  auction value, fallback/active values, and value source.
 
-Recommended direction: use separate projection data long-term, but allow a CSV-driven
-implementation short-term. Avoid bloating the per-draft `Player` model with raw projection stats
-unless that is clearly the fastest safe bridge.
+Do not attach raw projection stats or projection-derived values directly to `Player`. League-scored
+`projectedPoints` belongs in `DraftPlayerValue`, not `PlayerProjection`, because scoring settings
+vary by draft.
 
 ---
 
@@ -349,6 +353,51 @@ value_source
 
 Do not fully replace the fallback model immediately. First expose projection values as a parallel
 value source, then decide whether to blend, override, or let users choose.
+
+**Current implementation status:** draft PR opened as #27, stacked on PR #25 (`worktree-value-adjustment-algorithm`). The branch is `projection-aware-vor-engine`.
+
+Implemented in #27:
+
+- Adds the long-term projection storage model: `ProjectionSource`, `PlayerProjection`, and
+  `DraftPlayerValue`.
+- Adds `Player.sleeperId` as the shared identity link.
+- Adds ETR dynasty ranking → Sleeper ID matching for
+  `existing_project_docs/auction-tool/src/Dynasty_Rankings.csv`.
+- Adds league-specific projection scoring from normalized Mike Clay rows.
+- Adds replacement level, VOR, projection auction value allocation, and rookie-aware active value
+  behavior.
+- Adds `prisma/apply-projection-values.ts --draft-id <id>` to apply generated projection CSVs to a
+  draft.
+
+Next steps after PR #25 and #27:
+
+1. Merge #25 first, then review/merge #27 or retarget/rebase it if #25 changes materially.
+2. Generate or confirm `data/generated/etr_sleeper_matches.csv` exists locally.
+3. Run the apply script against a real draft:
+
+```bash
+pnpm tsx prisma/apply-projection-values.ts --draft-id <draft-id>
+```
+
+4. Spot-check value outputs before UI work:
+   - high-end QBs and elite TEs
+   - rookies with low year-one projections
+   - rookies with strong projections
+   - unmatched ETR players and unmatched projection players
+   - replacement levels by QB/RB/WR/TE
+5. Decide projection activation policy:
+   - keep fallback active by default
+   - add a value-source toggle
+   - blend fallback and projection values
+   - use projection override only for selected contexts
+6. Add lightweight UI visibility for `DraftPlayerValue` data after the numbers pass sanity checks.
+   Prefer a compact value-source badge or optional columns before making projection values the main
+   displayed number.
+7. Feed projection-aware lineup strength into #8 dynamic pick valuation, keeping dynasty market
+   strength and redraft projection strength as separate signals.
+
+Rookie policy for #5e: low rookie projections should not reduce active fallback/dynasty value, but
+strong rookie projections can raise active value when projection values are explicitly activated.
 
 ---
 

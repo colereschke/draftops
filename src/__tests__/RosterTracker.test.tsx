@@ -74,6 +74,15 @@ describe('RosterTracker', () => {
     expect(screen.getByText('Patrick Mahomes')).toBeInTheDocument();
   });
 
+  it('shows roster when the team row is clicked', async () => {
+    const user = userEvent.setup();
+    render(<RosterTracker teams={[makeTeam()]} ownerHandle="coreschke" />);
+
+    await user.click(screen.getByText('coreschke').closest('tr')!);
+
+    expect(screen.getByText('Patrick Mahomes')).toBeInTheDocument();
+  });
+
   it('collapses roster when the same expand button is clicked again', async () => {
     const user = userEvent.setup();
     render(<RosterTracker teams={[makeTeam()]} ownerHandle="coreschke" />);

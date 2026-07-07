@@ -123,8 +123,9 @@ export default function RosterTable({
             const rows = [
               <TableRow
                 key={team.id}
+                onClick={() => onToggle(team.id)}
                 className={cn(
-                  'hover:bg-card',
+                  'cursor-pointer hover:bg-card',
                   isExpanded ? 'border-b-0' : 'border-b-[#141824]',
                   !isOwner && i % 2 !== 0 ? 'bg-[#0a0c10]' : undefined,
                 )}
@@ -177,7 +178,10 @@ export default function RosterTable({
                 <TableCell className="text-right">
                   <button
                     type="button"
-                    onClick={() => onToggle(team.id)}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onToggle(team.id);
+                    }}
                     aria-expanded={isExpanded}
                     aria-label={`${isExpanded ? 'Collapse' : 'Expand'} roster for ${team.handle}`}
                     className="ml-auto inline-flex cursor-pointer items-center justify-center rounded-sm border-0 bg-transparent p-0 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"

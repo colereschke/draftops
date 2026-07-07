@@ -73,12 +73,21 @@ export default function RosterTable({
               Team
             </TableHead>
             <TableHead
-              onClick={() => onSort('rosterCount')}
-              className="font-label cursor-pointer border-none py-2 text-center text-[10px] font-semibold tracking-wide whitespace-nowrap uppercase select-none text-muted-foreground"
-              style={{ color: sortBy === 'rosterCount' ? 'var(--pos-wr)' : undefined }}
+              aria-sort={
+                sortBy === 'rosterCount' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'
+              }
+              className="border-none py-2 text-center"
             >
-              Roster
-              <SortIcon col="rosterCount" sortBy={sortBy} sortDir={sortDir} />
+              <button
+                type="button"
+                onClick={() => onSort('rosterCount')}
+                aria-label="Sort by Roster"
+                className="font-label cursor-pointer border-0 bg-transparent p-0 text-[10px] font-semibold tracking-wide whitespace-nowrap uppercase select-none text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                style={{ color: sortBy === 'rosterCount' ? 'var(--pos-wr)' : undefined }}
+              >
+                Roster
+                <SortIcon col="rosterCount" sortBy={sortBy} sortDir={sortDir} />
+              </button>
             </TableHead>
             <TableHead className="font-label border-none py-2 text-center text-[10px] font-semibold tracking-wide text-muted-foreground uppercase">
               PKG
@@ -86,12 +95,21 @@ export default function RosterTable({
             {SORT_COLUMNS.map((col) => (
               <TableHead
                 key={col.key}
-                onClick={() => onSort(col.key)}
-                className="font-label cursor-pointer border-none py-2 text-center text-[10px] font-semibold tracking-wide whitespace-nowrap uppercase select-none text-muted-foreground"
-                style={{ color: sortBy === col.key ? 'var(--pos-wr)' : undefined }}
+                aria-sort={
+                  sortBy === col.key ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'
+                }
+                className="border-none py-2 text-center"
               >
-                {col.label}
-                <SortIcon col={col.key} sortBy={sortBy} sortDir={sortDir} />
+                <button
+                  type="button"
+                  onClick={() => onSort(col.key)}
+                  aria-label={`Sort by ${col.label}`}
+                  className="font-label cursor-pointer border-0 bg-transparent p-0 text-[10px] font-semibold tracking-wide whitespace-nowrap uppercase select-none text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                  style={{ color: sortBy === col.key ? 'var(--pos-wr)' : undefined }}
+                >
+                  {col.label}
+                  <SortIcon col={col.key} sortBy={sortBy} sortDir={sortDir} />
+                </button>
               </TableHead>
             ))}
             <TableHead className="w-8 border-none py-2" />
@@ -105,9 +123,8 @@ export default function RosterTable({
             const rows = [
               <TableRow
                 key={team.id}
-                onClick={() => onToggle(team.id)}
                 className={cn(
-                  'cursor-pointer hover:bg-card',
+                  'hover:bg-card',
                   isExpanded ? 'border-b-0' : 'border-b-[#141824]',
                   !isOwner && i % 2 !== 0 ? 'bg-[#0a0c10]' : undefined,
                 )}
@@ -158,12 +175,20 @@ export default function RosterTable({
                   ${team.buyingPower}
                 </TableCell>
                 <TableCell className="text-right">
-                  <ChevronRight
-                    className={cn(
-                      'ml-auto inline size-3.5 text-muted-foreground transition-transform duration-150',
-                      isExpanded && 'rotate-90',
-                    )}
-                  />
+                  <button
+                    type="button"
+                    onClick={() => onToggle(team.id)}
+                    aria-expanded={isExpanded}
+                    aria-label={`${isExpanded ? 'Collapse' : 'Expand'} roster for ${team.handle}`}
+                    className="ml-auto inline-flex cursor-pointer items-center justify-center rounded-sm border-0 bg-transparent p-0 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                  >
+                    <ChevronRight
+                      className={cn(
+                        'size-3.5 text-muted-foreground transition-transform duration-150',
+                        isExpanded && 'rotate-90',
+                      )}
+                    />
+                  </button>
                 </TableCell>
               </TableRow>,
             ];

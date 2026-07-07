@@ -54,7 +54,7 @@ export default function WatchlistSidebar({
   }, [search, players, wonNames, watchlistSet, nominatedSet]);
 
   return (
-    <div className="flex w-60 min-w-60 flex-col gap-3 border-r border-border-subtle bg-card px-3 py-4">
+    <div className="flex w-full flex-col gap-3 border-b border-border-subtle bg-card px-3 py-4 md:w-60 md:min-w-60 md:border-r md:border-b-0">
       {/* In Auction */}
       <div>
         <div
@@ -86,8 +86,10 @@ export default function WatchlistSidebar({
                     )}
                   </div>
                   <button
+                    type="button"
                     onClick={() => onUnNominate(name)}
                     title="Remove from in auction"
+                    aria-label={`Remove ${name} from in auction`}
                     className="shrink-0 text-[#2a5a5a] transition-colors hover:text-[var(--pos-pick)]"
                   >
                     <X className="size-3.5" />
@@ -160,8 +162,10 @@ export default function WatchlistSidebar({
                   )}
                 </div>
                 <button
+                  type="button"
                   onClick={() => onRemoveFromWatchlist(name)}
                   title="Remove from watchlist"
+                  aria-label={`Remove ${name} from watchlist`}
                   className="shrink-0 text-muted-foreground transition-colors hover:text-destructive"
                 >
                   <X className="size-3.5" />

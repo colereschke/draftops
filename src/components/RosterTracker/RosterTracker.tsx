@@ -55,7 +55,7 @@ export default function RosterTracker({ teams, ownerHandle }: RosterTrackerProps
           Team Rosters
         </h1>
         <div className="text-[11px] text-muted-foreground">
-          Click any row to expand · Multiple rows can be open simultaneously
+          Use the expand control to view rosters · Multiple rows can be open simultaneously
         </div>
       </div>
 

@@ -80,15 +80,27 @@ export default function PlayerTable({
             {SORT_COLUMNS.map((col) => (
               <TableHead
                 key={col.key}
-                onClick={() => onSort(col.key)}
-                className="font-label cursor-pointer border-none py-2 text-[10px] font-semibold tracking-wide whitespace-nowrap uppercase select-none text-muted-foreground"
+                aria-sort={
+                  sortBy === col.key ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'
+                }
+                className="border-none py-2"
                 style={{
                   textAlign: col.key === 'player' ? 'left' : 'center',
-                  color: sortBy === col.key ? 'var(--pos-wr)' : undefined,
                 }}
               >
-                {col.label}
-                <SortIcon col={col.key} sortBy={sortBy} sortDir={sortDir} />
+                <button
+                  type="button"
+                  onClick={() => onSort(col.key)}
+                  aria-label={`Sort by ${col.label}`}
+                  className="font-label cursor-pointer border-0 bg-transparent p-0 text-[10px] font-semibold tracking-wide whitespace-nowrap uppercase select-none text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                  style={{
+                    color: sortBy === col.key ? 'var(--pos-wr)' : undefined,
+                    textAlign: col.key === 'player' ? 'left' : 'center',
+                  }}
+                >
+                  {col.label}
+                  <SortIcon col={col.key} sortBy={sortBy} sortDir={sortDir} />
+                </button>
               </TableHead>
             ))}
             {showNotes && (
@@ -113,9 +125,8 @@ export default function PlayerTable({
             return (
               <TableRow
                 key={p.player + i}
-                onClick={() => onRowClick(p)}
                 className={cn(
-                  'cursor-pointer border-b-[#141824] hover:bg-card',
+                  'border-b-[#141824] hover:bg-card',
                   isNominated ? 'bg-[#0d1f1f]' : i % 2 !== 0 ? 'bg-[#0a0c10]' : undefined,
                 )}
                 style={{
@@ -128,15 +139,18 @@ export default function PlayerTable({
                 </TableCell>
                 <TableCell className="text-left">
                   <div className="flex items-center gap-1.5">
-                    <span
-                      className="text-[13px]"
+                    <button
+                      type="button"
+                      onClick={() => onRowClick(p)}
+                      aria-label={`Open bid modal for ${p.player}`}
+                      className="cursor-pointer rounded-sm border-0 bg-transparent p-0 text-left text-[13px] focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
                       style={{
                         fontWeight: isPkg ? 700 : 600,
                         color: isPkg ? 'var(--pos-pkg)' : 'var(--text-primary)',
                       }}
                     >
                       {p.player}
-                    </span>
+                    </button>
                     {isRookie && (
                       <span
                         className="rounded-[3px] px-1 py-px text-[8px] font-bold tracking-wide uppercase"

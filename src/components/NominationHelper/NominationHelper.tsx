@@ -146,7 +146,10 @@ export default function NominationHelper({ draftId, players }: NominationHelperP
   const hasAuctionData = data.auctionResults.length > 0;
 
   return (
-    <div className="flex min-h-screen bg-background text-foreground">
+    <div
+      data-testid="nomination-helper-layout"
+      className="flex min-h-screen flex-col bg-background text-foreground md:flex-row"
+    >
       <WatchlistSidebar
         players={players}
         nominated={data.nominated}
@@ -157,7 +160,7 @@ export default function NominationHelper({ draftId, players }: NominationHelperP
         onUnNominate={unNominatePlayer}
       />
 
-      <div className="flex-1 overflow-x-auto px-5 pt-4 pb-10">
+      <div className="min-w-0 flex-1 overflow-x-auto px-5 pt-4 pb-10">
         <div className="mb-3.5">
           <div className="font-label mb-0.5 text-[10px] tracking-[3px] text-muted-foreground uppercase">
             Nomination Helper

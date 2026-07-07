@@ -61,7 +61,20 @@ describe('PlayerTable', () => {
     const user = userEvent.setup();
     const { onSort } = renderTable();
 
-    await user.click(screen.getByText('Player'));
+    await user.click(screen.getByRole('button', { name: /sort by player/i }));
+
+    expect(onSort).toHaveBeenCalledWith('player');
+  });
+
+  it('sort headers can be operated with the keyboard', async () => {
+    const user = userEvent.setup();
+    const { onSort } = renderTable();
+
+    await user.tab();
+    await user.tab();
+    expect(screen.getByRole('button', { name: /sort by player/i })).toHaveFocus();
+
+    await user.keyboard('{Enter}');
 
     expect(onSort).toHaveBeenCalledWith('player');
   });
@@ -70,7 +83,17 @@ describe('PlayerTable', () => {
     const user = userEvent.setup();
     const { onRowClick } = renderTable();
 
-    await user.click(screen.getByText('Josh Allen'));
+    await user.click(screen.getByRole('button', { name: /open bid modal for josh allen/i }));
+
+    expect(onRowClick).toHaveBeenCalledWith(PLAYERS[0]);
+  });
+
+  it('row actions can be operated with the keyboard', async () => {
+    const user = userEvent.setup();
+    const { onRowClick } = renderTable();
+
+    screen.getByRole('button', { name: /open bid modal for josh allen/i }).focus();
+    await user.keyboard('{Enter}');
 
     expect(onRowClick).toHaveBeenCalledWith(PLAYERS[0]);
   });

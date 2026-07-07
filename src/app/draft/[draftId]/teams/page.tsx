@@ -34,6 +34,7 @@ export default async function TeamsPage({ params }: { params: Promise<{ draftId:
     ceiling: p.ceiling,
     floor: p.floor,
     notes: p.notes,
+    sleeperId: p.sleeperId,
   }));
 
   return (

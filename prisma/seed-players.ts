@@ -34,6 +34,7 @@ async function main() {
         baseBudget: p.budget,
         baseCeiling: p.ceiling,
         baseFloor: p.floor,
+        sleeperId: null,
         notes: p.notes,
         draftId: draft.id,
       })),

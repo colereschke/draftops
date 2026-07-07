@@ -1,4 +1,4 @@
-# DraftOps — Claude Context
+# DraftOps — Codex Context
 
 Fantasy football dynasty auction draft tool built for a 12-team Superflex Sleeper league. The owner (Cole, handle: `coreschke`) is using this during a live slow auction and plans to share it with the Establish The Run dynasty Discord for feedback.
 
@@ -54,25 +54,20 @@ src/
 ├── data/
 │   └── players.ts                    # ~267 ETR dynasty players — server-only seed source (NOT imported by client components)
 ├── lib/
-│   ├── actions.ts                    # Server actions: createDraft (seeds Player table w/ adjusted+base values), logBid, updateBid, deleteBid
-│   ├── budget.ts                     # computeTeamStats(teams, rosterSize) for /budget page
-│   ├── computeTeamStats.ts           # computeTeamStats(teams, players, rosterSize) for /teams page
+│   ├── actions.ts                    # Server actions: createDraft (seeds Player table), logBid, updateBid, deleteBid
+│   ├── budget.ts                     # computeTeamStats for /budget page
+│   ├── computeTeamStats.ts           # computeTeamStats(teams, players) for /teams page (players param, no static import)
 │   ├── db.ts                         # Prisma singleton using PrismaPg adapter (pg Pool)
 │   ├── draft.ts                      # getDraft(userId, draftId) — auth-gated draft lookup
-│   ├── nominationScoring.ts          # computeNominationScores(..., targetRoster) — core nomination logic
+│   ├── nominationScoring.ts          # computeNominationScores — core nomination logic
 │   ├── posColors.ts                  # POS_COLORS map (bg, accent, badge, badgeText per position)
-│   ├── projectionScoring.ts          # league-specific fantasy points from normalized projections
-│   ├── projectionVor.ts              # replacement level, VOR, projection auction values
-│   ├── valueAdjustment.ts            # adjustPlayerValues — #5b algorithm (scoring/scarcity/concentration multipliers)
-│   ├── valueAdjustment.constants.ts  # tunable calibration constants for the value adjustment algorithm (backend-only)
-│   └── teams.ts                      # LEAGUE_TEAMS — seed default only (prisma/seed.ts); runtime reads per-draft settings (#5b)
+│   └── teams.ts                      # LEAGUE_TEAMS, ROSTER_SIZE = 30, TARGET_ROSTER (ROSTER_SIZE used as fallback until #5b)
 └── types/
     └── index.ts                      # Player, Position, StartingSlot, ScoringSettings, DEFAULT_* constants,
                                       # TeamStats, AuctionResultEntry, RosterEntry, TeamWithRoster, ClaimedBid, LeagueTeam
 middleware.ts                         # Auth.js middleware — redirects unauthenticated users to /sign-in
 prisma/
 ├── schema.prisma                     # Draft + Team + AuctionResult + PlayerWatchlist + NominatedPlayer + Player
-├── apply-projection-values.ts        # Joins generated projections to draft Players and stores VOR outputs
 ├── seed.ts                           # Upserts default draft + 12 teams (idempotent)
 ├── seed-players.ts                   # Full-seed script: seeds Player rows for drafts with zero players (skips drafts that already have any)
 ├── sync-players.ts                   # Backfill script: inserts src/data/players.ts entries missing (by name) from each draft's Player table; idempotent, safe to re-run after adding new players
@@ -102,22 +97,22 @@ Five models — all data scoped to a `Draft`:
 - `AuctionResult` — one row per completed bid (player, position, nflTeam, price, sfRank, notes, teamId, draftId)
 - `PlayerWatchlist` — owner's personal watchlist; excluded from nomination suggestions; unique on `(playerName, draftId)`
 - `NominatedPlayer` — players currently up for bidding; shown with a teal "LIVE" badge; auto-removed when a bid is logged via `logBid`; unique on `(playerName, draftId)`
-- `Player` — per-draft value row. Stores fallback ETR-derived values and optional Sleeper identity. Projection data and projection-derived values live in separate tables.
-- `ProjectionSource` / `PlayerProjection` / `DraftPlayerValue` — source metadata, normalized source projection stats, and draft-specific projection valuation outputs.
 
 Derived values (computed at query time, not stored):
 
 - `spent = SUM(results.price)`
 - `remaining = budget - spent`
 - `rosterCount = COUNT(results)`
-- `buyingPower = remaining - (draft.rosterSize - rosterCount)` — classic auction math
+- `buyingPower = remaining - (ROSTER_SIZE - rosterCount)` — classic auction math
 - `delta = result.price - player.budget` — on each roster entry, how much over/under target
 
 ## Key Library Files
 
 **`src/lib/teams.ts`**
 
-- `LEAGUE_TEAMS` — 12 teams with handles + display names; used only by `prisma/seed.ts` to seed the default draft. Runtime roster size / position targets come from `draft.rosterSize` and `draft.targetRoster` (see `DEFAULT_TARGET_ROSTER` in `src/types`).
+- `LEAGUE_TEAMS` — 12 teams with handles + display names
+- `ROSTER_SIZE = 30`
+- `TARGET_ROSTER = { QB: 4, RB: 9, WR: 11, TE: 3 }` — used by nomination scoring
 
 **`src/lib/draft.ts`**
 
@@ -239,8 +234,6 @@ OWNER_DISCORD_ID=      # Your Discord user ID — seeds ownerId on the default d
 - **Multi-draft schema** — `Draft` model with `ownerId` + `ownerTeamId`; all data scoped to `draftId`; expand/contract migration complete (non-nullable, composite uniques)
 - **League settings** — `Draft` stores `teamCount`, `rosterSize`, `budget`, `startingLineup Json?`, `scoringSettings Json?`, `targetRoster Json?`; form has Roster Settings, Starting Lineup builder, and Scoring sections; QB/SUPER_FLEX lineup validation (PR #20)
 - **Per-draft Player table** — `Player` model scoped to `draftId`, seeded from ETR base values at draft creation; `age Float?`; `@@unique([name, draftId])`; `prisma/seed-players.ts` backfills existing drafts (PR #20)
-- **Value adjustment algorithm (#5b Phase 1)** — at draft creation, `adjustPlayerValues` (`src/lib/valueAdjustment.ts`) tunes each player's `budget`/`ceiling`/`floor` from base ETR values via three multipliers: per-position **scoring** (TE-premium is the dominant case; TE band widened), per-position **lineup-scarcity** (FLEX/SF demand flows to the scoring-favored position), and rank-based **concentration** tilt (teamCount × lineup size). `Player` now stores `baseBudget`/`baseCeiling`/`baseFloor` (untouched) alongside the adjusted trio. Only new drafts are adjusted — existing/live drafts keep `base = adjusted`, no recompute trigger yet. Runtime now reads `draft.rosterSize`/`draft.targetRoster` instead of the `ROSTER_SIZE`/`TARGET_ROSTER` constants. Calibration lives in `src/lib/valueAdjustment.constants.ts` (backend-only, TUNABLE). Phase 2 (Mike Clay projection dual-scoring, first-down historical rates, VOR concentration) is the fast-follow.
-- **Projection-aware VOR engine (#5e initial)** — generated Mike Clay projections can be joined to Sleeper-linked ETR values and applied to a draft with `pnpm tsx prisma/apply-projection-values.ts --draft-id <id>`. The script stores `Player.sleeperId`, source stats in `PlayerProjection`, and league-specific projected points/VOR/auction outputs in `DraftPlayerValue`. Projection values are written as a parallel value source; `activeAuctionValue` remains fallback by default. Rookie handling is asymmetric: low rookie projections do not reduce active value, but strong rookie projections can lift it when projection values are explicitly activated.
 - `/` — Value sheet with full player list (from DB), filters, search, sort, bid logging modal, budget tracker
 - `/teams` — Team roster tracker with expandable rows, spend/remaining/buying power per team, delta vs. target per player (players from DB)
 - `/budget` — Budget pressure view sorted by buying power with auto-refresh
@@ -258,18 +251,20 @@ Source: ETR dynasty rankings CSV (~267 players). Values scaled ×5 for $1,000 bu
 
 **Longer term** (see `ROADMAP.md`):
 
-- #5b Value adjustment algorithm — **Phase 1 (position-level) done**: settings→value plumbing + scoring/scarcity/concentration multipliers + `rosterSize`/`targetRoster` rewiring. Spec: `docs/superpowers/specs/2026-07-06-value-adjustment-algorithm-design.md`. **Phase 2** (fast-follow) layers per-player Mike Clay projection dual-scoring on top, adds first-down historical rates, and swaps the concentration median pivot for value-over-replacement.
+- #5b Value adjustment algorithm — tunes player budget/ceiling/floor based on league settings delta from baseline. `rosterSize` is stored on `Draft` but `computeTeamStats` still uses the `ROSTER_SIZE` constant — #5b wires those together.
 - #5c Sleeper league import — auto-populate draft settings from a Sleeper league ID
 - #6 UI redesign (Linear/Vercel aesthetic, shadcn/ui shortlisted) — after deploy milestone
 - #7 Custom rankings upload CSV — adds upload UI on top of the Player model from #5a
 
 ## Global Rules
 
-**Read before touching.** Before making any change in the repo, read the repo's `CLAUDE.md`. It contains the stack, layout, conventions, and repo-specific constraints that take precedence over general intuition.
+**Read before touching.** Before making any change in the repo, read the repo's `AGENTS.md`. It contains the stack, layout, conventions, and repo-specific constraints that take precedence over general intuition.
 
 **Don't commit trivial superpowers docs.** Design specs and implementation plans generated during a superpowers workflow should only be committed when the work is non-trivial enough that future-you would want to understand why a design decision was made. For simple, self-evident work, clean up generated spec/plan files at the end of the workflow — don't commit them.
 
 **Keep PRs clean.** Don't let extraneous files (scratch notes, generated docs, debug artifacts, unrelated changes) into PRs. This can be overridden if explicitly requested, but the default is a clean diff that contains only what the PR describes.
+
+**PR creation workflow.** The GitHub connector may be able to read PRs but fail to create them with `403 Resource not accessible by integration`, and sandboxed `gh` may not be authenticated. After pushing the branch, try `gh auth status` and `gh pr create` with elevated/outside-sandbox permissions; this repo has worked with the local authenticated `gh` token in that mode. Use the intended base branch explicitly for stacked PRs, for example `gh pr create --draft --base worktree-value-adjustment-algorithm --head projection-aware-vor-engine`.
 
 **No author attribution in commits.** Do not add `Co-Authored-By`, `Author:`, or any other authorship lines to commit messages.
 

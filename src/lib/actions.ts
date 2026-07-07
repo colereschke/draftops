@@ -158,6 +158,7 @@ export async function createDraft(data: {
         baseBudget: p.baseBudget,
         baseCeiling: p.baseCeiling,
         baseFloor: p.baseFloor,
+        sleeperId: null,
         notes: p.notes,
         draftId: draft.id,
       })),

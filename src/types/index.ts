@@ -10,6 +10,7 @@ export interface Player {
   ceiling: number;
   floor: number;
   notes: string;
+  sleeperId?: string | null;
 }
 
 export interface TeamStats {

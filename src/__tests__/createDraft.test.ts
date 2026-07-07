@@ -197,4 +197,16 @@ describe('createDraft', () => {
     const te = payload.find((r) => r.pos === 'TE')!;
     expect(te.budget).toBeGreaterThan(te.baseBudget);
   });
+
+  it('initializes sleeper identity as unmapped for seeded players', async () => {
+    await createDraft(VALID_INPUT);
+
+    const payload = mockTxPlayerCreateMany.mock.calls[0][0].data as Array<{
+      sleeperId?: string | null;
+      projectionAuctionValue?: number | null;
+    }>;
+
+    expect(payload[0].sleeperId ?? null).toBeNull();
+    expect('projectionAuctionValue' in payload[0]).toBe(false);
+  });
 });

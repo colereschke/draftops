@@ -55,6 +55,7 @@ export default async function DraftHomePage({ params }: { params: Promise<{ draf
     ceiling: p.ceiling,
     floor: p.floor,
     notes: p.notes,
+    sleeperId: p.sleeperId,
   }));
 
   return (

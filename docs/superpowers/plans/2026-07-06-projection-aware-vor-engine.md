@@ -4,7 +4,7 @@
 
 **Goal:** Add the first projection-aware valuation path: Sleeper-linked ETR values, fantasy-point calculation from normalized projections, replacement-level/VOR calculation, and projection auction values stored separately from fallback values.
 
-**Architecture:** Keep generated projection CSVs local and ignored, but persist the app-facing outputs on the per-draft `Player` rows. Use Python only for reproducible CSV identity mapping, and TypeScript for app valuation math. The existing fallback `budget` remains the active app value in this phase unless an explicit apply script writes projection values.
+**Architecture:** Keep generated projection CSVs local and ignored, persist `sleeperId` on `Player` as shared identity, and store projection/value outputs in separate projection tables. Use Python only for reproducible CSV identity mapping, and TypeScript for app valuation math. The existing fallback `budget` remains the active app value in this phase unless an explicit value-source workflow changes it.
 
 **Tech Stack:** Next.js 16 App Router, TypeScript 5 strict mode, Prisma 7/Postgres, Jest, Python projection ETL scripts.
 
@@ -12,32 +12,185 @@
 
 ## Projection Storage Decision
 
-Use **CSV-driven raw projections short-term, separate canonical projection data long-term, and
-denormalized calculated outputs on `Player` for the first app integration.**
+Superseded by `docs/superpowers/specs/2026-07-07-projection-value-storage-design.md`.
+
+Use **CSV-driven raw projections, `Player.sleeperId` for identity, and separate persistence for
+projection-derived values.**
 
 This means #5e should:
 
-- Store `sleeperId` on the per-draft `Player` row because DraftOps needs a stable identity key for
-  projection joins, roster sync, and custom rankings.
-- Store calculated, draft-specific outputs on `Player`: `projectedPoints`, `replacementPoints`,
-  `vor`, `projectionAuctionValue`, `fallbackAuctionValue`, `activeAuctionValue`, `valueSource`,
-  and projection metadata.
-- Keep raw projection stats in ignored generated CSVs for this phase. The ETL is reproducible, and
-  raw stats are not yet user-editable app state.
-- Avoid adding raw stat columns such as `passYds`, `rushTd`, or `receptions` to `Player`.
+- Store only `sleeperId` on the per-draft `Player` row.
+- Store source-specific projected points in `PlayerProjection`.
+- Store draft-specific replacement/VOR/auction outputs in `DraftPlayerValue`.
+- Keep raw projection stats in ignored generated CSVs for this phase.
+- Avoid adding raw stat columns such as `passYds`, `rushTd`, or `receptions` to app tables.
 
-This deliberately chooses a bridge between roadmap options 2 and 3:
+This is the long-term shape now, not a bridge that intentionally needs a follow-up schema reversal.
 
-- It does **not** bloat `Player` with raw projection source data.
-- It does persist the calculated app-facing values where the current UI and server components can
-  read them cheaply.
-- It leaves a clean long-term migration path to canonical tables like `ProjectionSource`,
-  `PlayerProjection`, and `DraftProjectionValue` once multiple projection sources or source history
-  matter.
+`Player.budget`, `Player.ceiling`, and `Player.floor` remain the fallback rankings-derived values
+from #5b.
 
-Do not build the canonical projection tables in this PR unless the CSV-driven approach blocks
-correctness. The first user value is getting projection-aware VOR into the app model without
-turning one Mike Clay PDF into permanent schema shape.
+## Storage Correction Plan
+
+The first implementation pass stored projection-derived columns on `Player`. Correct that before
+opening the PR.
+
+### Task A: Move Projection Persistence Out of Player
+
+**Files:**
+
+- Modify: `prisma/schema.prisma`
+- Replace: `prisma/migrations/20260706203000_player_projection_values/migration.sql`
+- Modify: `src/types/index.ts`
+- Modify: `src/lib/actions.ts`
+- Modify: `prisma/seed-players.ts`
+- Modify: `prisma/sync-players.ts`
+- Modify: `src/app/draft/[draftId]/page.tsx`
+- Modify: `src/app/draft/[draftId]/nominate/page.tsx`
+- Modify: `src/app/draft/[draftId]/teams/page.tsx`
+- Modify: `src/__tests__/createDraft.test.ts`
+
+- [ ] **Step 1: Update the create-draft test**
+
+Replace the fallback metadata assertion with a Sleeper identity assertion:
+
+```ts
+it('initializes sleeper identity as unmapped for seeded players', async () => {
+  await createDraft(VALID_INPUT);
+
+  const payload = mockTxPlayerCreateMany.mock.calls[0][0].data as Array<{
+    sleeperId?: string | null;
+    projectionAuctionValue?: number | null;
+  }>;
+
+  expect(payload[0].sleeperId ?? null).toBeNull();
+  expect('projectionAuctionValue' in payload[0]).toBe(false);
+});
+```
+
+- [ ] **Step 2: Update Prisma schema**
+
+Keep this on `Player`:
+
+```prisma
+sleeperId String?
+```
+
+Add:
+
+```prisma
+model ProjectionSource {
+  id             Int      @id @default(autoincrement())
+  name           String
+  season         Int
+  projectionDate DateTime?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  projections PlayerProjection[]
+  draftValues DraftPlayerValue[]
+
+  @@unique([name, season, projectionDate])
+}
+
+model PlayerProjection {
+  id                 Int    @id @default(autoincrement())
+  sleeperId          String
+  position           String
+  projectedPoints    Float
+  projectionSourceId Int
+
+  source ProjectionSource @relation(fields: [projectionSourceId], references: [id])
+
+  @@unique([sleeperId, projectionSourceId])
+  @@index([sleeperId])
+}
+
+model DraftPlayerValue {
+  id                     Int      @id @default(autoincrement())
+  draftId                Int
+  playerId               Int
+  projectionSourceId     Int?
+  projectedPoints        Float?
+  replacementPoints      Float?
+  vor                    Float?
+  projectionAuctionValue Int?
+  fallbackAuctionValue   Int
+  activeAuctionValue     Int
+  valueSource            String   @default("fallback")
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+
+  draft            Draft             @relation(fields: [draftId], references: [id])
+  player           Player            @relation(fields: [playerId], references: [id])
+  projectionSource ProjectionSource? @relation(fields: [projectionSourceId], references: [id])
+
+  @@unique([draftId, playerId, projectionSourceId])
+  @@index([draftId])
+  @@index([playerId])
+}
+```
+
+- [ ] **Step 3: Replace the migration**
+
+Use a migration that adds `Player.sleeperId`, creates the three new tables, and creates the required
+indexes/uniques. It must not add projection-derived columns to `Player`.
+
+- [ ] **Step 4: Remove projection defaults from Player create paths**
+
+Only initialize `sleeperId: null` in `src/lib/actions.ts`, `prisma/seed-players.ts`, and
+`prisma/sync-players.ts`.
+
+- [ ] **Step 5: Remove projection-derived fields from app Player mapping/types**
+
+Keep `sleeperId?: string | null` on the app `Player` type. Remove `projectedPoints`,
+`replacementPoints`, `vor`, `projectionAuctionValue`, `fallbackAuctionValue`, `activeAuctionValue`,
+`valueSource`, `projectionSource`, `projectionDate`, and `projectionSeason` from `Player`.
+
+- [ ] **Step 6: Verify**
+
+Run:
+
+```bash
+pnpm prisma generate
+pnpm jest createDraft -t "initializes sleeper identity as unmapped"
+pnpm tsc --noEmit
+```
+
+### Task B: Write Projection Values to Dedicated Tables
+
+**Files:**
+
+- Modify: `prisma/apply-projection-values.ts`
+- Modify: `src/__tests__/projectionApply.test.ts`
+- Modify: `scripts/projections/README.md`
+- Modify: `CLAUDE.md`
+
+- [ ] **Step 1: Update projection apply tests**
+
+Add tests for grouping rows by projection source and joining players to projections without relying
+on projection fields on `Player`.
+
+- [ ] **Step 2: Update apply script persistence**
+
+The script should upsert `ProjectionSource`, upsert `PlayerProjection`, update `Player.sleeperId`,
+calculate VOR values, and upsert `DraftPlayerValue`.
+
+- [ ] **Step 3: Update docs**
+
+Document that raw stats remain CSV-only, projection points live in `PlayerProjection`, and
+draft-specific VOR values live in `DraftPlayerValue`.
+
+- [ ] **Step 4: Full verification**
+
+Run:
+
+```bash
+PYTHONPATH=scripts/projections /home/colereschke/dev/projects/draftops/.claude/worktrees/projection-etl/.venv/bin/python -m pytest scripts/projections/tests -q
+pnpm tsc --noEmit
+pnpm lint
+pnpm test
+```
 
 ## Rookie Projection Policy
 

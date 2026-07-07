@@ -51,6 +51,49 @@ IDs so rankings values can be joined to projection values:
 
 `data/generated/etr_sleeper_matches.csv` is generated output and should not be edited manually.
 
+## Apply Projection Values to a Draft
+
+After `master_projections.csv` and `etr_sleeper_matches.csv` exist, apply projection-aware VOR
+values to one draft's `Player` rows:
+
+```bash
+pnpm tsx prisma/apply-projection-values.ts --draft-id <draft-id>
+```
+
+The script defaults to these generated inputs:
+
+```text
+data/generated/master_projections.csv
+data/generated/etr_sleeper_matches.csv
+```
+
+You can override either path:
+
+```bash
+pnpm tsx prisma/apply-projection-values.ts \
+  --draft-id <draft-id> \
+  --projections-csv data/generated/master_projections.csv \
+  --etr-matches-csv data/generated/etr_sleeper_matches.csv
+```
+
+The script stores Sleeper identity plus calculated value outputs on `Player`:
+
+```text
+sleeperId
+projectedPoints
+replacementPoints
+vor
+projectionAuctionValue
+fallbackAuctionValue
+activeAuctionValue
+valueSource
+projectionSource
+projectionDate
+projectionSeason
+```
+
+Raw projection stats remain CSV input for now. Do not manually edit generated CSVs.
+
 ## Checks
 
 ```bash

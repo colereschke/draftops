@@ -61,6 +61,8 @@ src/
 │   ├── draft.ts                      # getDraft(userId, draftId) — auth-gated draft lookup
 │   ├── nominationScoring.ts          # computeNominationScores(..., targetRoster) — core nomination logic
 │   ├── posColors.ts                  # POS_COLORS map (bg, accent, badge, badgeText per position)
+│   ├── projectionScoring.ts          # league-specific fantasy points from normalized projections
+│   ├── projectionVor.ts              # replacement level, VOR, projection auction values
 │   ├── valueAdjustment.ts            # adjustPlayerValues — #5b algorithm (scoring/scarcity/concentration multipliers)
 │   ├── valueAdjustment.constants.ts  # tunable calibration constants for the value adjustment algorithm (backend-only)
 │   └── teams.ts                      # LEAGUE_TEAMS — seed default only (prisma/seed.ts); runtime reads per-draft settings (#5b)
@@ -70,6 +72,7 @@ src/
 middleware.ts                         # Auth.js middleware — redirects unauthenticated users to /sign-in
 prisma/
 ├── schema.prisma                     # Draft + Team + AuctionResult + PlayerWatchlist + NominatedPlayer + Player
+├── apply-projection-values.ts        # Joins generated projections to draft Players and stores VOR outputs
 ├── seed.ts                           # Upserts default draft + 12 teams (idempotent)
 ├── seed-players.ts                   # Full-seed script: seeds Player rows for drafts with zero players (skips drafts that already have any)
 ├── sync-players.ts                   # Backfill script: inserts src/data/players.ts entries missing (by name) from each draft's Player table; idempotent, safe to re-run after adding new players
@@ -99,6 +102,7 @@ Five models — all data scoped to a `Draft`:
 - `AuctionResult` — one row per completed bid (player, position, nflTeam, price, sfRank, notes, teamId, draftId)
 - `PlayerWatchlist` — owner's personal watchlist; excluded from nomination suggestions; unique on `(playerName, draftId)`
 - `NominatedPlayer` — players currently up for bidding; shown with a teal "LIVE" badge; auto-removed when a bid is logged via `logBid`; unique on `(playerName, draftId)`
+- `Player` — per-draft value row. Stores fallback ETR-derived values, optional Sleeper identity, and optional projection-aware calculated outputs (`projectedPoints`, `replacementPoints`, `vor`, `projectionAuctionValue`, `activeAuctionValue`, `valueSource`, projection metadata). Raw projection stats stay in generated CSV input for now.
 
 Derived values (computed at query time, not stored):
 
@@ -235,6 +239,7 @@ OWNER_DISCORD_ID=      # Your Discord user ID — seeds ownerId on the default d
 - **League settings** — `Draft` stores `teamCount`, `rosterSize`, `budget`, `startingLineup Json?`, `scoringSettings Json?`, `targetRoster Json?`; form has Roster Settings, Starting Lineup builder, and Scoring sections; QB/SUPER_FLEX lineup validation (PR #20)
 - **Per-draft Player table** — `Player` model scoped to `draftId`, seeded from ETR base values at draft creation; `age Float?`; `@@unique([name, draftId])`; `prisma/seed-players.ts` backfills existing drafts (PR #20)
 - **Value adjustment algorithm (#5b Phase 1)** — at draft creation, `adjustPlayerValues` (`src/lib/valueAdjustment.ts`) tunes each player's `budget`/`ceiling`/`floor` from base ETR values via three multipliers: per-position **scoring** (TE-premium is the dominant case; TE band widened), per-position **lineup-scarcity** (FLEX/SF demand flows to the scoring-favored position), and rank-based **concentration** tilt (teamCount × lineup size). `Player` now stores `baseBudget`/`baseCeiling`/`baseFloor` (untouched) alongside the adjusted trio. Only new drafts are adjusted — existing/live drafts keep `base = adjusted`, no recompute trigger yet. Runtime now reads `draft.rosterSize`/`draft.targetRoster` instead of the `ROSTER_SIZE`/`TARGET_ROSTER` constants. Calibration lives in `src/lib/valueAdjustment.constants.ts` (backend-only, TUNABLE). Phase 2 (Mike Clay projection dual-scoring, first-down historical rates, VOR concentration) is the fast-follow.
+- **Projection-aware VOR engine (#5e initial)** — generated Mike Clay projections can be joined to Sleeper-linked ETR values and applied to a draft with `pnpm tsx prisma/apply-projection-values.ts --draft-id <id>`. The script stores calculated outputs on `Player` while keeping raw projection stats in generated CSVs. Projection values are written as a parallel value source; `activeAuctionValue` remains fallback by default. Rookie handling is asymmetric: low rookie projections do not reduce active value, but strong rookie projections can lift it when projection values are explicitly activated.
 - `/` — Value sheet with full player list (from DB), filters, search, sort, bid logging modal, budget tracker
 - `/teams` — Team roster tracker with expandable rows, spend/remaining/buying power per team, delta vs. target per player (players from DB)
 - `/budget` — Budget pressure view sorted by buying power with auto-refresh

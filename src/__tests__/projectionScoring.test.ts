@@ -42,3 +42,29 @@ it('applies position-specific PPR for receiving stats', () => {
 
   expect(calculateProjectedPoints(te, { ...DEFAULT_SCORING_SETTINGS, pprTE: 2 })).toBeCloseTo(298);
 });
+
+it('estimates rushing and receiving first-down bonuses by position', () => {
+  const rb: ProjectionStats = {
+    ...qb,
+    position: 'RB',
+    passYds: 0,
+    passTd: 0,
+    passInt: 0,
+    rushAtt: 100,
+    rushYds: 500,
+    rushTd: 5,
+    targets: 60,
+    receptions: 40,
+    recYds: 300,
+    recTd: 2,
+  };
+
+  expect(
+    calculateProjectedPoints(rb, {
+      ...DEFAULT_SCORING_SETTINGS,
+      rushFD: 0.5,
+      recFD: 0.25,
+      rbFDBonus: 0.25,
+    }),
+  ).toBeCloseTo(185.05);
+});

@@ -134,7 +134,7 @@ def _first_numeric_token_index(tokens: list[str]) -> int | None:
 
 def _is_number(token: str) -> bool:
     try:
-        float(token)
+        _parse_number(token)
     except ValueError:
         return False
     return True

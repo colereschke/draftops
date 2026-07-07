@@ -35,6 +35,17 @@ def test_parse_offensive_projection_line_handles_suffix_and_apostrophe_names() -
     assert row.rec_yds == 956
 
 
+def test_parse_offensive_projection_line_handles_comma_formatted_numbers() -> None:
+    row = parse_offensive_projection_line(
+        "QB Josh Allen 17 509 340 3,945 26 12 36 116 579 12 0 0 0 0 369 1",
+        team="BUF",
+        source_page=5,
+    )
+
+    assert row is not None
+    assert row.pass_yds == 3945
+
+
 def test_parse_offensive_projection_line_skips_total_and_unsupported_rows() -> None:
     assert (
         parse_offensive_projection_line(

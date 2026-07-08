@@ -285,6 +285,10 @@ import {
 
 export type Appetite = 'overpays' | 'neutral' | 'thrifty' | 'no-read';
 
+// Re-export so consumers can pull the position type from one module (@/lib/tendencies)
+// alongside the tendency types, rather than reaching into the constants file.
+export type { AppetitePos } from './tendencies.constants';
+
 export interface PositionTendency {
   position: AppetitePos;
   buys: number;
@@ -1175,15 +1179,7 @@ const makeTendency = (over: Partial<ManagerTendency> = {}): ManagerTendency => (
 
 describe('RosterTracker', () => {
   it('renders a dossier card per team and pins the owner first', () => {
-    const teams = [
-      makeTeam({
-        id: 2,
-        handle: 'rival_b',
-        displayName: 'B',
-        totalSpend: 500,
-      } as Partial<TeamWithRoster>),
-      makeTeam(),
-    ];
+    const teams = [makeTeam({ id: 2, handle: 'rival_b', displayName: 'B' }), makeTeam()];
     const tendencies = [makeTendency({ teamId: 2, handle: 'rival_b' }), makeTendency()];
     render(<RosterTracker teams={teams} tendencies={tendencies} ownerHandle="coreschke" />);
     const cards = screen.getAllByTestId(/^dossier-card-/);
@@ -1854,15 +1850,94 @@ export default async function BudgetPage({ params }: { params: Promise<{ draftId
 }
 ```
 
-- [ ] **Step 3: Typecheck + run budget-related tests**
+- [ ] **Step 3: Replace the orphaned BudgetPressureView test**
 
-Run: `pnpm tsc --noEmit && pnpm test src/__tests__/ThreatBoard.test.tsx`
+The existing `src/__tests__/components/BudgetPressureView.test.tsx` renders the old two-prop signature (`teams`, `ownerHandle`) and asserts on removed testids (`bp-1`, `row-coreschke`, `$800`, buying-power colors). It will fail typecheck (missing required props) and its assertions are obsolete. Replace the whole file:
+
+```tsx
+// src/__tests__/components/BudgetPressureView.test.tsx  (replace file contents)
+import { render, screen } from '@testing-library/react';
+import BudgetPressureView from '@/components/BudgetPressure/BudgetPressureView';
+import type { TeamStats } from '@/types';
+import type { ManagerTendency, Appetite, AppetitePos } from '@/lib/tendencies';
+
+const stats = (id: number, handle: string, buyingPower: number): TeamStats => ({
+  id,
+  handle,
+  displayName: handle,
+  budget: 1000,
+  spent: 0,
+  remaining: buyingPower + 20,
+  rosterCount: 5,
+  rosterRemaining: 20,
+  buyingPower,
+  pkgCount: 0,
+});
+
+const posT = (position: AppetitePos, appetite: Appetite) => ({
+  position,
+  buys: 3,
+  spend: 0,
+  valueSum: 0,
+  deltaSum: 0,
+  avgDelta: null,
+  overPct: null,
+  spendShare: 0,
+  appetite,
+});
+
+const tend = (teamId: number, handle: string): ManagerTendency => ({
+  teamId,
+  handle,
+  displayName: handle,
+  buys: 5,
+  totalSpend: 500,
+  totalValue: 480,
+  overallOverPct: 0.04,
+  topBuy: 120,
+  lean: 'balanced',
+  aggression: 'neutral',
+  positions: {
+    QB: posT('QB', 'neutral'),
+    RB: posT('RB', 'neutral'),
+    WR: posT('WR', 'neutral'),
+    TE: posT('TE', 'neutral'),
+  },
+});
+
+const teams: TeamStats[] = [stats(1, 'coreschke', 660), stats(2, 'rival_b', 40)];
+const tendencies = [tend(1, 'coreschke'), tend(2, 'rival_b')];
+
+describe('BudgetPressureView', () => {
+  it('renders secondary market metrics and the threat board', () => {
+    render(
+      <BudgetPressureView
+        teams={teams}
+        tendencies={tendencies}
+        livePosition="WR"
+        liveName="Puka Nacua"
+        ownerHandle="coreschke"
+      />,
+    );
+    // Room Liquidity = 660 + 40 = 700; Low Power = 1 team under $50.
+    expect(screen.getByText('$700')).toBeInTheDocument();
+    expect(screen.getByText('1 teams')).toBeInTheDocument();
+    // ThreatBoard is mounted with a row per team.
+    expect(screen.getByTestId('threat-row-coreschke')).toBeInTheDocument();
+    expect(screen.getByTestId('threat-row-rival_b')).toBeInTheDocument();
+  });
+});
+```
+
+- [ ] **Step 4: Typecheck + run budget-related tests**
+
+Run: `pnpm tsc --noEmit && pnpm test src/__tests__/ThreatBoard.test.tsx src/__tests__/components/BudgetPressureView.test.tsx`
 Expected: PASS. (`prisma.nominatedPlayer` and `player.select` match the schema in `prisma/schema.prisma`.)
 
-- [ ] **Step 4: Commit**
+- [ ] **Step 5: Commit**
 
 ```bash
-git add src/components/BudgetPressure/BudgetPressureView.tsx src/app/draft/[draftId]/budget/page.tsx
+git add src/components/BudgetPressure/BudgetPressureView.tsx src/app/draft/[draftId]/budget/page.tsx src/__tests__/components/BudgetPressureView.test.tsx
 git commit -m "feat: Budget Pressure -> live threat board wiring"
 ```
 
@@ -1877,7 +1952,7 @@ git commit -m "feat: Budget Pressure -> live threat board wiring"
 - [ ] **Step 1: Run the full gate**
 
 Run: `pnpm tsc --noEmit && pnpm lint && pnpm test`
-Expected: all PASS. If any BudgetPressure/RosterTracker snapshot or old test references the removed `RosterTable` or old props, update it to the new shape (search: `grep -rn "RosterTable\|Most Dangerous\|Your Rank" src/__tests__`).
+Expected: all PASS. If any BudgetPressure/RosterTracker test references the removed `RosterTable`, old props, or removed testids, update it to the new shape (search: `grep -rn "RosterTable\|Most Dangerous\|Your Rank\|bp-[0-9]\|row-coreschke" src/__tests__`). Note: `src/__tests__/components/BudgetPressureView.test.tsx` is already rewritten in Task 8 — confirm it passes here.
 
 - [ ] **Step 2: Update CLAUDE.md**
 
@@ -1924,3 +1999,12 @@ Run: `make dev`, open `/draft/<id>/teams` and `/draft/<id>/budget`. Confirm: dos
 **Type consistency:** `ManagerTendency`/`PositionTendency`/`Appetite`/`AppetitePos`/`TendencyTeamInput` defined in Task 2/1 and used verbatim in Tasks 3–8. `computeTendencies(teams, players)` signature matches its call sites (teams page passes `rawTeams`+`players`; budget page passes `teams`+`{player,budget}[]`). `maxBid`/`threatScore`/`appetiteMultiplier` signatures consistent across Tasks 3, 7. ThreatBoard `livePosition: AppetitePos | null` matches the page's resolved value. ✓
 
 One consistency note: the ThreatBoard `ranked` map looks up tendencies via `tendencies.find(t => t.teamId === team.id)`, matching `ManagerTendency.teamId` (there is no `id` field on `ManagerTendency`).
+
+## Opus Pre-Execution Review — Applied Fixes
+
+A critical Opus review ran against the real codebase before execution. Two CRITICAL issues were found and fixed inline:
+
+1. **`AppetitePos` re-export (C1):** four consumers import `AppetitePos` from `@/lib/tendencies`, but Task 2 only imported it internally. Task 2 now re-exports it (`export type { AppetitePos } from './tendencies.constants'`).
+2. **Orphaned `BudgetPressureView.test.tsx` (C2):** the existing test at `src/__tests__/components/BudgetPressureView.test.tsx` used the old two-prop signature and removed testids (`bp-1`, `row-coreschke`) — a guaranteed `tsc`/test failure. Task 8 Step 3 now rewrites it for the new props + ThreatBoard delegation, and the Task 9 grep was widened (`bp-[0-9]`, `row-coreschke`) so an orphaned test can't slip through again.
+
+All other API usage, Prisma calls, tendency/threat math, and the derive-not-effect override design were verified correct by the review.

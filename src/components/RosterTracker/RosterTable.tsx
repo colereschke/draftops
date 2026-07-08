@@ -2,7 +2,6 @@
 
 import { ArrowUp, ArrowDown, ArrowUpDown, ChevronRight } from 'lucide-react';
 import type { TeamWithRoster } from '@/types';
-import { ROSTER_SIZE } from '@/lib/teams';
 import { cn } from '@/lib/utils';
 import {
   Table,
@@ -150,7 +149,7 @@ export default function RosterTable({
                   )}
                 </TableCell>
                 <TableCell className="text-center font-mono text-xs text-secondary-fg tabular-nums">
-                  {team.rosterCount} / {ROSTER_SIZE}
+                  {team.rosterCount} / {team.rosterCount + team.rosterRemaining}
                 </TableCell>
                 <TableCell className="text-center">
                   {team.pkgCount > 0 && (

@@ -46,6 +46,7 @@ describe('NominationHelper UI', () => {
         watchlist: [],
         nominated: [],
         ownerHandle: null,
+        targetRoster: { QB: 4, RB: 9, WR: 11, TE: 3 },
       }),
     } as Response);
   });

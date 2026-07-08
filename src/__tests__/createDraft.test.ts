@@ -1,5 +1,6 @@
 import { createDraft } from '@/lib/actions';
 import type { StartingSlot } from '@/types';
+import { players as BASE_PLAYERS } from '@/data/players';
 
 const mockAuth = jest.fn();
 const mockTransaction = jest.fn();
@@ -170,5 +171,42 @@ describe('createDraft', () => {
       ceiling: expect.any(Number),
       floor: expect.any(Number),
     });
+  });
+
+  it('records base values verbatim and lifts TE budgets under a TE premium', async () => {
+    await createDraft({
+      ...VALID_INPUT,
+      scoringSettings: { ...VALID_INPUT.scoringSettings, pprTE: 2 },
+    });
+
+    const payload = mockTxPlayerCreateMany.mock.calls[0][0].data as Array<{
+      name: string;
+      pos: string;
+      budget: number;
+      baseBudget: number;
+      baseCeiling: number;
+      baseFloor: number;
+    }>;
+
+    // Row order mirrors BASE_PLAYERS — base columns are the untouched source values.
+    expect(payload[0].baseBudget).toBe(BASE_PLAYERS[0].budget);
+    expect(payload[0].baseCeiling).toBe(BASE_PLAYERS[0].ceiling);
+    expect(payload[0].baseFloor).toBe(BASE_PLAYERS[0].floor);
+
+    // A 2x TE premium unambiguously lifts adjusted TE budgets above their base.
+    const te = payload.find((r) => r.pos === 'TE')!;
+    expect(te.budget).toBeGreaterThan(te.baseBudget);
+  });
+
+  it('initializes sleeper identity as unmapped for seeded players', async () => {
+    await createDraft(VALID_INPUT);
+
+    const payload = mockTxPlayerCreateMany.mock.calls[0][0].data as Array<{
+      sleeperId?: string | null;
+      projectionAuctionValue?: number | null;
+    }>;
+
+    expect(payload[0].sleeperId ?? null).toBeNull();
+    expect('projectionAuctionValue' in payload[0]).toBe(false);
   });
 });

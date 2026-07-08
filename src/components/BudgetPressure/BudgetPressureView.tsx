@@ -1,5 +1,4 @@
 import type { TeamStats } from '@/types';
-import { ROSTER_SIZE } from '@/lib/teams';
 import { cn } from '@/lib/utils';
 import BudgetRefresher from './BudgetRefresher';
 import {
@@ -133,7 +132,7 @@ export default function BudgetPressureView({ teams, ownerHandle }: BudgetPressur
                     ${team.remaining}
                   </TableCell>
                   <TableCell className="text-center font-mono text-xs text-secondary-fg tabular-nums">
-                    {team.rosterCount} / {ROSTER_SIZE}
+                    {team.rosterCount} / {team.rosterCount + team.rosterRemaining}
                   </TableCell>
                   <TableCell className="min-w-[180px]">
                     <div className="flex items-center gap-2.5">

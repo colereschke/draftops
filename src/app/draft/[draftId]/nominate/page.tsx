@@ -29,6 +29,7 @@ export default async function NominatePage({ params }: { params: Promise<{ draft
     ceiling: p.ceiling,
     floor: p.floor,
     notes: p.notes,
+    sleeperId: p.sleeperId,
   }));
 
   return <NominationHelper draftId={draftId} players={players} />;

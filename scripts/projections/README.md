@@ -37,6 +37,81 @@ data/generated/projection_match_report.csv
 data/generated/unmatched_players.csv
 ```
 
+## Match ETR Values to Sleeper
+
+After generating/refreshing Sleeper player data, match the original ETR dynasty values to Sleeper
+IDs so rankings values can be joined to projection values:
+
+```bash
+.venv/bin/python -m draftops_projections.match_etr_values \
+  --etr-csv existing_project_docs/auction-tool/src/Dynasty_Rankings.csv \
+  --sleeper-json data/raw/sleeper_players.json \
+  --output-csv data/generated/etr_sleeper_matches.csv
+```
+
+`data/generated/etr_sleeper_matches.csv` is generated output and should not be edited manually.
+
+## Apply Projection Values to a Draft
+
+After `master_projections.csv` and `etr_sleeper_matches.csv` exist, apply projection-aware VOR
+values to one draft's `Player` rows:
+
+```bash
+pnpm tsx prisma/apply-projection-values.ts --draft-id <draft-id>
+```
+
+The script defaults to these generated inputs:
+
+```text
+data/generated/master_projections.csv
+data/generated/etr_sleeper_matches.csv
+```
+
+You can override either path:
+
+```bash
+pnpm tsx prisma/apply-projection-values.ts \
+  --draft-id <draft-id> \
+  --projections-csv data/generated/master_projections.csv \
+  --etr-matches-csv data/generated/etr_sleeper_matches.csv
+```
+
+The script stores Sleeper identity on `Player`, normalized source stats on `PlayerProjection`, and
+draft-specific calculated value outputs on `DraftPlayerValue`.
+
+```text
+Player.sleeperId
+
+PlayerProjection.sleeperId
+PlayerProjection.position
+PlayerProjection.games
+PlayerProjection.passAtt
+PlayerProjection.passCmp
+PlayerProjection.passYds
+PlayerProjection.passTd
+PlayerProjection.passInt
+PlayerProjection.passSacks
+PlayerProjection.rushAtt
+PlayerProjection.rushYds
+PlayerProjection.rushTd
+PlayerProjection.targets
+PlayerProjection.receptions
+PlayerProjection.recYds
+PlayerProjection.recTd
+PlayerProjection.baseFantasyPoints
+PlayerProjection.projectionRank
+
+DraftPlayerValue.projectedPoints
+DraftPlayerValue.replacementPoints
+DraftPlayerValue.vor
+DraftPlayerValue.projectionAuctionValue
+DraftPlayerValue.fallbackAuctionValue
+DraftPlayerValue.activeAuctionValue
+DraftPlayerValue.valueSource
+```
+
+Do not manually edit generated CSVs.
+
 ## Checks
 
 ```bash

@@ -7,6 +7,7 @@ import { prisma } from '@/lib/db';
 import { getDraft } from '@/lib/draft';
 import type { Position, StartingSlot, ScoringSettings } from '@/types';
 import { players as BASE_PLAYERS } from '@/data/players';
+import { adjustPlayerValues } from '@/lib/valueAdjustment';
 
 export async function logBid(data: {
   player: string;
@@ -138,8 +139,14 @@ export async function createDraft(data: {
 
     await tx.draft.update({ where: { id: draft.id }, data: { ownerTeamId } });
 
+    const valued = adjustPlayerValues(BASE_PLAYERS, {
+      startingLineup: data.startingLineup,
+      scoringSettings: data.scoringSettings,
+      teamCount: data.teams.length,
+    });
+
     await tx.player.createMany({
-      data: BASE_PLAYERS.map((p) => ({
+      data: valued.map((p) => ({
         name: p.player,
         nflTeam: p.team,
         pos: p.pos,
@@ -148,6 +155,10 @@ export async function createDraft(data: {
         budget: p.budget,
         ceiling: p.ceiling,
         floor: p.floor,
+        baseBudget: p.baseBudget,
+        baseCeiling: p.baseCeiling,
+        baseFloor: p.baseFloor,
+        sleeperId: null,
         notes: p.notes,
         draftId: draft.id,
       })),

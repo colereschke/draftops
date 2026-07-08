@@ -48,6 +48,7 @@ TEAM_ALIASES = {
     "SF": "SF",
     "TB": "TB",
     "TEN": "TEN",
+    "WFT": "WAS",
     "WAS": "WAS",
     "WSH": "WAS",
 }
@@ -69,7 +70,7 @@ def normalize_team(team: str | None) -> str:
     if team is None:
         return ""
     raw_team = team.strip().upper()
-    if raw_team in {"", "FA"}:
+    if raw_team in {"", "FA", "-", "—", "–"}:
         return ""
     return TEAM_ALIASES.get(raw_team, raw_team)
 

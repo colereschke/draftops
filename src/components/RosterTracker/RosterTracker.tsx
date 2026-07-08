@@ -2,7 +2,6 @@
 
 import { useState, useMemo, useCallback } from 'react';
 import type { TeamWithRoster } from '@/types';
-import { LEAGUE_TEAMS, ROSTER_SIZE } from '@/lib/teams';
 import RosterTable, { type SortKey } from './RosterTable';
 
 interface RosterTrackerProps {
@@ -62,8 +61,8 @@ export default function RosterTracker({ teams, ownerHandle }: RosterTrackerProps
         <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-stretch">
           <section className="rounded-lg border border-border-subtle bg-card px-4 py-3">
             <div className="font-label mb-1 text-[10px] tracking-[2.5px] text-muted-foreground uppercase">
-              {LEAGUE_TEAMS.length}-Team · Superflex · TE Premium · $1,000 Budget · {ROSTER_SIZE}
-              -Man Rosters
+              {teams.length}-Team · Superflex · TE Premium · $1,000 Budget ·{' '}
+              {teams[0] ? teams[0].rosterCount + teams[0].rosterRemaining : 0}-Man Rosters
             </div>
             <h1 className="font-label m-0 text-2xl leading-none font-bold tracking-tight text-foreground">
               Team Rosters

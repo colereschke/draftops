@@ -2,8 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/auth';
 import { prisma } from '@/lib/db';
 import { getDraft } from '@/lib/draft';
-import { ROSTER_SIZE } from '@/lib/teams';
-import type { TeamStats, AuctionResultEntry } from '@/types';
+import { DEFAULT_TARGET_ROSTER } from '@/types';
+import type { TeamStats, AuctionResultEntry, Position } from '@/types';
 
 export async function GET(
   _request: NextRequest,
@@ -25,7 +25,7 @@ export async function GET(
     const spent = team.results.reduce((sum: number, r) => sum + r.price, 0);
     const remaining = team.budget - spent;
     const rosterCount = team.results.length;
-    const rosterRemaining = ROSTER_SIZE - rosterCount;
+    const rosterRemaining = draft.rosterSize - rosterCount;
     const buyingPower = remaining - rosterRemaining;
     const pkgCount = team.results.filter((r) => r.position === 'PKG').length;
     return {
@@ -73,5 +73,7 @@ export async function GET(
     watchlist: watchlistEntries.map((e) => e.playerName),
     nominated: nominatedEntries.map((e) => e.playerName),
     ownerHandle: draft.ownerTeam?.handle ?? null,
+    targetRoster:
+      (draft.targetRoster as Partial<Record<Position, number>> | null) ?? DEFAULT_TARGET_ROSTER,
   });
 }

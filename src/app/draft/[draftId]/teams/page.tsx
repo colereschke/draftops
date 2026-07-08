@@ -34,11 +34,12 @@ export default async function TeamsPage({ params }: { params: Promise<{ draftId:
     ceiling: p.ceiling,
     floor: p.floor,
     notes: p.notes,
+    sleeperId: p.sleeperId,
   }));
 
   return (
     <RosterTracker
-      teams={computeTeamStats(rawTeams, players)}
+      teams={computeTeamStats(rawTeams, players, draft.rosterSize)}
       ownerHandle={draft.ownerTeam?.handle ?? null}
     />
   );

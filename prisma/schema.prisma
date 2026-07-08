@@ -15,18 +15,19 @@ enum DraftStatus {
 model Draft {
   id          Int         @id @default(autoincrement())
   name        String
-  ownerId     String?     // Auth.js userId (Discord snowflake) — nullable until claimed on first sign-in
-  ownerTeamId Int?        // which Team within this draft belongs to the owner; nullable until backfill
+  ownerId     String? // Auth.js userId (Discord snowflake) — nullable until claimed on first sign-in
+  ownerTeamId Int? // which Team within this draft belongs to the owner; nullable until backfill
   status      DraftStatus @default(ACTIVE)
   createdAt   DateTime    @default(now())
 
-  teamCount       Int    @default(12)
-  rosterSize      Int    @default(30)
-  budget          Int    @default(1000)
+  teamCount       Int                @default(12)
+  rosterSize      Int                @default(30)
+  budget          Int                @default(1000)
   startingLineup  Json?
   scoringSettings Json?
   targetRoster    Json?
   players         Player[]
+  playerValues    DraftPlayerValue[]
 
   teams            Team[]            @relation("DraftTeams")
   ownerTeam        Team?             @relation("DraftOwnerTeam", fields: [ownerTeamId], references: [id])
@@ -36,16 +37,16 @@ model Draft {
 }
 
 model Team {
-  id          Int             @id @default(autoincrement())
-  handle      String
-  displayName String?
-  budget      Int             @default(1000)
-  createdAt   DateTime        @default(now())
-  updatedAt   DateTime        @updatedAt
-  draftId     Int
-  draft       Draft           @relation("DraftTeams", fields: [draftId], references: [id])
-  results     AuctionResult[]
-  ownedByDraft Draft[]        @relation("DraftOwnerTeam")
+  id           Int             @id @default(autoincrement())
+  handle       String
+  displayName  String?
+  budget       Int             @default(1000)
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+  draftId      Int
+  draft        Draft           @relation("DraftTeams", fields: [draftId], references: [id])
+  results      AuctionResult[]
+  ownedByDraft Draft[]         @relation("DraftOwnerTeam")
 
   @@unique([handle, draftId])
 }
@@ -86,18 +87,90 @@ model NominatedPlayer {
 }
 
 model Player {
-  id      Int    @id @default(autoincrement())
-  name    String
-  nflTeam String
-  pos     String
-  age     Float?
-  sfRank  Int
-  budget  Int
-  ceiling Int
-  floor   Int
-  notes   String @default("")
-  draftId Int
-  draft   Draft  @relation(fields: [draftId], references: [id])
+  id          Int                @id @default(autoincrement())
+  name        String
+  nflTeam     String
+  pos         String
+  age         Float?
+  sfRank      Int
+  budget      Int
+  ceiling     Int
+  floor       Int
+  baseBudget  Int
+  baseCeiling Int
+  baseFloor   Int
+  sleeperId   String?
+  notes       String             @default("")
+  draftId     Int
+  draft       Draft              @relation(fields: [draftId], references: [id])
+  draftValues DraftPlayerValue[]
 
   @@unique([name, draftId])
+  @@index([sleeperId])
+}
+
+model ProjectionSource {
+  id             Int       @id @default(autoincrement())
+  name           String
+  season         Int
+  projectionDate DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  projections PlayerProjection[]
+  draftValues DraftPlayerValue[]
+
+  @@unique([name, season, projectionDate])
+}
+
+model PlayerProjection {
+  id                 Int    @id @default(autoincrement())
+  sleeperId          String
+  position           String
+  games              Float
+  passAtt            Float
+  passCmp            Float
+  passYds            Float
+  passTd             Float
+  passInt            Float
+  passSacks          Float
+  rushAtt            Float
+  rushYds            Float
+  rushTd             Float
+  targets            Float
+  receptions         Float
+  recYds             Float
+  recTd              Float
+  baseFantasyPoints  Float
+  projectionRank     Int?
+  projectionSourceId Int
+
+  source ProjectionSource @relation(fields: [projectionSourceId], references: [id])
+
+  @@unique([sleeperId, projectionSourceId])
+  @@index([sleeperId])
+}
+
+model DraftPlayerValue {
+  id                     Int      @id @default(autoincrement())
+  draftId                Int
+  playerId               Int
+  projectionSourceId     Int?
+  projectedPoints        Float?
+  replacementPoints      Float?
+  vor                    Float?
+  projectionAuctionValue Int?
+  fallbackAuctionValue   Int
+  activeAuctionValue     Int
+  valueSource            String   @default("fallback")
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+
+  draft            Draft             @relation(fields: [draftId], references: [id])
+  player           Player            @relation(fields: [playerId], references: [id])
+  projectionSource ProjectionSource? @relation(fields: [projectionSourceId], references: [id])
+
+  @@unique([draftId, playerId, projectionSourceId])
+  @@index([draftId])
+  @@index([playerId])
 }

@@ -21,7 +21,7 @@ export default async function BudgetPage({ params }: { params: Promise<{ draftId
 
   return (
     <BudgetPressureView
-      teams={computeTeamStats(teams)}
+      teams={computeTeamStats(teams, draft.rosterSize)}
       ownerHandle={draft.ownerTeam?.handle ?? null}
     />
   );

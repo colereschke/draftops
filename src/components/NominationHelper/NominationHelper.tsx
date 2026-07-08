@@ -13,6 +13,7 @@ interface NomData {
   watchlist: string[];
   nominated: string[];
   ownerHandle: string | null;
+  targetRoster: Partial<Record<Position, number>>;
 }
 
 interface NominationHelperProps {
@@ -60,6 +61,7 @@ export default function NominationHelper({ draftId, players }: NominationHelperP
       data.nominated,
       // null ownerHandle → no owner team excluded from rival demand scoring (correct for unclaimed draft)
       data.ownerHandle ?? '',
+      data.targetRoster,
     );
   }, [data, players]);
 

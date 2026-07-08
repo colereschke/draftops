@@ -2,8 +2,9 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import RosterTracker from '@/components/RosterTracker/RosterTracker';
 import type { TeamWithRoster } from '@/types';
+import type { ManagerTendency } from '@/lib/tendencies';
 
-const makeTeam = (overrides: Partial<TeamWithRoster> = {}): TeamWithRoster => ({
+const makeTeam = (over: Partial<TeamWithRoster> = {}): TeamWithRoster => ({
   id: 1,
   handle: 'coreschke',
   displayName: 'Cole',
@@ -38,129 +39,84 @@ const makeTeam = (overrides: Partial<TeamWithRoster> = {}): TeamWithRoster => ({
       delta: null,
     },
   ],
-  ...overrides,
+  ...over,
 });
 
-const emptyTeam: TeamWithRoster = {
-  id: 2,
-  handle: 'chappy72',
-  displayName: null,
-  budget: 1000,
-  spent: 0,
-  remaining: 1000,
-  rosterCount: 0,
-  rosterRemaining: 30,
-  buyingPower: 970,
-  pkgCount: 0,
-  results: [],
-};
+const makeTendency = (over: Partial<ManagerTendency> = {}): ManagerTendency => ({
+  teamId: 1,
+  handle: 'coreschke',
+  displayName: 'Cole',
+  buys: 2,
+  totalSpend: 312,
+  totalValue: 300,
+  overallOverPct: 0.04,
+  topBuy: 200,
+  lean: 'balanced',
+  aggression: 'neutral',
+  positions: {
+    QB: {
+      position: 'QB',
+      buys: 1,
+      spend: 200,
+      valueSum: 200,
+      deltaSum: 0,
+      avgDelta: 0,
+      overPct: 0,
+      spendShare: 0.64,
+      appetite: 'no-read',
+    },
+    RB: {
+      position: 'RB',
+      buys: 0,
+      spend: 0,
+      valueSum: 0,
+      deltaSum: 0,
+      avgDelta: null,
+      overPct: null,
+      spendShare: 0,
+      appetite: 'no-read',
+    },
+    WR: {
+      position: 'WR',
+      buys: 0,
+      spend: 0,
+      valueSum: 0,
+      deltaSum: 0,
+      avgDelta: null,
+      overPct: null,
+      spendShare: 0,
+      appetite: 'no-read',
+    },
+    TE: {
+      position: 'TE',
+      buys: 0,
+      spend: 0,
+      valueSum: 0,
+      deltaSum: 0,
+      avgDelta: null,
+      overPct: null,
+      spendShare: 0,
+      appetite: 'no-read',
+    },
+  },
+  ...over,
+});
 
 describe('RosterTracker', () => {
-  it('renders all team handles in the table', () => {
-    render(<RosterTracker teams={[makeTeam(), emptyTeam]} ownerHandle="coreschke" />);
-    expect(screen.getByText('coreschke')).toBeInTheDocument();
-    expect(screen.getByText('chappy72')).toBeInTheDocument();
+  it('renders a dossier card per team and pins the owner first', () => {
+    const teams = [makeTeam({ id: 2, handle: 'rival_b', displayName: 'B' }), makeTeam()];
+    const tendencies = [makeTendency({ teamId: 2, handle: 'rival_b' }), makeTendency()];
+    render(<RosterTracker teams={teams} tendencies={tendencies} ownerHandle="coreschke" />);
+    const cards = screen.getAllByTestId(/^dossier-card-/);
+    expect(cards).toHaveLength(2);
+    expect(cards[0]).toHaveAttribute('data-testid', 'dossier-card-1'); // owner pinned first
   });
 
-  it('renders roster summary metrics in the page intro', () => {
-    render(<RosterTracker teams={[makeTeam(), emptyTeam]} ownerHandle="coreschke" />);
-
-    expect(screen.getByText('Teams')).toBeInTheDocument();
-    expect(screen.getByTestId('roster-metric-teams')).toHaveTextContent('2');
-    expect(screen.getByText('Open Slots')).toBeInTheDocument();
-    expect(screen.getByTestId('roster-metric-open-slots')).toHaveTextContent('58');
-    expect(screen.getByText('Most Flexible')).toBeInTheDocument();
-    expect(screen.getByTestId('roster-metric-most-flexible')).toHaveTextContent('chappy72');
-    expect(screen.getByText('Packages Held')).toBeInTheDocument();
-    expect(screen.getByTestId('roster-metric-packages')).toHaveTextContent('1');
-  });
-
-  it('does not show roster player rows by default', () => {
-    render(<RosterTracker teams={[makeTeam()]} ownerHandle="coreschke" />);
-    expect(screen.queryByText('Patrick Mahomes')).not.toBeInTheDocument();
-  });
-
-  it('shows roster when a team expand button is clicked', async () => {
-    const user = userEvent.setup();
-    render(<RosterTracker teams={[makeTeam()]} ownerHandle="coreschke" />);
-    await user.click(screen.getByRole('button', { name: /expand roster for coreschke/i }));
-    expect(screen.getByText('Patrick Mahomes')).toBeInTheDocument();
-  });
-
-  it('shows roster when the team row is clicked', async () => {
-    const user = userEvent.setup();
-    render(<RosterTracker teams={[makeTeam()]} ownerHandle="coreschke" />);
-
-    await user.click(screen.getByText('coreschke').closest('tr')!);
-
-    expect(screen.getByText('Patrick Mahomes')).toBeInTheDocument();
-  });
-
-  it('collapses roster when the same expand button is clicked again', async () => {
-    const user = userEvent.setup();
-    render(<RosterTracker teams={[makeTeam()]} ownerHandle="coreschke" />);
-    const button = screen.getByRole('button', { name: /expand roster for coreschke/i });
-    await user.click(button);
-    await user.click(button);
-    expect(screen.queryByText('Patrick Mahomes')).not.toBeInTheDocument();
-  });
-
-  it('keeps multiple rows expanded simultaneously', async () => {
-    const user = userEvent.setup();
-    const team2 = makeTeam({
-      id: 2,
-      handle: 'chappy72',
-      displayName: null,
-      pkgCount: 0,
-      results: [
-        {
-          id: 3,
-          player: 'Justin Jefferson',
-          position: 'WR',
-          nflTeam: 'MIN',
-          price: 180,
-          sfRank: 5,
-          teamId: 2,
-          teamHandle: 'chappy72',
-          delta: null,
-        },
-      ],
-    });
-    render(<RosterTracker teams={[makeTeam(), team2]} ownerHandle="coreschke" />);
-    await user.click(screen.getByRole('button', { name: /expand roster for coreschke/i }));
-    await user.click(screen.getByRole('button', { name: /expand roster for chappy72/i }));
-    expect(screen.getByText('Patrick Mahomes')).toBeInTheDocument();
-    expect(screen.getByText('Justin Jefferson')).toBeInTheDocument();
-  });
-
-  it('sort headers can be operated with the keyboard', async () => {
-    const user = userEvent.setup();
-    render(<RosterTracker teams={[makeTeam(), emptyTeam]} ownerHandle="coreschke" />);
-
-    await user.tab();
-    expect(screen.getByRole('button', { name: /sort by roster/i })).toHaveFocus();
-    await user.keyboard('{Enter}');
-
-    expect(screen.getByRole('columnheader', { name: /roster/i })).toHaveAttribute(
-      'aria-sort',
-      'descending',
+  it('expands a card to reveal the grouped roster drawer', async () => {
+    render(
+      <RosterTracker teams={[makeTeam()]} tendencies={[makeTendency()]} ownerHandle="coreschke" />,
     );
-  });
-
-  it('shows PKG badge for teams with pick packages', () => {
-    render(<RosterTracker teams={[makeTeam()]} ownerHandle="coreschke" />);
-    expect(screen.getByText('1×')).toBeInTheDocument();
-  });
-
-  it('does not render a PKG badge for teams with zero pick packages', () => {
-    render(<RosterTracker teams={[emptyTeam]} ownerHandle="coreschke" />);
-    expect(screen.queryByText('0×')).not.toBeInTheDocument();
-  });
-
-  it('shows empty state message when an expanded team has no results', async () => {
-    const user = userEvent.setup();
-    render(<RosterTracker teams={[emptyTeam]} ownerHandle="coreschke" />);
-    await user.click(screen.getByRole('button', { name: /expand roster for chappy72/i }));
-    expect(screen.getByText('No players won yet.')).toBeInTheDocument();
+    await userEvent.click(screen.getByTestId('dossier-expand-1'));
+    expect(screen.getByTestId('roster-group-QB')).toBeInTheDocument();
   });
 });

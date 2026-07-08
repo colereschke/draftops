@@ -67,6 +67,23 @@ test-coverage: ## Run tests with coverage report
 .PHONY: check
 check: typecheck lint format-check test ## Run all checks (typecheck, lint, format, test)
 
+# ── Projection ETL ────────────────────────────────────────────────────────────
+
+.PHONY: projections-setup
+projections-setup: ## Install Python projection tooling with uv
+	uv sync --extra dev
+
+.PHONY: projections-generate
+projections-generate: ## Generate projection CSVs from local raw inputs
+	uv run python scripts/projections/generate_master_csv.py
+
+.PHONY: projections-check
+projections-check: ## Run Python projection checks
+	uv run --extra dev pytest scripts/projections/tests -q
+	uv run --extra dev ruff format --check scripts/projections
+	uv run --extra dev ruff check scripts/projections
+	uv run --extra dev mypy
+
 # ── Database ──────────────────────────────────────────────────────────────────
 
 .PHONY: db-start

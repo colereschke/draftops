@@ -47,10 +47,10 @@ src/
 ├── components/
 │   ├── AuctionSheet/                 # Main player value sheet + bid logging
 │   ├── BidModal/                     # Log/edit/delete bid modal
-│   ├── BudgetPressure/               # Budget pressure table + 20s auto-refresh
+│   ├── BudgetPressure/               # Live threat board (ThreatBoard) — position selector + threat ranking (maxBid × revealed appetite) + 20s auto-refresh
 │   ├── NavBar/                       # Fixed header with nav links
 │   ├── NominationHelper/             # Nomination scorer + watchlist + in-auction sidebar
-│   └── RosterTracker/                # Expandable team roster view
+│   └── RosterTracker/                # Manager dossier grid (DossierCard) — per-team scouting cards (lean/appetite/aggression), expandable grouped roster drawer
 ├── data/
 │   └── players.ts                    # ~267 ETR dynasty players — server-only seed source (NOT imported by client components)
 ├── lib/
@@ -61,6 +61,9 @@ src/
 │   ├── draft.ts                      # getDraft(userId, draftId) — auth-gated draft lookup
 │   ├── nominationScoring.ts          # computeNominationScores(..., targetRoster) — core nomination logic
 │   ├── posColors.ts                  # POS_COLORS map (bg, accent, badge, badgeText per position)
+│   ├── tendencies.ts                 # computeTendencies — per-manager behavioral engine (lean/appetite/aggression); feeds /teams + /budget
+│   ├── tendencies.constants.ts       # tunable thresholds + appetite multipliers for the tendency engine (backend-only)
+│   ├── threat.ts                     # maxBid, appetiteMultiplier, threatScore — Budget Pressure threat ranking
 │   ├── projectionScoring.ts          # league-specific fantasy points from normalized projections
 │   ├── projectionVor.ts              # replacement level, VOR, projection auction values
 │   ├── valueAdjustment.ts            # adjustPlayerValues — #5b algorithm (scoring/scarcity/concentration multipliers)
@@ -83,13 +86,13 @@ existing_project_docs/                # Original reference files — do not dele
 
 ## Pages & Routes
 
-| Route       | Purpose                                                                                                |
-| ----------- | ------------------------------------------------------------------------------------------------------ |
-| `/sign-in`  | Discord OAuth sign-in; redirects to `/` after auth                                                     |
-| `/`         | Value sheet — full player list with filters, search, sort, bid logging via modal                       |
-| `/teams`    | Team roster tracker — expandable rows showing each player a team has won, with delta vs. target budget |
-| `/budget`   | Budget pressure view — teams sorted by buying power with visual bar; auto-refreshes every 20s          |
-| `/nominate` | Nomination helper — ranks available players by rival demand score; personal watchlist sidebar          |
+| Route       | Purpose                                                                                                                                                                                           |
+| ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `/sign-in`  | Discord OAuth sign-in; redirects to `/` after auth                                                                                                                                                |
+| `/`         | Value sheet — full player list with filters, search, sort, bid logging via modal                                                                                                                  |
+| `/teams`    | Manager dossier board — per-team scouting cards reading revealed buying behavior (lean, per-position overpay/bargain appetite, aggression); expand for grouped roster with per-position subtotals |
+| `/budget`   | Live threat board — position-anchored (auto-selects the live nomination, manual override); ranks teams by max bid × revealed appetite; keeps Room Liquidity + Low Power metrics; 20s auto-refresh |
+| `/nominate` | Nomination helper — ranks available players by rival demand score; personal watchlist sidebar                                                                                                     |
 
 All pages are server components that fetch from Prisma directly and pass data down to `'use client'` components. Every route except `/sign-in` and the Auth.js API route is protected by `middleware.ts`.
 
@@ -139,6 +142,19 @@ Derived values (computed at query time, not stored):
 - `deleteBid({ id })`
 
 **`src/lib/posColors.ts`** — `POS_COLORS` maps position → `{ bg, accent, badge, badgeText }`
+
+**`src/lib/tendencies.ts`** — shared behavioral engine feeding `/teams` and `/budget`
+
+- `computeTendencies(teams, players)` → `ManagerTendency[]`
+- Per manager, per position (QB/RB/WR/TE only; PICK/PKG count toward activity, not appetite): `buys`, `spend`, `deltaSum`, `overPct`, `spendShare`, and an `appetite` of `overpays`/`neutral`/`thrifty`/`no-read`
+- Derived labels: `appetite` (gated `no-read` until `MIN_BUYS_FOR_READ`), `lean` (top spend-share position, else `balanced`), `aggression` (from overall over% vs value)
+- The `no-read` sample-size gate lives ONLY here, so both pages inherit the same honesty. Calibration in `src/lib/tendencies.constants.ts` (backend-only, TUNABLE)
+
+**`src/lib/threat.ts`** — Budget Pressure threat ranking
+
+- `maxBid(team)` = `buyingPower + 1` when a slot remains, else 0 (clamped ≥ 0)
+- `appetiteMultiplier(appetite)` — `overpays` > 1, `thrifty` < 1, `neutral`/`no-read` = 1.0 (so cold start ranks by max bid)
+- `threatScore(team, appetite)` = `maxBid × appetiteMultiplier`
 
 ## Design System
 
@@ -242,8 +258,9 @@ OWNER_DISCORD_ID=      # Your Discord user ID — seeds ownerId on the default d
 - **Value adjustment algorithm (#5b Phase 1)** — at draft creation, `adjustPlayerValues` (`src/lib/valueAdjustment.ts`) tunes each player's `budget`/`ceiling`/`floor` from base ETR values via three multipliers: per-position **scoring** (TE-premium is the dominant case; TE band widened), per-position **lineup-scarcity** (FLEX/SF demand flows to the scoring-favored position), and rank-based **concentration** tilt (teamCount × lineup size). `Player` now stores `baseBudget`/`baseCeiling`/`baseFloor` (untouched) alongside the adjusted trio. Only new drafts are adjusted — existing/live drafts keep `base = adjusted`, no recompute trigger yet. Runtime now reads `draft.rosterSize`/`draft.targetRoster` instead of the `ROSTER_SIZE`/`TARGET_ROSTER` constants. Calibration lives in `src/lib/valueAdjustment.constants.ts` (backend-only, TUNABLE). Phase 2 (Mike Clay projection dual-scoring, first-down historical rates, VOR concentration) is the fast-follow.
 - **Projection-aware VOR engine (#5e initial)** — generated Mike Clay projections can be joined to Sleeper-linked ETR values and applied to a draft with `pnpm tsx prisma/apply-projection-values.ts --draft-id <id>`. The script stores `Player.sleeperId`, source stats in `PlayerProjection`, and league-specific projected points/VOR/auction outputs in `DraftPlayerValue`. Projection values are written as a parallel value source; `activeAuctionValue` remains fallback by default. Rookie handling is asymmetric: low rookie projections do not reduce active value, but strong rookie projections can lift it when projection values are explicitly activated.
 - `/` — Value sheet with full player list (from DB), filters, search, sort, bid logging modal, budget tracker
-- `/teams` — Team roster tracker with expandable rows, spend/remaining/buying power per team, delta vs. target per player (players from DB)
-- `/budget` — Budget pressure view sorted by buying power with auto-refresh
+- **Secondary-pages divergence** — `/teams` and `/budget` were diverged so each answers a distinct question, wired by a shared behavioral engine (`src/lib/tendencies.ts`). Philosophy: draft-for-value, so **no** count-vs-target "needs" framing on either page. `computeTendencies` derives per-manager, per-position buying behavior (spend lean, overpay/bargain **appetite** with a `no-read` sample-size gate, overall **aggression**) from auction results vs. player value. `/teams` renders it as manager dossier cards; `/budget` uses the same appetite to weight its threat ranking (`threat = maxBid × appetite`, cold-start ranks by max bid).
+- `/teams` — Manager dossier grid: per-team scouting cards (lean/appetite/aggression + activity), no money on the face; expand for a position-grouped roster drawer with per-position spend + delta subtotals (players from DB)
+- `/budget` — Live threat board: position selector auto-selects the live nomination (manual override persists across the 20s refresh); teams ranked by `maxBid × revealed appetite` for that position; Room Liquidity + Low Power secondary metrics
 - `/nominate` — Nomination helper that ranks available players by rival demand; personal watchlist persisted to DB; "Nom" button tracks players currently in auction; full server-component with auth gate (PR #20)
 
 ## Player Data

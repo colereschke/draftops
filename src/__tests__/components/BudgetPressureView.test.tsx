@@ -75,25 +75,25 @@ describe('BudgetPressureView', () => {
   it('applies green color to buying power > 150', () => {
     render(<BudgetPressureView teams={teams} ownerHandle="coreschke" />);
     const bpCell = screen.getByTestId('bp-1');
-    expect(bpCell).toHaveStyle({ color: '#4caf6e' });
+    expect(bpCell).toHaveStyle({ color: 'var(--age-young)' });
   });
 
   it('applies amber color to buying power between 50 and 150', () => {
     render(<BudgetPressureView teams={teams} ownerHandle="coreschke" />);
     const bpCell = screen.getByTestId('bp-2');
-    expect(bpCell).toHaveStyle({ color: '#e8a030' });
+    expect(bpCell).toHaveStyle({ color: 'var(--primary)' });
   });
 
   it('applies red color to buying power under 50', () => {
     render(<BudgetPressureView teams={teams} ownerHandle="coreschke" />);
     const bpCell = screen.getByTestId('bp-3');
-    expect(bpCell).toHaveStyle({ color: '#e05050' });
+    expect(bpCell).toHaveStyle({ color: 'var(--age-old)' });
   });
 
-  it("highlights Cole's row with QB-blue left border", () => {
+  it("highlights Cole's row with primary left border", () => {
     render(<BudgetPressureView teams={teams} ownerHandle="coreschke" />);
     const coleRow = screen.getByTestId('row-coreschke');
-    expect(coleRow).toHaveStyle({ borderLeft: '3px solid #4f83e8' });
+    expect(coleRow).toHaveStyle({ borderLeft: '3px solid var(--primary)' });
   });
 
   it('renders the BudgetRefresher', () => {

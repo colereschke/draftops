@@ -19,6 +19,8 @@ export interface Player {
   replacementPoints?: number | null;
   vor?: number | null;
   valueSource?: string;
+  strategyLens?: 'rebuild' | 'balanced' | 'contend';
+  strategyAdjustment?: number;
 }
 
 export interface TeamStats {

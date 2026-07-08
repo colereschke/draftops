@@ -34,8 +34,8 @@
   --card-foreground: var(--text-primary);
   --popover: var(--bg-elevated);
   --popover-foreground: var(--text-primary);
-  --primary: #e8a030;
-  --primary-foreground: var(--text-primary);
+  --primary: #d7ded2;
+  --primary-foreground: var(--bg-base);
   --secondary: var(--bg-elevated);
   --secondary-foreground: var(--text-primary);
   --muted: var(--bg-elevated);
@@ -45,7 +45,7 @@
   --destructive: var(--age-old);
   --border: var(--border-default);
   --input: var(--border-default);
-  --ring: #e8a030;
+  --ring: #66706a;
   --radius: 0.5rem;
 }
 

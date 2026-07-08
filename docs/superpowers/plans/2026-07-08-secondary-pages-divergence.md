@@ -1861,6 +1861,13 @@ import BudgetPressureView from '@/components/BudgetPressure/BudgetPressureView';
 import type { TeamStats } from '@/types';
 import type { ManagerTendency, Appetite, AppetitePos } from '@/lib/tendencies';
 
+// BudgetRefresher calls useRouter(); stub it so the view renders outside an
+// App Router context (same stub the pre-divergence test used).
+jest.mock('@/components/BudgetPressure/BudgetRefresher', () => ({
+  __esModule: true,
+  default: () => <div data-testid="budget-refresher" />,
+}));
+
 const stats = (id: number, handle: string, buyingPower: number): TeamStats => ({
   id,
   handle,

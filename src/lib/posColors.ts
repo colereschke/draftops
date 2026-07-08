@@ -4,10 +4,10 @@ export const POS_COLORS: Record<
   Position,
   { bg: string; accent: string; badge: string; badgeText: string }
 > = {
-  QB: { bg: '#1a2744', accent: '#4f83e8', badge: '#e8f0fe', badgeText: '#1a2744' },
-  RB: { bg: '#1a2e1a', accent: '#4caf6e', badge: '#e6f4ea', badgeText: '#1a3a22' },
-  WR: { bg: '#2a1f0e', accent: '#e8a030', badge: '#fef3e2', badgeText: '#3a2008' },
-  TE: { bg: '#2a1a2a', accent: '#c060d0', badge: '#f5e6f8', badgeText: '#3a0a3a' },
-  PICK: { bg: '#1a2a2a', accent: '#40b0b0', badge: '#e0f5f5', badgeText: '#0a3030' },
-  PKG: { bg: '#2a2010', accent: '#f0c040', badge: '#fdf5d0', badgeText: '#3a2a00' },
+  QB: { bg: '#16223a', accent: '#4f83e8', badge: '#1d3154', badgeText: '#cddcff' },
+  RB: { bg: '#172719', accent: '#4caf6e', badge: '#213b25', badgeText: '#d1f0d8' },
+  WR: { bg: '#2b2111', accent: '#e8a030', badge: '#3e2c14', badgeText: '#f8dca9' },
+  TE: { bg: '#281b2d', accent: '#b86ac8', badge: '#3c2745', badgeText: '#efd7f4' },
+  PICK: { bg: '#252827', accent: '#aeb4ad', badge: '#343837', badgeText: '#e0e3df' },
+  PKG: { bg: '#252827', accent: '#aeb4ad', badge: '#343837', badgeText: '#e0e3df' },
 };

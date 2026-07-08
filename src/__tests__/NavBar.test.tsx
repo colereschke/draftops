@@ -1,4 +1,5 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import NavBar from '@/components/NavBar';
 import type { Session } from 'next-auth';
 
@@ -24,9 +25,15 @@ describe('NavBar', () => {
     expect(screen.getByText('Cole')).toBeInTheDocument();
   });
 
-  it('displays a sign-out button when a session is provided', () => {
+  it('displays sign-out inside the account menu when a session is provided', async () => {
+    const user = userEvent.setup();
     render(<NavBar session={MOCK_SESSION} />);
-    expect(screen.getByRole('button', { name: /sign out/i })).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /cole/i }));
+
+    await waitFor(() => {
+      expect(screen.getByRole('menuitem', { name: /sign out/i })).toBeInTheDocument();
+    });
   });
 
   it('does not display username or sign-out when session is null', () => {

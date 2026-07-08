@@ -218,11 +218,11 @@ export default function AuctionSheet({
   const posStats = useMemo(() => {
     const stats = {} as Record<'QB' | 'RB' | 'WR' | 'TE', { count: number; total: number }>;
     (['QB', 'RB', 'WR', 'TE'] as const).forEach((pos) => {
-      const pp = players.filter((p) => p.pos === pos);
+      const pp = players.filter((p) => p.pos === pos && !claimMap.has(p.player));
       stats[pos] = { count: pp.length, total: pp.reduce((s, p) => s + p.budget, 0) };
     });
     return stats;
-  }, [players]);
+  }, [claimMap, players]);
 
   const grandTotal = Object.values(posStats).reduce((s, v) => s + v.total, 0);
   const totalPlayerCount = players.filter(

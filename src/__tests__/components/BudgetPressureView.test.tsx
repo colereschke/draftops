@@ -1,108 +1,76 @@
 import { render, screen } from '@testing-library/react';
 import BudgetPressureView from '@/components/BudgetPressure/BudgetPressureView';
 import type { TeamStats } from '@/types';
+import type { ManagerTendency, Appetite, AppetitePos } from '@/lib/tendencies';
 
 jest.mock('@/components/BudgetPressure/BudgetRefresher', () => ({
   __esModule: true,
   default: () => <div data-testid="budget-refresher" />,
 }));
 
-const makeTeam = (overrides: Partial<TeamStats>): TeamStats => ({
-  id: 1,
-  handle: 'testteam',
-  displayName: null,
+const stats = (id: number, handle: string, buyingPower: number): TeamStats => ({
+  id,
+  handle,
+  displayName: handle,
   budget: 1000,
   spent: 0,
-  remaining: 1000,
-  rosterCount: 0,
-  rosterRemaining: 30,
-  buyingPower: 970,
+  remaining: buyingPower + 20,
+  rosterCount: 5,
+  rosterRemaining: 20,
+  buyingPower,
   pkgCount: 0,
-  ...overrides,
 });
 
-const teams: TeamStats[] = [
-  makeTeam({
-    id: 1,
-    handle: 'coreschke',
-    displayName: 'Cole',
-    buyingPower: 800,
-    remaining: 830,
-    spent: 170,
-    rosterCount: 5,
-    rosterRemaining: 25,
-  }),
-  makeTeam({
-    id: 2,
-    handle: 'chappy72',
-    buyingPower: 100,
-    remaining: 122,
-    spent: 878,
-    rosterCount: 22,
-    rosterRemaining: 22,
-  }),
-  makeTeam({
-    id: 3,
-    handle: 'DrFunk',
-    buyingPower: 30,
-    remaining: 60,
-    spent: 940,
-    rosterCount: 28,
-    rosterRemaining: 2,
-  }),
-];
+const posT = (position: AppetitePos, appetite: Appetite) => ({
+  position,
+  buys: 3,
+  spend: 0,
+  valueSum: 0,
+  deltaSum: 0,
+  avgDelta: null,
+  overPct: null,
+  spendShare: 0,
+  appetite,
+});
+
+const tend = (teamId: number, handle: string): ManagerTendency => ({
+  teamId,
+  handle,
+  displayName: handle,
+  buys: 5,
+  totalSpend: 500,
+  totalValue: 480,
+  overallOverPct: 0.04,
+  topBuy: 120,
+  lean: 'balanced',
+  aggression: 'neutral',
+  positions: {
+    QB: posT('QB', 'neutral'),
+    RB: posT('RB', 'neutral'),
+    WR: posT('WR', 'neutral'),
+    TE: posT('TE', 'neutral'),
+  },
+});
+
+const teams: TeamStats[] = [stats(1, 'coreschke', 660), stats(2, 'rival_b', 40)];
+const tendencies = [tend(1, 'coreschke'), tend(2, 'rival_b')];
 
 describe('BudgetPressureView', () => {
-  it('renders a row for each team', () => {
-    render(<BudgetPressureView teams={teams} ownerHandle="coreschke" />);
-    expect(screen.getByText('Cole')).toBeInTheDocument();
-    expect(screen.getByText('chappy72')).toBeInTheDocument();
-    expect(screen.getByText('DrFunk')).toBeInTheDocument();
-  });
-
-  it('displays handle when displayName is null', () => {
-    render(<BudgetPressureView teams={teams} ownerHandle="coreschke" />);
-    expect(screen.getByText('chappy72')).toBeInTheDocument();
-  });
-
-  it('renders rank numbers starting at 1', () => {
-    render(<BudgetPressureView teams={teams} ownerHandle="coreschke" />);
-    expect(screen.getByText('1')).toBeInTheDocument();
-    expect(screen.getByText('2')).toBeInTheDocument();
-    expect(screen.getByText('3')).toBeInTheDocument();
-  });
-
-  it('applies green color to buying power > 150', () => {
-    render(<BudgetPressureView teams={teams} ownerHandle="coreschke" />);
-    const bpCell = screen.getByTestId('bp-1');
-    expect(bpCell).toHaveStyle({ color: 'var(--age-young)' });
-  });
-
-  it('applies amber color to buying power between 50 and 150', () => {
-    render(<BudgetPressureView teams={teams} ownerHandle="coreschke" />);
-    const bpCell = screen.getByTestId('bp-2');
-    expect(bpCell).toHaveStyle({ color: 'var(--primary)' });
-  });
-
-  it('applies red color to buying power under 50', () => {
-    render(<BudgetPressureView teams={teams} ownerHandle="coreschke" />);
-    const bpCell = screen.getByTestId('bp-3');
-    expect(bpCell).toHaveStyle({ color: 'var(--age-old)' });
-  });
-
-  it("highlights Cole's row with primary left border", () => {
-    render(<BudgetPressureView teams={teams} ownerHandle="coreschke" />);
-    const coleRow = screen.getByTestId('row-coreschke');
-    expect(coleRow).toHaveStyle({ borderLeft: '3px solid var(--primary)' });
-  });
-
-  it('renders the BudgetRefresher', () => {
-    render(<BudgetPressureView teams={teams} ownerHandle="coreschke" />);
-    expect(screen.getByTestId('budget-refresher')).toBeInTheDocument();
-  });
-
-  it('renders dollar signs for monetary values', () => {
-    render(<BudgetPressureView teams={teams} ownerHandle="coreschke" />);
-    expect(screen.getByText('$800')).toBeInTheDocument(); // Cole's buying power
+  it('renders secondary market metrics and the threat board', () => {
+    render(
+      <BudgetPressureView
+        teams={teams}
+        tendencies={tendencies}
+        livePosition="WR"
+        liveName="Puka Nacua"
+        ownerHandle="coreschke"
+      />,
+    );
+    // Room Liquidity = 660 + 40 = 700; Low Power = 1 team under $50.
+    expect(screen.getByText('$700')).toBeInTheDocument();
+    expect(screen.getByText('1 teams')).toBeInTheDocument();
+    // ThreatBoard is mounted with a row per team.
+    expect(screen.getByTestId('threat-row-coreschke')).toBeInTheDocument();
+    expect(screen.getByTestId('threat-row-rival_b')).toBeInTheDocument();
   });
 });

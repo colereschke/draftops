@@ -55,17 +55,16 @@ export default function WatchlistSidebar({
 
   return (
     <div className="flex w-full flex-col gap-3 border-b border-border-subtle bg-card px-3 py-4 md:w-60 md:min-w-60 md:border-r md:border-b-0">
-      {/* In Auction */}
       <div>
-        <div
-          className="font-label mb-1.5 text-[10px] tracking-[2px] uppercase"
-          style={{ color: 'var(--pos-pick)' }}
-        >
+        <div className="font-label mb-3 text-[10px] tracking-[2.5px] text-muted-foreground uppercase">
+          Live Rail
+        </div>
+        <div className="font-label mb-1.5 text-[10px] tracking-[2px] text-foreground uppercase">
           In Auction
         </div>
         <div className="flex flex-col gap-1.5">
           {nominated.length === 0 ? (
-            <div className="text-[11px] leading-relaxed text-[#2a3a3a]">
+            <div className="text-[11px] leading-relaxed text-muted-foreground">
               No players currently nominated
             </div>
           ) : (
@@ -74,8 +73,8 @@ export default function WatchlistSidebar({
               return (
                 <div
                   key={name}
-                  className="flex items-center gap-1.5 rounded-[5px] bg-[#0d2020] px-2 py-1.5"
-                  style={{ borderLeft: '3px solid var(--pos-pick)' }}
+                  className="flex items-center gap-1.5 rounded-[5px] border border-border-subtle bg-muted px-2 py-1.5"
+                  style={{ borderLeft: '3px solid var(--primary)' }}
                 >
                   <div className="min-w-0 flex-1">
                     <div className="truncate text-xs font-semibold text-foreground">{name}</div>
@@ -90,7 +89,7 @@ export default function WatchlistSidebar({
                     onClick={() => onUnNominate(name)}
                     title="Remove from in auction"
                     aria-label={`Remove ${name} from in auction`}
-                    className="shrink-0 text-[#2a5a5a] transition-colors hover:text-[var(--pos-pick)]"
+                    className="shrink-0 text-muted-foreground transition-colors hover:text-primary"
                   >
                     <X className="size-3.5" />
                   </button>
@@ -109,14 +108,14 @@ export default function WatchlistSidebar({
 
       {/* Search-to-add */}
       <div ref={wrapperRef} className="relative">
-        <Command shouldFilter={false} className="rounded-[5px] border border-border bg-[#1a1f2e]">
+        <Command shouldFilter={false} className="rounded-[5px] border border-border bg-muted">
           <CommandInput
             value={search}
             onValueChange={setSearch}
             placeholder="Add player I want..."
           />
           {search.trim() !== '' && searchResults.length > 0 && (
-            <CommandList className="absolute top-full right-0 left-0 z-10 mt-1 rounded-[5px] border border-border bg-[#1a1f2e]">
+            <CommandList className="absolute top-full right-0 left-0 z-10 mt-1 rounded-[5px] border border-border bg-popover">
               {searchResults.map((p) => (
                 <CommandItem
                   key={p.player}
@@ -150,7 +149,7 @@ export default function WatchlistSidebar({
             return (
               <div
                 key={name}
-                className="flex items-center gap-1.5 rounded-[5px] bg-[#1a1f2e] px-2 py-1.5"
+                className="flex items-center gap-1.5 rounded-[5px] border border-border-subtle bg-muted px-2 py-1.5"
                 style={{ borderLeft: `3px solid ${accent}` }}
               >
                 <div className="min-w-0 flex-1">

@@ -54,7 +54,7 @@ describe('AuctionHeader', () => {
       />,
     );
 
-    expect(screen.getByText(/20% · \$200/)).toBeInTheDocument(); // QB: 200/1000
-    expect(screen.getByText(/40% · \$400/)).toBeInTheDocument(); // WR: 400/1000
+    expect(screen.getByText(/20% · 2 · \$200/)).toBeInTheDocument(); // QB: 200/1000
+    expect(screen.getByText(/40% · 2 · \$400/)).toBeInTheDocument(); // WR: 400/1000
   });
 });

@@ -5,26 +5,26 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
-  --bg-base: #0a0d14;
-  --bg-surface: #141824;
-  --bg-elevated: #1a1f2e;
-  --border-subtle: #1e2434;
-  --border-default: #2a3048;
-  --text-primary: #e8eaf0;
-  --text-secondary: #8892a4;
-  --text-muted: #4a5168;
+  --bg-base: #0c0d0e;
+  --bg-surface: #141517;
+  --bg-elevated: #1b1d20;
+  --border-subtle: #222529;
+  --border-default: #30343a;
+  --text-primary: #f2f3ee;
+  --text-secondary: #a8ada4;
+  --text-muted: #687066;
 
   --pos-qb: #4f83e8;
   --pos-rb: #4caf6e;
   --pos-wr: #e8a030;
-  --pos-te: #c060d0;
-  --pos-pick: #40b0b0;
-  --pos-pkg: #f0c040;
+  --pos-te: #b86ac8;
+  --pos-pick: #aeb4ad;
+  --pos-pkg: #aeb4ad;
 
   --age-young: #4caf6e;
-  --age-prime: #e8eaf0;
+  --age-prime: #f3f1e8;
   --age-aging: #e8a030;
-  --age-old: #e05050;
+  --age-old: #9f363c;
 
   /* shadcn/ui canonical tokens, mapped onto the palette above.
      Dark-only app: one value set, no .dark class toggle. */
@@ -34,18 +34,18 @@
   --card-foreground: var(--text-primary);
   --popover: var(--bg-elevated);
   --popover-foreground: var(--text-primary);
-  --primary: #7c6ff0;
+  --primary: #e8a030;
   --primary-foreground: var(--text-primary);
   --secondary: var(--bg-elevated);
   --secondary-foreground: var(--text-primary);
   --muted: var(--bg-elevated);
   --muted-foreground: var(--text-muted);
-  --accent: #232a3d;
+  --accent: #202328;
   --accent-foreground: var(--text-primary);
   --destructive: var(--age-old);
   --border: var(--border-default);
   --input: var(--border-default);
-  --ring: #7c6ff0;
+  --ring: #e8a030;
   --radius: 0.5rem;
 }
 

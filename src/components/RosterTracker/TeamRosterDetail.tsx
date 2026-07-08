@@ -19,7 +19,7 @@ export default function TeamRosterDetail({ results }: TeamRosterDetailProps) {
         return (
           <div
             key={result.id}
-            className="flex items-center gap-2.5 rounded-r bg-[#0a0d14] px-2 py-[5px]"
+            className="flex items-center gap-2.5 rounded-r border border-l-0 border-border-subtle bg-background px-2 py-[5px]"
             style={{ borderLeft: `3px solid ${c.accent}` }}
           >
             <span

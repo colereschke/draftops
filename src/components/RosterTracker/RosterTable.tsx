@@ -17,9 +17,9 @@ import TeamRosterDetail from './TeamRosterDetail';
 export type SortKey = 'buyingPower' | 'spent' | 'remaining' | 'rosterCount';
 
 function buyingPowerColor(bp: number): string {
-  if (bp > 150) return '#4caf6e';
-  if (bp >= 50) return '#e8a030';
-  return '#e05050';
+  if (bp > 150) return 'var(--age-young)';
+  if (bp >= 50) return 'var(--primary)';
+  return 'var(--age-old)';
 }
 
 interface SortIconProps {
@@ -126,12 +126,11 @@ export default function RosterTable({
                 onClick={() => onToggle(team.id)}
                 className={cn(
                   'cursor-pointer hover:bg-card',
-                  isExpanded ? 'border-b-0' : 'border-b-[#141824]',
-                  !isOwner && i % 2 !== 0 ? 'bg-[#0a0c10]' : undefined,
+                  isExpanded ? 'border-b-0' : 'border-b-border-subtle',
+                  isOwner ? 'bg-accent' : i % 2 !== 0 ? 'bg-muted/20' : undefined,
                 )}
                 style={{
-                  background: isOwner ? '#141e2e' : undefined,
-                  borderLeft: `3px solid ${isOwner ? '#4f83e8' : 'var(--border)'}`,
+                  borderLeft: `3px solid ${isOwner ? 'var(--primary)' : 'var(--border)'}`,
                 }}
               >
                 <TableCell className="text-left">
@@ -140,7 +139,7 @@ export default function RosterTable({
                       'text-[13px]',
                       isOwner ? 'font-bold' : 'font-normal text-foreground',
                     )}
-                    style={isOwner ? { color: '#4f83e8' } : undefined}
+                    style={isOwner ? { color: 'var(--primary)' } : undefined}
                   >
                     {team.handle}
                   </span>
@@ -155,10 +154,7 @@ export default function RosterTable({
                 </TableCell>
                 <TableCell className="text-center">
                   {team.pkgCount > 0 && (
-                    <span
-                      className="rounded font-mono text-[11px] font-bold tabular-nums"
-                      style={{ color: 'var(--pos-pkg)', background: '#2a2010', padding: '2px 6px' }}
-                    >
+                    <span className="rounded border border-border bg-muted px-1.5 py-0.5 font-mono text-[11px] font-bold text-muted-foreground tabular-nums">
                       {team.pkgCount}×
                     </span>
                   )}
@@ -200,8 +196,8 @@ export default function RosterTable({
             if (isExpanded) {
               rows.push(
                 <TableRow key={`${team.id}-roster`} className="hover:bg-transparent">
-                  <TableCell colSpan={7} className="border-b-2 border-b-[#2a3048] p-0">
-                    <div className="bg-[#080a10] px-4 pt-2.5 pb-3.5">
+                  <TableCell colSpan={7} className="border-b-2 border-b-border p-0">
+                    <div className="border-l-[3px] border-l-primary bg-card px-4 pt-2.5 pb-3.5">
                       <TeamRosterDetail results={team.results} />
                     </div>
                   </TableCell>

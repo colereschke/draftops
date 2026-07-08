@@ -18,7 +18,7 @@ export default function RivalDemandBar({ rivalContributions }: RivalDemandBarPro
           <div className="w-[70px] overflow-hidden text-right font-mono text-[9px] text-nowrap text-ellipsis text-secondary-fg">
             {r.handle}
           </div>
-          <div className="h-1 flex-1 overflow-hidden rounded-[2px] bg-[#1a1f2e]">
+          <div className="h-1 flex-1 overflow-hidden rounded-[2px] bg-muted">
             <div
               className="h-full rounded-[2px]"
               style={{ width: `${r.pct}%`, background: 'var(--pos-qb)' }}

@@ -35,7 +35,7 @@ export default function FilterControls({
 }: FilterControlsProps) {
   return (
     <>
-      <div className="flex flex-wrap items-center gap-2.5 border-b border-border-subtle bg-[#0d1018] px-5 py-3">
+      <div className="flex flex-wrap items-center gap-2.5 border-b border-border-subtle bg-card px-5 py-3">
         <ToggleGroup
           value={[posFilter]}
           onValueChange={(vals) =>
@@ -50,7 +50,7 @@ export default function FilterControls({
               <ToggleGroupItem
                 key={pos}
                 value={pos}
-                className="font-label rounded-[5px] border border-border px-2.5 py-1 text-[11px] font-semibold tracking-wide text-muted-foreground"
+                className="font-label h-8 rounded-md border border-border bg-background px-2.5 text-[11px] font-semibold tracking-wide text-muted-foreground hover:bg-accent hover:text-foreground"
                 style={
                   active
                     ? {
@@ -71,45 +71,47 @@ export default function FilterControls({
           value={search}
           onChange={(e) => onSearchChange(e.target.value)}
           placeholder="Search player or team..."
-          className="w-[180px]"
+          className="w-[210px] rounded-md bg-background text-[12px] focus-visible:border-border focus-visible:ring-1 focus-visible:ring-border"
         />
 
         <Toggle
           pressed={showNotes}
           onPressedChange={onShowNotesChange}
           variant="outline"
-          className="text-[11px]"
+          className="font-label h-8 rounded-md bg-background text-[11px] font-bold tracking-wide uppercase"
         >
-          {showNotes ? 'Hide Notes' : 'Show Notes'}
+          {showNotes ? 'Hide notes' : 'Show notes'}
         </Toggle>
 
         <Toggle
           pressed={availableOnly}
           onPressedChange={onAvailableOnlyChange}
           variant="outline"
-          className="text-[11px]"
+          className="font-label h-8 rounded-md bg-background text-[11px] font-bold tracking-wide uppercase"
         >
-          Available Only
+          Available only
         </Toggle>
 
-        <div className="ml-auto text-[11px] text-muted-foreground">{resultCount} players shown</div>
+        <div className="ml-auto font-mono text-[11px] text-muted-foreground tabular-nums">
+          {resultCount} players shown
+        </div>
       </div>
 
       {/* Legend */}
-      <div className="flex flex-wrap gap-[18px] border-b border-border-subtle bg-[#080a10] px-5 py-1.5 text-[10px] text-muted-foreground">
+      <div className="flex flex-wrap gap-[18px] border-b border-border-subtle bg-background px-5 py-2 text-[10px] text-muted-foreground">
         <span>
-          🔻 <b className="text-secondary-fg">Floor</b> = steal territory
+          <b className="text-secondary-fg">Floor</b> = steal territory
         </span>
         <span>
-          💰 <b className="text-secondary-fg">Target</b> = calibrated bid
+          <b style={{ color: 'var(--pos-wr)' }}>Target</b> = calibrated bid
         </span>
         <span>
-          🔺 <b className="text-secondary-fg">Ceiling</b> = hard stop
+          <b style={{ color: 'var(--age-old)' }}>Ceiling</b> = hard stop
         </span>
         <span className="border-l border-border-subtle pl-[18px]">
           Age: <span style={{ color: 'var(--age-young)' }}>≤24</span>{' '}
-          <span style={{ color: 'var(--age-prime)' }}>25–27</span>{' '}
-          <span style={{ color: 'var(--age-aging)' }}>28–30</span>{' '}
+          <span style={{ color: 'var(--age-prime)' }}>25-27</span>{' '}
+          <span style={{ color: 'var(--age-aging)' }}>28-30</span>{' '}
           <span style={{ color: 'var(--age-old)' }}>31+</span>
         </span>
         <span>

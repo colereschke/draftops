@@ -1,5 +1,14 @@
 import type { TeamStats } from '@/types';
+import { cn } from '@/lib/utils';
 import BudgetRefresher from './BudgetRefresher';
+import {
+  Table,
+  TableHeader,
+  TableBody,
+  TableRow,
+  TableHead,
+  TableCell,
+} from '@/components/ui/table';
 
 function buyingPowerColor(bp: number): string {
   if (bp > 150) return '#4caf6e';
@@ -12,202 +21,110 @@ interface BudgetPressureViewProps {
   ownerHandle: string | null;
 }
 
+const COLUMNS = ['#', 'Team', 'Spent', 'Remaining', 'Roster', 'Buying Power'] as const;
+
 export default function BudgetPressureView({ teams, ownerHandle }: BudgetPressureViewProps) {
   const maxBp = Math.max(...teams.map((t) => t.buyingPower), 1);
 
   return (
-    <div
-      style={{
-        fontFamily: 'var(--font-inter), "Inter", sans-serif',
-        background: 'var(--bg-base, #0a0d14)',
-        minHeight: '100vh',
-        color: '#e8eaf0',
-      }}
-    >
+    <div className="min-h-screen bg-background text-foreground">
       {/* Header */}
-      <div
-        style={{
-          background: 'var(--bg-surface, #141824)',
-          borderBottom: '1px solid #2a3048',
-          padding: '18px 20px 14px',
-        }}
-      >
-        <div
-          style={{
-            fontSize: 10,
-            letterSpacing: 3,
-            color: '#4a5168',
-            textTransform: 'uppercase',
-            marginBottom: 3,
-            fontFamily: 'var(--font-barlow), sans-serif',
-          }}
-        >
+      <div className="border-b border-border bg-card px-5 pt-[18px] pb-3.5">
+        <div className="font-label mb-1 text-[10px] tracking-[3px] text-muted-foreground uppercase">
           12-Team · Superflex · $1,000 Budget · 30-Man Rosters
         </div>
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            flexWrap: 'wrap',
-            gap: 10,
-          }}
-        >
-          <h1
-            style={{
-              margin: 0,
-              fontSize: 20,
-              fontWeight: 700,
-              color: '#fff',
-              letterSpacing: -0.5,
-              fontFamily: 'var(--font-barlow), sans-serif',
-            }}
-          >
+        <div className="flex flex-wrap items-center justify-between gap-2.5">
+          <h1 className="font-label m-0 text-xl font-bold tracking-tight text-white">
             Budget Pressure
           </h1>
           <BudgetRefresher intervalMs={20000} />
         </div>
-        <div style={{ fontSize: 11, color: '#4a5168', marginTop: 2 }}>
+        <div className="mt-0.5 text-[11px] text-muted-foreground">
           Buying power = remaining − remaining roster spots · sorted by most dangerous bidder
         </div>
       </div>
 
       {/* Table */}
-      <div style={{ padding: '0 20px 40px', overflowX: 'auto' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: 6 }}>
-          <thead>
-            <tr style={{ borderBottom: '1px solid #2a3048' }}>
-              {['#', 'Team', 'Spent', 'Remaining', 'Roster', 'Buying Power'].map((col) => (
-                <th
+      <div className="overflow-x-auto px-5 pb-10">
+        <Table className="mt-1.5">
+          <TableHeader>
+            <TableRow className="border-border hover:bg-transparent">
+              {COLUMNS.map((col) => (
+                <TableHead
                   key={col}
+                  className="font-label border-none py-2 text-[10px] font-semibold tracking-wide whitespace-nowrap text-muted-foreground uppercase"
                   style={{
-                    padding: '9px 10px',
                     textAlign: col === 'Team' || col === 'Buying Power' ? 'left' : 'center',
-                    fontSize: 10,
-                    fontWeight: 600,
-                    letterSpacing: 1,
-                    color: '#4a5168',
-                    textTransform: 'uppercase',
-                    whiteSpace: 'nowrap',
-                    fontFamily: 'var(--font-barlow), sans-serif',
                   }}
                 >
                   {col}
-                </th>
+                </TableHead>
               ))}
-            </tr>
-          </thead>
-          <tbody>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
             {teams.map((team, i) => {
               const isOwner = ownerHandle !== null && team.handle === ownerHandle;
               const bpColor = buyingPowerColor(team.buyingPower);
               const barWidth = maxBp > 0 ? Math.max(0, (team.buyingPower / maxBp) * 100) : 0;
 
               return (
-                <tr
+                <TableRow
                   key={team.id}
                   data-testid={`row-${team.handle}`}
+                  className={cn(
+                    'border-b-[#141824] hover:bg-transparent',
+                    !isOwner && i % 2 !== 0 ? 'bg-[#0a0c10]' : undefined,
+                  )}
                   style={{
-                    borderBottom: '1px solid #141824',
-                    background: isOwner ? '#141e2e' : i % 2 === 0 ? 'transparent' : '#0a0c10',
-                    borderLeft: `3px solid ${isOwner ? '#4f83e8' : '#2a3048'}`,
+                    background: isOwner ? '#141e2e' : undefined,
+                    borderLeft: `3px solid ${isOwner ? '#4f83e8' : 'var(--border)'}`,
                   }}
                 >
-                  <td
-                    style={{
-                      padding: '10px 10px',
-                      textAlign: 'center',
-                      fontSize: 11,
-                      color: '#4a5168',
-                      fontFamily: 'var(--font-mono), monospace',
-                    }}
-                  >
+                  <TableCell className="text-center font-mono text-[11px] text-muted-foreground tabular-nums">
                     {i + 1}
-                  </td>
-                  <td style={{ padding: '10px 10px', textAlign: 'left' }}>
+                  </TableCell>
+                  <TableCell className="text-left">
                     <span
-                      style={{
-                        fontSize: 13,
-                        fontWeight: isOwner ? 700 : 500,
-                        color: isOwner ? '#e8eaf0' : '#8892a4',
-                      }}
+                      className={cn(
+                        'text-[13px]',
+                        isOwner ? 'font-bold text-foreground' : 'font-medium text-secondary-fg',
+                      )}
                     >
                       {team.displayName ?? team.handle}
                     </span>
-                  </td>
-                  <td
-                    style={{
-                      padding: '10px 10px',
-                      textAlign: 'center',
-                      fontSize: 12,
-                      color: '#8892a4',
-                      fontFamily: 'var(--font-mono), monospace',
-                    }}
-                  >
+                  </TableCell>
+                  <TableCell className="text-center font-mono text-xs text-secondary-fg tabular-nums">
                     ${team.spent}
-                  </td>
-                  <td
-                    style={{
-                      padding: '10px 10px',
-                      textAlign: 'center',
-                      fontSize: 12,
-                      color: '#e8eaf0',
-                      fontFamily: 'var(--font-mono), monospace',
-                    }}
-                  >
+                  </TableCell>
+                  <TableCell className="text-center font-mono text-xs text-foreground tabular-nums">
                     ${team.remaining}
-                  </td>
-                  <td
-                    style={{
-                      padding: '10px 10px',
-                      textAlign: 'center',
-                      fontSize: 12,
-                      color: '#8892a4',
-                      fontFamily: 'var(--font-mono), monospace',
-                    }}
-                  >
+                  </TableCell>
+                  <TableCell className="text-center font-mono text-xs text-secondary-fg tabular-nums">
                     {team.rosterCount} / {team.rosterCount + team.rosterRemaining}
-                  </td>
-                  <td style={{ padding: '10px 10px', minWidth: 180 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  </TableCell>
+                  <TableCell className="min-w-[180px]">
+                    <div className="flex items-center gap-2.5">
                       <span
                         data-testid={`bp-${i + 1}`}
-                        style={{
-                          fontSize: 15,
-                          fontWeight: 700,
-                          color: bpColor,
-                          fontFamily: 'var(--font-mono), monospace',
-                          minWidth: 60,
-                        }}
+                        className="min-w-[60px] font-mono text-[15px] font-bold tabular-nums"
+                        style={{ color: bpColor }}
                       >
                         ${team.buyingPower}
                       </span>
-                      <div
-                        style={{
-                          flex: 1,
-                          height: 6,
-                          background: '#1a1f2e',
-                          borderRadius: 3,
-                          overflow: 'hidden',
-                        }}
-                      >
+                      <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-muted">
                         <div
-                          style={{
-                            width: `${barWidth}%`,
-                            height: '100%',
-                            background: bpColor,
-                            borderRadius: 3,
-                            opacity: 0.75,
-                          }}
+                          className="h-full rounded-full"
+                          style={{ width: `${barWidth}%`, background: bpColor, opacity: 0.75 }}
                         />
                       </div>
                     </div>
-                  </td>
-                </tr>
+                  </TableCell>
+                </TableRow>
               );
             })}
-          </tbody>
-        </table>
+          </TableBody>
+        </Table>
       </div>
     </div>
   );

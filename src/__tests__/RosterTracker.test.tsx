@@ -1,4 +1,5 @@
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import RosterTracker from '@/components/RosterTracker/RosterTracker';
 import type { TeamWithRoster } from '@/types';
 
@@ -66,21 +67,33 @@ describe('RosterTracker', () => {
     expect(screen.queryByText('Patrick Mahomes')).not.toBeInTheDocument();
   });
 
-  it('shows roster when a team row is clicked', () => {
+  it('shows roster when a team expand button is clicked', async () => {
+    const user = userEvent.setup();
     render(<RosterTracker teams={[makeTeam()]} ownerHandle="coreschke" />);
-    fireEvent.click(screen.getByText('coreschke').closest('tr')!);
+    await user.click(screen.getByRole('button', { name: /expand roster for coreschke/i }));
     expect(screen.getByText('Patrick Mahomes')).toBeInTheDocument();
   });
 
-  it('collapses roster when the same row is clicked again', () => {
+  it('shows roster when the team row is clicked', async () => {
+    const user = userEvent.setup();
     render(<RosterTracker teams={[makeTeam()]} ownerHandle="coreschke" />);
-    const row = screen.getByText('coreschke').closest('tr')!;
-    fireEvent.click(row);
-    fireEvent.click(row);
+
+    await user.click(screen.getByText('coreschke').closest('tr')!);
+
+    expect(screen.getByText('Patrick Mahomes')).toBeInTheDocument();
+  });
+
+  it('collapses roster when the same expand button is clicked again', async () => {
+    const user = userEvent.setup();
+    render(<RosterTracker teams={[makeTeam()]} ownerHandle="coreschke" />);
+    const button = screen.getByRole('button', { name: /expand roster for coreschke/i });
+    await user.click(button);
+    await user.click(button);
     expect(screen.queryByText('Patrick Mahomes')).not.toBeInTheDocument();
   });
 
-  it('keeps multiple rows expanded simultaneously', () => {
+  it('keeps multiple rows expanded simultaneously', async () => {
+    const user = userEvent.setup();
     const team2 = makeTeam({
       id: 2,
       handle: 'chappy72',
@@ -101,10 +114,24 @@ describe('RosterTracker', () => {
       ],
     });
     render(<RosterTracker teams={[makeTeam(), team2]} ownerHandle="coreschke" />);
-    fireEvent.click(screen.getByText('coreschke').closest('tr')!);
-    fireEvent.click(screen.getByText('chappy72').closest('tr')!);
+    await user.click(screen.getByRole('button', { name: /expand roster for coreschke/i }));
+    await user.click(screen.getByRole('button', { name: /expand roster for chappy72/i }));
     expect(screen.getByText('Patrick Mahomes')).toBeInTheDocument();
     expect(screen.getByText('Justin Jefferson')).toBeInTheDocument();
+  });
+
+  it('sort headers can be operated with the keyboard', async () => {
+    const user = userEvent.setup();
+    render(<RosterTracker teams={[makeTeam(), emptyTeam]} ownerHandle="coreschke" />);
+
+    await user.tab();
+    expect(screen.getByRole('button', { name: /sort by roster/i })).toHaveFocus();
+    await user.keyboard('{Enter}');
+
+    expect(screen.getByRole('columnheader', { name: /roster/i })).toHaveAttribute(
+      'aria-sort',
+      'descending',
+    );
   });
 
   it('shows PKG badge for teams with pick packages', () => {
@@ -117,9 +144,10 @@ describe('RosterTracker', () => {
     expect(screen.queryByText('0×')).not.toBeInTheDocument();
   });
 
-  it('shows empty state message when an expanded team has no results', () => {
+  it('shows empty state message when an expanded team has no results', async () => {
+    const user = userEvent.setup();
     render(<RosterTracker teams={[emptyTeam]} ownerHandle="coreschke" />);
-    fireEvent.click(screen.getByText('chappy72').closest('tr')!);
+    await user.click(screen.getByRole('button', { name: /expand roster for chappy72/i }));
     expect(screen.getByText('No players won yet.')).toBeInTheDocument();
   });
 });

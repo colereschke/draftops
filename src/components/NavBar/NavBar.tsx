@@ -1,65 +1,27 @@
 import type { Session } from 'next-auth';
 import { signOut } from '@/auth';
+import { Button } from '@/components/ui/button';
 import NavLinks from './NavLinks';
 
 export default function NavBar({ session }: { session: Session | null }) {
   return (
-    <div
-      style={{
-        position: 'sticky',
-        top: 0,
-        zIndex: 50,
-        background: 'var(--bg-surface, #141824)',
-        padding: '6px 20px',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        flexWrap: 'wrap',
-        gap: '4px 20px',
-      }}
-    >
-      <span
-        style={{
-          fontFamily: 'var(--font-barlow), sans-serif',
-          fontWeight: 700,
-          fontSize: 15,
-          letterSpacing: 1.5,
-          color: '#e8eaf0',
-          textTransform: 'uppercase',
-        }}
-      >
+    <div className="bg-card gap-x-lg gap-y-xs px-lg py-sm sticky top-0 z-50 flex flex-wrap items-center justify-between">
+      <span className="font-label text-label-lg text-foreground font-bold tracking-wide uppercase">
         DraftOps
       </span>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
+      <div className="gap-lg flex items-center">
         <NavLinks />
         <a
           href="https://github.com/colereschke/draftops/issues/new?template=feedback.yml"
           target="_blank"
           rel="noopener noreferrer"
-          style={{
-            fontSize: 13,
-            fontWeight: 700,
-            letterSpacing: 1,
-            textTransform: 'uppercase',
-            fontFamily: 'var(--font-barlow), sans-serif',
-            textDecoration: 'none',
-            color: '#4a5168',
-          }}
+          className="font-label text-label-md text-muted-foreground font-bold tracking-wide uppercase no-underline"
         >
           Feedback
         </a>
         {session && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <span
-              style={{
-                fontFamily: 'var(--font-barlow), sans-serif',
-                fontWeight: 700,
-                fontSize: 13,
-                letterSpacing: 1,
-                textTransform: 'uppercase',
-                color: '#4a5168',
-              }}
-            >
+          <div className="gap-md flex items-center">
+            <span className="font-label text-label-md text-muted-foreground font-bold tracking-wide uppercase">
               {session.user?.name}
             </span>
             <form
@@ -68,23 +30,14 @@ export default function NavBar({ session }: { session: Session | null }) {
                 await signOut({ redirectTo: '/sign-in' });
               }}
             >
-              <button
+              <Button
                 type="submit"
-                style={{
-                  background: 'none',
-                  border: 'none',
-                  cursor: 'pointer',
-                  fontFamily: 'var(--font-barlow), sans-serif',
-                  fontWeight: 700,
-                  fontSize: 13,
-                  letterSpacing: 1,
-                  textTransform: 'uppercase',
-                  color: '#4a5168',
-                  padding: 0,
-                }}
+                variant="ghost"
+                size="sm"
+                className="font-label text-label-md text-muted-foreground h-auto p-0 font-bold tracking-wide uppercase"
               >
                 Sign out
-              </button>
+              </Button>
             </form>
           </div>
         )}

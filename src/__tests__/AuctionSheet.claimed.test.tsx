@@ -1,5 +1,7 @@
+// src/__tests__/AuctionSheet.claimed.test.tsx
 import React from 'react';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import AuctionSheet from '@/components/AuctionSheet/AuctionSheet';
 import type { Player, ClaimedBid, LeagueTeam } from '@/types';
 
@@ -56,201 +58,109 @@ afterEach(() => {
   jest.restoreAllMocks();
 });
 
+function renderSheet(overrides: Partial<React.ComponentProps<typeof AuctionSheet>> = {}) {
+  return render(
+    <AuctionSheet
+      players={MOCK_PLAYERS}
+      claimedBids={[]}
+      teams={mockTeams}
+      nominatedPlayers={[]}
+      draftId={1}
+      ownerHandle="coreschke"
+      ownerBudget={1000}
+      {...overrides}
+    />,
+  );
+}
+
 describe('AuctionSheet with claimed bids', () => {
   it('renders without claimed bids and does not show a Claimed column', () => {
-    render(
-      <AuctionSheet
-        players={MOCK_PLAYERS}
-        claimedBids={[]}
-        teams={mockTeams}
-        nominatedPlayers={[]}
-        draftId={1}
-        ownerHandle="coreschke"
-        ownerBudget={1000}
-      />,
-    );
+    renderSheet();
 
     expect(screen.queryByText('Claimed')).not.toBeInTheDocument();
   });
 
   it('shows a Claimed column header when at least one bid exists', () => {
-    render(
-      <AuctionSheet
-        players={MOCK_PLAYERS}
-        claimedBids={[mockClaim]}
-        teams={mockTeams}
-        nominatedPlayers={[]}
-        draftId={1}
-        ownerHandle="coreschke"
-        ownerBudget={1000}
-      />,
-    );
+    renderSheet({ claimedBids: [mockClaim] });
 
     expect(screen.getByText('Claimed')).toBeInTheDocument();
   });
 
   it('shows team handle and price in the claimed column for a claimed player', () => {
-    render(
-      <AuctionSheet
-        players={MOCK_PLAYERS}
-        claimedBids={[mockClaim]}
-        teams={mockTeams}
-        nominatedPlayers={[]}
-        draftId={1}
-        ownerHandle="coreschke"
-        ownerBudget={1000}
-      />,
-    );
+    renderSheet({ claimedBids: [mockClaim] });
 
     expect(screen.getByText(/coreschke/)).toBeInTheDocument();
     expect(screen.getAllByText(/\$110/).length).toBeGreaterThan(0);
   });
 
-  it('shows EV diff with ▼ and green color when bought under target', () => {
+  it('shows EV diff with ▼ and green color when bought under target', async () => {
     // mockClaim.price = 110, player.budget = 120, diff = -10 → ▼$10
-    render(
-      <AuctionSheet
-        players={MOCK_PLAYERS}
-        claimedBids={[mockClaim]}
-        teams={mockTeams}
-        nominatedPlayers={[]}
-        draftId={1}
-        ownerHandle="coreschke"
-        ownerBudget={1000}
-      />,
-    );
+    renderSheet({ claimedBids: [mockClaim] });
 
     expect(screen.getByText(/▼\$10/)).toBeInTheDocument();
   });
 
   it('shows EV diff with ▲ and red when overpaid', () => {
     const overClaim: ClaimedBid = { ...mockClaim, price: 130 };
-    render(
-      <AuctionSheet
-        players={MOCK_PLAYERS}
-        claimedBids={[overClaim]}
-        teams={mockTeams}
-        nominatedPlayers={[]}
-        draftId={1}
-        ownerHandle="coreschke"
-        ownerBudget={1000}
-      />,
-    );
+    renderSheet({ claimedBids: [overClaim] });
 
     // price 130, budget 120, diff = +10 → ▲$10
     expect(screen.getByText(/▲\$10/)).toBeInTheDocument();
   });
 
-  it('opens the modal when a claimed player row is clicked', () => {
-    render(
-      <AuctionSheet
-        players={MOCK_PLAYERS}
-        claimedBids={[mockClaim]}
-        teams={mockTeams}
-        nominatedPlayers={[]}
-        draftId={1}
-        ownerHandle="coreschke"
-        ownerBudget={1000}
-      />,
-    );
+  it('opens the modal when a claimed player row is clicked', async () => {
+    const user = userEvent.setup();
+    renderSheet({ claimedBids: [mockClaim] });
 
-    fireEvent.click(screen.getAllByText('Josh Allen')[0]);
+    await user.click(screen.getAllByText('Josh Allen')[0]);
 
-    // Modal opens in edit mode
     expect(screen.getByRole('button', { name: /update bid/i })).toBeInTheDocument();
   });
 
-  it('opens the modal when an unclaimed player row is clicked', () => {
-    render(
-      <AuctionSheet
-        players={MOCK_PLAYERS}
-        claimedBids={[]}
-        teams={mockTeams}
-        nominatedPlayers={[]}
-        draftId={1}
-        ownerHandle="coreschke"
-        ownerBudget={1000}
-      />,
-    );
+  it('opens the modal when an unclaimed player row is clicked', async () => {
+    const user = userEvent.setup();
+    renderSheet();
 
-    fireEvent.click(screen.getByText('Justin Jefferson'));
+    await user.click(screen.getByText('Justin Jefferson'));
 
-    // Modal opens in add mode
     expect(screen.getByRole('button', { name: /log bid/i })).toBeInTheDocument();
   });
 
   it('shows LIVE badge for a player in the nominatedPlayers prop', () => {
-    render(
-      <AuctionSheet
-        players={MOCK_PLAYERS}
-        claimedBids={[]}
-        teams={mockTeams}
-        nominatedPlayers={['Josh Allen']}
-        draftId={1}
-        ownerHandle="coreschke"
-        ownerBudget={1000}
-      />,
-    );
+    renderSheet({ nominatedPlayers: ['Josh Allen'] });
+
     expect(screen.getByText('LIVE')).toBeInTheDocument();
   });
 
-  it('shows Nom button in modal for an unnominated player', () => {
-    render(
-      <AuctionSheet
-        players={MOCK_PLAYERS}
-        claimedBids={[]}
-        teams={mockTeams}
-        nominatedPlayers={[]}
-        draftId={1}
-        ownerHandle="coreschke"
-        ownerBudget={1000}
-      />,
-    );
-    fireEvent.click(screen.getByText('Josh Allen'));
+  it('shows Nom button in modal for an unnominated player', async () => {
+    const user = userEvent.setup();
+    renderSheet();
+
+    await user.click(screen.getByText('Josh Allen'));
+
     expect(screen.getByRole('button', { name: /^nom$/i })).toBeInTheDocument();
   });
 
-  it('shows In Auction in modal for an already-nominated player', () => {
-    render(
-      <AuctionSheet
-        players={MOCK_PLAYERS}
-        claimedBids={[]}
-        teams={mockTeams}
-        nominatedPlayers={['Josh Allen']}
-        draftId={1}
-        ownerHandle="coreschke"
-        ownerBudget={1000}
-      />,
-    );
-    fireEvent.click(screen.getAllByText('Josh Allen')[0]);
+  it('shows In Auction in modal for an already-nominated player', async () => {
+    const user = userEvent.setup();
+    renderSheet({ nominatedPlayers: ['Josh Allen'] });
+
+    await user.click(screen.getAllByText('Josh Allen')[0]);
+
     expect(screen.getByText(/in auction/i)).toBeInTheDocument();
   });
 
   it('closes modal, shows LIVE badge, and calls /api/draft/1/nominated after clicking Nom', async () => {
-    render(
-      <AuctionSheet
-        players={MOCK_PLAYERS}
-        claimedBids={[]}
-        teams={mockTeams}
-        nominatedPlayers={[]}
-        draftId={1}
-        ownerHandle="coreschke"
-        ownerBudget={1000}
-      />,
-    );
+    const user = userEvent.setup();
+    renderSheet();
 
-    fireEvent.click(screen.getByText('Josh Allen'));
+    await user.click(screen.getByText('Josh Allen'));
     expect(screen.getByRole('dialog')).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: /^nom$/i }));
+    await user.click(screen.getByRole('button', { name: /^nom$/i }));
 
-    // Modal should close
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
-
-    // LIVE badge should appear optimistically
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
     expect(screen.getByText('LIVE')).toBeInTheDocument();
-
-    // API should have been called
     expect(global.fetch).toHaveBeenCalledWith(
       '/api/draft/1/nominated',
       expect.objectContaining({
@@ -258,5 +168,43 @@ describe('AuctionSheet with claimed bids', () => {
         body: JSON.stringify({ playerName: 'Josh Allen' }),
       }),
     );
+  });
+
+  it('hides claimed players from the table when Available Only is toggled on', async () => {
+    const user = userEvent.setup();
+    renderSheet({ claimedBids: [mockClaim] });
+
+    expect(screen.getByText('Josh Allen')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /available only/i }));
+
+    await waitFor(() => expect(screen.queryByText('Josh Allen')).not.toBeInTheDocument());
+    expect(screen.getByText('Justin Jefferson')).toBeInTheDocument();
+  });
+
+  it('hides the Claimed column while Available Only is active, and restores it when toggled off', async () => {
+    const user = userEvent.setup();
+    renderSheet({ claimedBids: [mockClaim] });
+
+    expect(screen.getByText('Claimed')).toBeInTheDocument();
+
+    const toggle = screen.getByRole('button', { name: /available only/i });
+    await user.click(toggle);
+    await waitFor(() => expect(screen.queryByText('Claimed')).not.toBeInTheDocument());
+
+    await user.click(toggle);
+    await waitFor(() => expect(screen.getByText('Claimed')).toBeInTheDocument());
+  });
+
+  it('falls back to showing all players when the active position pill is clicked again', async () => {
+    const user = userEvent.setup();
+    renderSheet();
+
+    const qbPill = screen.getByRole('button', { name: 'QB' });
+    await user.click(qbPill);
+    await waitFor(() => expect(screen.queryByText('Justin Jefferson')).not.toBeInTheDocument());
+
+    await user.click(qbPill);
+    await waitFor(() => expect(screen.getByText('Justin Jefferson')).toBeInTheDocument());
   });
 });

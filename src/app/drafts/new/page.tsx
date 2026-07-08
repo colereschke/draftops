@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useState, useTransition } from 'react';
 import { createDraft } from '@/lib/actions';
 import { importFromSleeper } from '@/lib/sleeper-actions';
@@ -170,16 +171,28 @@ export default function NewDraftPage() {
 
   return (
     <main style={{ padding: '2rem', maxWidth: '680px', margin: '0 auto' }}>
-      <h1
+      <div
         style={{
-          fontFamily: 'var(--font-barlow)',
-          fontSize: '1.5rem',
-          color: 'var(--text-primary)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
           marginBottom: '1.5rem',
         }}
       >
-        New Draft
-      </h1>
+        <h1
+          style={{
+            fontFamily: 'var(--font-barlow)',
+            fontSize: '1.5rem',
+            color: 'var(--text-primary)',
+            margin: 0,
+          }}
+        >
+          New Draft
+        </h1>
+        <Link href="/drafts" style={cancelLinkStyle}>
+          Cancel
+        </Link>
+      </div>
 
       {/* --- Import from Sleeper --- */}
       <div
@@ -690,22 +703,27 @@ export default function NewDraftPage() {
           </p>
         )}
 
-        <button
-          type="submit"
-          disabled={isPending}
-          style={{
-            background: isPending ? 'var(--text-secondary)' : 'var(--pos-qb)',
-            color: '#fff',
-            border: 'none',
-            borderRadius: '4px',
-            padding: '0.5rem 1.5rem',
-            fontFamily: 'var(--font-barlow)',
-            fontSize: '1rem',
-            cursor: isPending ? 'not-allowed' : 'pointer',
-          }}
-        >
-          {isPending ? 'Creating…' : 'Create Draft'}
-        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+          <button
+            type="submit"
+            disabled={isPending}
+            style={{
+              background: isPending ? 'var(--text-secondary)' : 'var(--pos-qb)',
+              color: '#fff',
+              border: 'none',
+              borderRadius: '4px',
+              padding: '0.5rem 1.5rem',
+              fontFamily: 'var(--font-barlow)',
+              fontSize: '1rem',
+              cursor: isPending ? 'not-allowed' : 'pointer',
+            }}
+          >
+            {isPending ? 'Creating…' : 'Create Draft'}
+          </button>
+          <Link href="/drafts" style={cancelLinkStyle}>
+            Cancel
+          </Link>
+        </div>
       </form>
     </main>
   );
@@ -758,4 +776,14 @@ const subSectionStyle: React.CSSProperties = {
   textTransform: 'uppercase',
   letterSpacing: '0.03em',
   marginBottom: '0.4rem',
+};
+
+const cancelLinkStyle: React.CSSProperties = {
+  color: 'var(--text-secondary)',
+  fontFamily: 'var(--font-barlow)',
+  fontSize: '0.875rem',
+  fontWeight: 700,
+  letterSpacing: '0.05em',
+  textDecoration: 'none',
+  textTransform: 'uppercase',
 };

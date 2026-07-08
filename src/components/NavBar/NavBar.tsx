@@ -1,6 +1,13 @@
 import type { Session } from 'next-auth';
+import { ChevronDownIcon, LogOutIcon } from 'lucide-react';
 import { signOut } from '@/auth';
 import { Button } from '@/components/ui/button';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import NavLinks from './NavLinks';
 
 export default function NavBar({ session }: { session: Session | null }) {
@@ -20,26 +27,37 @@ export default function NavBar({ session }: { session: Session | null }) {
           Feedback
         </a>
         {session && (
-          <div className="gap-md flex items-center">
-            <span className="font-label text-label-md text-muted-foreground font-bold tracking-wide uppercase">
-              {session.user?.name}
-            </span>
-            <form
-              action={async () => {
-                'use server';
-                await signOut({ redirectTo: '/sign-in' });
-              }}
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              render={
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="font-label text-label-md text-muted-foreground gap-1 px-1 font-bold tracking-wide uppercase hover:text-foreground"
+                />
+              }
             >
-              <Button
-                type="submit"
-                variant="ghost"
-                size="sm"
-                className="font-label text-label-md text-muted-foreground h-auto p-0 font-bold tracking-wide uppercase"
+              {session.user?.name}
+              <ChevronDownIcon className="size-3.5" />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="min-w-36">
+              <form
+                action={async () => {
+                  'use server';
+                  await signOut({ redirectTo: '/sign-in' });
+                }}
               >
-                Sign out
-              </Button>
-            </form>
-          </div>
+                <DropdownMenuItem
+                  nativeButton
+                  render={<button type="submit" />}
+                  className="font-label text-label-sm w-full font-bold tracking-wide uppercase"
+                >
+                  <LogOutIcon className="size-3.5" />
+                  Sign out
+                </DropdownMenuItem>
+              </form>
+            </DropdownMenuContent>
+          </DropdownMenu>
         )}
       </div>
     </div>

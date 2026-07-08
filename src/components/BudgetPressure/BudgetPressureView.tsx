@@ -11,9 +11,9 @@ import {
 } from '@/components/ui/table';
 
 function buyingPowerColor(bp: number): string {
-  if (bp > 150) return '#4caf6e';
-  if (bp >= 50) return '#e8a030';
-  return '#e05050';
+  if (bp > 150) return 'var(--age-young)';
+  if (bp >= 50) return 'var(--primary)';
+  return 'var(--age-old)';
 }
 
 interface BudgetPressureViewProps {
@@ -25,26 +25,58 @@ const COLUMNS = ['#', 'Team', 'Spent', 'Remaining', 'Roster', 'Buying Power'] as
 
 export default function BudgetPressureView({ teams, ownerHandle }: BudgetPressureViewProps) {
   const maxBp = Math.max(...teams.map((t) => t.buyingPower), 1);
+  const mostDangerous = teams.reduce<TeamStats | null>(
+    (best, team) => (!best || team.buyingPower > best.buyingPower ? team : best),
+    null,
+  );
+  const ownerIndex = ownerHandle ? teams.findIndex((team) => team.handle === ownerHandle) : -1;
+  const ownerTeam = ownerIndex >= 0 ? teams[ownerIndex] : null;
+  const roomLiquidity = teams.reduce((sum, team) => sum + team.buyingPower, 0);
+  const lowPowerCount = teams.filter((team) => team.buyingPower < 50).length;
 
   return (
     <div className="min-h-screen bg-background text-foreground">
-      {/* Header */}
-      <div className="border-b border-border bg-card px-5 pt-[18px] pb-3.5">
-        <div className="font-label mb-1 text-[10px] tracking-[3px] text-muted-foreground uppercase">
-          12-Team · Superflex · $1,000 Budget · 30-Man Rosters
-        </div>
-        <div className="flex flex-wrap items-center justify-between gap-2.5">
-          <h1 className="font-label m-0 text-xl font-bold tracking-tight text-white">
-            Budget Pressure
-          </h1>
-          <BudgetRefresher intervalMs={20000} />
-        </div>
-        <div className="mt-0.5 text-[11px] text-muted-foreground">
-          Buying power = remaining − remaining roster spots · sorted by most dangerous bidder
+      <div className="border-b border-border bg-background px-5 py-4">
+        <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-stretch">
+          <section className="rounded-lg border border-border-subtle bg-card px-4 py-3">
+            <div className="font-label mb-1 text-[10px] tracking-[2.5px] text-muted-foreground uppercase">
+              12-Team · Superflex · $1,000 Budget · 30-Man Rosters
+            </div>
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <h1 className="font-label m-0 text-2xl leading-none font-bold tracking-tight text-foreground">
+                  Budget Pressure
+                </h1>
+                <div className="mt-1.5 text-[11px] text-secondary-fg">
+                  Teams ranked by live buying power after roster obligations.
+                </div>
+              </div>
+              <BudgetRefresher intervalMs={20000} />
+            </div>
+            <div className="mt-2 text-[11px] text-muted-foreground">
+              Buying power = remaining dollars minus open roster spots.
+            </div>
+          </section>
+
+          <section className="grid min-w-full grid-cols-2 gap-2 sm:grid-cols-4 xl:min-w-[720px]">
+            <PressureMetric
+              label="Most Dangerous"
+              value={mostDangerous?.handle ?? '—'}
+              detail={mostDangerous ? `BP $${mostDangerous.buyingPower}` : undefined}
+              tone="danger"
+            />
+            <PressureMetric
+              label="Your Rank"
+              value={ownerTeam ? `#${ownerIndex + 1}` : '—'}
+              detail={ownerTeam ? `BP $${ownerTeam.buyingPower}` : undefined}
+              tone="owner"
+            />
+            <PressureMetric label="Room Liquidity" value={`$${roomLiquidity}`} />
+            <PressureMetric label="Low Power" value={`${lowPowerCount} teams`} detail="Under $50" />
+          </section>
         </div>
       </div>
 
-      {/* Table */}
       <div className="overflow-x-auto px-5 pb-10">
         <Table className="mt-1.5">
           <TableHeader>
@@ -73,12 +105,11 @@ export default function BudgetPressureView({ teams, ownerHandle }: BudgetPressur
                   key={team.id}
                   data-testid={`row-${team.handle}`}
                   className={cn(
-                    'border-b-[#141824] hover:bg-transparent',
-                    !isOwner && i % 2 !== 0 ? 'bg-[#0a0c10]' : undefined,
+                    'border-b-border-subtle hover:bg-transparent',
+                    isOwner ? 'bg-accent' : i % 2 !== 0 ? 'bg-muted/20' : undefined,
                   )}
                   style={{
-                    background: isOwner ? '#141e2e' : undefined,
-                    borderLeft: `3px solid ${isOwner ? '#4f83e8' : 'var(--border)'}`,
+                    borderLeft: `3px solid ${isOwner ? 'var(--primary)' : 'var(--border)'}`,
                   }}
                 >
                   <TableCell className="text-center font-mono text-[11px] text-muted-foreground tabular-nums">
@@ -126,6 +157,33 @@ export default function BudgetPressureView({ teams, ownerHandle }: BudgetPressur
           </TableBody>
         </Table>
       </div>
+    </div>
+  );
+}
+
+interface PressureMetricProps {
+  label: string;
+  value: number | string;
+  detail?: string;
+  tone?: 'danger' | 'owner';
+}
+
+function PressureMetric({ label, value, detail, tone }: PressureMetricProps) {
+  const color =
+    tone === 'danger' ? 'var(--age-old)' : tone === 'owner' ? 'var(--primary)' : undefined;
+
+  return (
+    <div className="rounded-lg border border-border-subtle bg-card px-3 py-3">
+      <div className="font-label text-[10px] tracking-[1.7px] text-muted-foreground uppercase">
+        {label}
+      </div>
+      <div
+        className="mt-1 font-mono text-xl font-bold text-foreground tabular-nums"
+        style={{ color }}
+      >
+        {value}
+      </div>
+      {detail && <div className="mt-0.5 font-mono text-[11px] text-muted-foreground">{detail}</div>}
     </div>
   );
 }

@@ -146,6 +146,11 @@ export default function NominationHelper({ draftId, players }: NominationHelperP
   }
 
   const hasAuctionData = data.auctionResults.length > 0;
+  const bestNomination = scored[0] ?? null;
+  const maxPressure = scored.reduce(
+    (max, player) => Math.max(max, Math.round(player.nominationScore)),
+    0,
+  );
 
   return (
     <div
@@ -163,13 +168,40 @@ export default function NominationHelper({ draftId, players }: NominationHelperP
       />
 
       <div className="min-w-0 flex-1 overflow-x-auto px-5 pt-4 pb-10">
-        <div className="mb-3.5">
-          <div className="font-label mb-0.5 text-[10px] tracking-[3px] text-muted-foreground uppercase">
-            Nomination Helper
-          </div>
-          <div className="text-xs text-muted-foreground">
-            Players ranked by how much nominating them will drain rival budgets
-          </div>
+        <div className="mb-4 grid gap-3 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-stretch">
+          <section className="rounded-lg border border-border-subtle bg-card px-4 py-3">
+            <div className="font-label mb-1 text-[10px] tracking-[2.5px] text-muted-foreground uppercase">
+              Live Workbench
+            </div>
+            <h1 className="font-label m-0 text-2xl leading-none font-bold tracking-tight text-foreground">
+              Nomination Helper
+            </h1>
+            <div className="mt-1.5 text-[11px] text-secondary-fg">
+              Find nominations that pull money from rival builds.
+            </div>
+          </section>
+
+          <section className="grid min-w-full grid-cols-2 gap-2 sm:grid-cols-4 xl:min-w-[720px]">
+            <NominationMetric
+              label="Best Nomination"
+              value={bestNomination?.player.player ?? '—'}
+              detail={
+                bestNomination
+                  ? `${bestNomination.player.pos} · ${Math.round(
+                      bestNomination.nominationScore,
+                    ).toLocaleString()} pressure`
+                  : undefined
+              }
+              tone="primary"
+            />
+            <NominationMetric label="Live Nominations" value={data.nominated.length} />
+            <NominationMetric label="Watchlist" value={data.watchlist.length} />
+            <NominationMetric
+              label="Rival Pressure"
+              value={maxPressure.toLocaleString()}
+              detail="Top visible score"
+            />
+          </section>
         </div>
 
         <NominationTable
@@ -181,6 +213,30 @@ export default function NominationHelper({ draftId, players }: NominationHelperP
           onNominate={nominatePlayer}
         />
       </div>
+    </div>
+  );
+}
+
+interface NominationMetricProps {
+  label: string;
+  value: number | string;
+  detail?: string;
+  tone?: 'primary';
+}
+
+function NominationMetric({ label, value, detail, tone }: NominationMetricProps) {
+  return (
+    <div className="rounded-lg border border-border-subtle bg-card px-3 py-3">
+      <div className="font-label text-[10px] tracking-[1.7px] text-muted-foreground uppercase">
+        {label}
+      </div>
+      <div
+        className="mt-1 truncate font-mono text-xl font-bold text-foreground tabular-nums"
+        style={{ color: tone === 'primary' ? 'var(--primary)' : undefined }}
+      >
+        {value}
+      </div>
+      {detail && <div className="mt-0.5 truncate text-[11px] text-muted-foreground">{detail}</div>}
     </div>
   );
 }

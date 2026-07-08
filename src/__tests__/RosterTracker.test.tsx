@@ -62,6 +62,19 @@ describe('RosterTracker', () => {
     expect(screen.getByText('chappy72')).toBeInTheDocument();
   });
 
+  it('renders roster summary metrics in the page intro', () => {
+    render(<RosterTracker teams={[makeTeam(), emptyTeam]} ownerHandle="coreschke" />);
+
+    expect(screen.getByText('Teams')).toBeInTheDocument();
+    expect(screen.getByTestId('roster-metric-teams')).toHaveTextContent('2');
+    expect(screen.getByText('Open Slots')).toBeInTheDocument();
+    expect(screen.getByTestId('roster-metric-open-slots')).toHaveTextContent('58');
+    expect(screen.getByText('Most Flexible')).toBeInTheDocument();
+    expect(screen.getByTestId('roster-metric-most-flexible')).toHaveTextContent('chappy72');
+    expect(screen.getByText('Packages Held')).toBeInTheDocument();
+    expect(screen.getByTestId('roster-metric-packages')).toHaveTextContent('1');
+  });
+
   it('does not show roster player rows by default', () => {
     render(<RosterTracker teams={[makeTeam()]} ownerHandle="coreschke" />);
     expect(screen.queryByText('Patrick Mahomes')).not.toBeInTheDocument();

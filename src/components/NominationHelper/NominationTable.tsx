@@ -19,7 +19,7 @@ import RivalDemandBar from './RivalDemandBar';
 
 const POSITIONS: Array<'ALL' | Position> = ['ALL', 'QB', 'RB', 'WR', 'TE', 'PICK', 'PKG'];
 
-const COLUMNS = ['#', 'Player', 'Target / Ceil', 'Score', 'Rival Demand', '', ''] as const;
+const COLUMNS = ['#', 'Player', 'Target / Ceil', 'Pressure', 'Rival Demand', '', ''] as const;
 
 interface NominationTableProps {
   scored: ScoredPlayer[];
@@ -114,8 +114,8 @@ export default function NominationTable({
               <TableRow
                 key={player.player}
                 className={cn(
-                  'border-b-[#141824] hover:bg-card',
-                  i % 2 !== 0 ? 'bg-[#0a0c10]' : undefined,
+                  'border-b-border-subtle hover:bg-card',
+                  i % 2 !== 0 ? 'bg-muted/20' : undefined,
                 )}
                 style={{ borderLeft: `3px solid ${c.accent}` }}
               >
@@ -137,7 +137,7 @@ export default function NominationTable({
                       <span
                         className="rounded text-[8px] font-bold tracking-wide uppercase"
                         style={{
-                          background: '#3a2800',
+                          background: 'var(--accent)',
                           color: 'var(--pos-wr)',
                           padding: '1px 4px',
                         }}
@@ -189,7 +189,7 @@ export default function NominationTable({
                     className="font-label tracking-wide hover:border-[var(--pos-pick)]"
                     style={{ color: 'var(--pos-pick)' }}
                   >
-                    Nom
+                    Nominate
                   </Button>
                 </TableCell>
               </TableRow>

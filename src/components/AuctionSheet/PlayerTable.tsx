@@ -33,9 +33,9 @@ const SORT_COLUMNS: Array<{ key: SortKey; label: string }> = [
   { key: 'pos', label: 'Pos' },
   { key: 'team', label: 'Team' },
   { key: 'age', label: 'Age' },
-  { key: 'floor', label: '🔻 Floor' },
-  { key: 'budget', label: '💰 Target' },
-  { key: 'ceiling', label: '🔺 Ceiling' },
+  { key: 'floor', label: 'Floor' },
+  { key: 'budget', label: 'Target' },
+  { key: 'ceiling', label: 'Ceiling' },
 ];
 
 function ageColor(age: number | null): string {
@@ -55,9 +55,9 @@ interface SortIconProps {
 function SortIcon({ col, sortBy, sortDir }: SortIconProps) {
   if (sortBy !== col) return <ArrowUpDown className="ml-1 inline size-3.5 text-muted-foreground" />;
   return sortDir === 'asc' ? (
-    <ArrowUp className="ml-1 inline size-3.5" style={{ color: 'var(--pos-wr)' }} />
+    <ArrowUp className="ml-1 inline size-3.5" style={{ color: 'var(--primary)' }} />
   ) : (
-    <ArrowDown className="ml-1 inline size-3.5" style={{ color: 'var(--pos-wr)' }} />
+    <ArrowDown className="ml-1 inline size-3.5" style={{ color: 'var(--primary)' }} />
   );
 }
 
@@ -74,9 +74,9 @@ export default function PlayerTable({
 }: PlayerTableProps) {
   return (
     <div className="overflow-x-auto px-5 pb-10">
-      <Table className="mt-1.5">
+      <Table className="mt-1.5 border-separate border-spacing-0">
         <TableHeader>
-          <TableRow className="border-border hover:bg-transparent">
+          <TableRow className="border-border-subtle hover:bg-transparent">
             {SORT_COLUMNS.map((col) => (
               <TableHead
                 key={col.key}
@@ -94,7 +94,7 @@ export default function PlayerTable({
                   aria-label={`Sort by ${col.label}`}
                   className="font-label cursor-pointer border-0 bg-transparent p-0 text-[10px] font-semibold tracking-wide whitespace-nowrap uppercase select-none text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
                   style={{
-                    color: sortBy === col.key ? 'var(--pos-wr)' : undefined,
+                    color: sortBy === col.key ? 'var(--primary)' : undefined,
                     textAlign: col.key === 'player' ? 'left' : 'center',
                   }}
                 >
@@ -126,15 +126,21 @@ export default function PlayerTable({
               <TableRow
                 key={p.player + i}
                 className={cn(
-                  'border-b-[#141824] hover:bg-card',
-                  isNominated ? 'bg-[#0d1f1f]' : i % 2 !== 0 ? 'bg-[#0a0c10]' : undefined,
+                  'border-b-border-subtle hover:bg-card',
+                  claim && 'bg-background',
+                  !claim && isNominated && 'bg-[color-mix(in_srgb,var(--pos-pick)_9%,transparent)]',
+                  !claim && !isNominated && i % 2 !== 0 && 'bg-card/45',
                 )}
                 style={{
                   borderLeft: `3px solid ${isNominated ? 'var(--pos-pick)' : c.accent}`,
-                  opacity: claim ? 0.5 : 1,
                 }}
               >
-                <TableCell className="text-center font-mono text-[11px] text-muted-foreground tabular-nums">
+                <TableCell
+                  className={cn(
+                    'text-center font-mono text-[11px] text-muted-foreground tabular-nums',
+                    claim && 'text-muted-foreground',
+                  )}
+                >
                   {p.sfRank}
                 </TableCell>
                 <TableCell className="text-left">
@@ -146,7 +152,11 @@ export default function PlayerTable({
                       className="cursor-pointer rounded-sm border-0 bg-transparent p-0 text-left text-[13px] focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
                       style={{
                         fontWeight: isPkg ? 700 : 600,
-                        color: isPkg ? 'var(--pos-pkg)' : 'var(--text-primary)',
+                        color: claim
+                          ? 'var(--text-secondary)'
+                          : isPkg
+                            ? 'var(--pos-pkg)'
+                            : 'var(--text-primary)',
                       }}
                     >
                       {p.player}
@@ -154,7 +164,7 @@ export default function PlayerTable({
                     {isRookie && (
                       <span
                         className="rounded-[3px] px-1 py-px text-[8px] font-bold tracking-wide uppercase"
-                        style={{ background: '#3a2800', color: 'var(--pos-wr)' }}
+                        style={{ background: '#172719', color: 'var(--age-young)' }}
                       >
                         R
                       </span>
@@ -162,7 +172,7 @@ export default function PlayerTable({
                     {isPkg && (
                       <span
                         className="rounded-[3px] px-1 py-px text-[8px] font-bold tracking-wide uppercase"
-                        style={{ background: '#3a2a00', color: 'var(--pos-pkg)' }}
+                        style={{ background: POS_COLORS.PKG.bg, color: POS_COLORS.PKG.accent }}
                       >
                         PKG
                       </span>
@@ -170,7 +180,7 @@ export default function PlayerTable({
                     {isNominated && (
                       <span
                         className="rounded-[3px] px-1 py-px text-[8px] font-bold tracking-wide uppercase"
-                        style={{ background: '#0d2a2a', color: 'var(--pos-pick)' }}
+                        style={{ background: POS_COLORS.PICK.bg, color: 'var(--pos-pick)' }}
                       >
                         LIVE
                       </span>
@@ -185,27 +195,46 @@ export default function PlayerTable({
                     {p.pos}
                   </span>
                 </TableCell>
-                <TableCell className="text-center text-[11px] text-secondary-fg">
+                <TableCell
+                  className={cn(
+                    'text-center text-[11px] text-secondary-fg',
+                    claim && 'text-muted-foreground',
+                  )}
+                >
                   {p.team}
                 </TableCell>
                 <TableCell
-                  className="text-center font-mono text-[11px] tabular-nums"
-                  style={{ color: ageColor(p.age) }}
+                  className={cn(
+                    'text-center font-mono text-[11px] tabular-nums',
+                    claim && 'text-secondary-fg',
+                  )}
+                  style={{ color: claim ? undefined : ageColor(p.age) }}
                 >
                   {p.age !== null ? p.age.toFixed(1) : '—'}
                 </TableCell>
-                <TableCell className="text-center font-mono text-xs text-secondary-fg tabular-nums">
+                <TableCell
+                  className={cn(
+                    'text-center font-mono text-xs text-secondary-fg tabular-nums',
+                    claim && 'text-muted-foreground',
+                  )}
+                >
                   ${p.floor}
                 </TableCell>
                 <TableCell
-                  className="text-center font-mono text-sm font-bold tabular-nums"
-                  style={{ color: c.accent }}
+                  className={cn(
+                    'text-center font-mono text-sm font-bold tabular-nums',
+                    claim && 'text-secondary-fg',
+                  )}
+                  style={{ color: claim ? 'var(--text-secondary)' : 'var(--primary)' }}
                 >
                   ${p.budget}
                 </TableCell>
                 <TableCell
-                  className="text-center font-mono text-xs tabular-nums"
-                  style={{ color: 'var(--age-old)' }}
+                  className={cn(
+                    'text-center font-mono text-xs tabular-nums',
+                    claim && 'text-muted-foreground',
+                  )}
+                  style={{ color: claim ? 'var(--text-muted)' : 'var(--text-secondary)' }}
                 >
                   ${p.ceiling}
                 </TableCell>

@@ -88,6 +88,25 @@ describe('PlayerTable', () => {
     expect(onRowClick).toHaveBeenCalledWith(PLAYERS[0]);
   });
 
+  it('calls onRowClick when the player row is clicked outside the player name', async () => {
+    const user = userEvent.setup();
+    const { onRowClick } = renderTable();
+
+    await user.click(screen.getByTestId('player-row-1'));
+
+    expect(onRowClick).toHaveBeenCalledWith(PLAYERS[0]);
+  });
+
+  it('opens a player row with the keyboard', async () => {
+    const user = userEvent.setup();
+    const { onRowClick } = renderTable();
+
+    screen.getByTestId('player-row-1').focus();
+    await user.keyboard('{Enter}');
+
+    expect(onRowClick).toHaveBeenCalledWith(PLAYERS[0]);
+  });
+
   it('row actions can be operated with the keyboard', async () => {
     const user = userEvent.setup();
     const { onRowClick } = renderTable();
@@ -166,5 +185,23 @@ describe('PlayerTable', () => {
     renderTable({ nominatedSet: new Set(['Josh Allen']) });
 
     expect(screen.getByText('LIVE')).toBeInTheDocument();
+  });
+
+  it('does not show raw projection context inline in the table', () => {
+    renderTable({
+      players: [
+        {
+          ...PLAYERS[0],
+          projectionAuctionValue: 113,
+          projectedPoints: 410.5,
+          vor: 150.4,
+          valueSource: 'fallback',
+        },
+      ],
+    });
+
+    expect(screen.queryByText('VOR')).not.toBeInTheDocument();
+    expect(screen.queryByText('Proj $113')).not.toBeInTheDocument();
+    expect(screen.queryByText('PROJ')).not.toBeInTheDocument();
   });
 });

@@ -90,6 +90,57 @@ describe('BidModal — add mode', () => {
 
     expect(screen.queryByRole('button', { name: /remove/i })).not.toBeInTheDocument();
   });
+
+  it('uses an explicit viewport-safe width instead of a fragile arbitrary width class', () => {
+    render(
+      <BidModal player={mockPlayer} teams={mockTeams} onClose={jest.fn()} onSubmit={jest.fn()} />,
+    );
+
+    const dialog = screen.getByRole('dialog');
+    expect(dialog).toHaveStyle({
+      width: '360px',
+      maxWidth: 'calc(100vw - 32px)',
+    });
+    expect(dialog).not.toHaveClass('w-[360px]');
+  });
+
+  it('uses the same restrained focus treatment as value-sheet search for price input', () => {
+    render(
+      <BidModal player={mockPlayer} teams={mockTeams} onClose={jest.fn()} onSubmit={jest.fn()} />,
+    );
+
+    expect(screen.getByLabelText('Price')).toHaveClass(
+      'focus-visible:border-border',
+      'focus-visible:ring-1',
+      'focus-visible:ring-border',
+    );
+  });
+
+  it('shows projection price context when available', () => {
+    render(
+      <BidModal
+        player={{
+          ...mockPlayer,
+          baseBudget: 120,
+          projectionAuctionValue: 113,
+          projectedPoints: 410.5,
+          vor: 150.4,
+          valueSource: 'fallback',
+        }}
+        teams={mockTeams}
+        onClose={jest.fn()}
+        onSubmit={jest.fn()}
+      />,
+    );
+
+    expect(screen.getByText('Price context')).toBeInTheDocument();
+    expect(screen.getByText('Dynasty')).toBeInTheDocument();
+    expect(screen.getByText('Projection')).toBeInTheDocument();
+    expect(screen.getByText('Active')).toBeInTheDocument();
+    expect(screen.getByTestId('bid-price-context-dynasty')).toHaveTextContent('$120');
+    expect(screen.getByTestId('bid-price-context-projection')).toHaveTextContent('$113');
+    expect(screen.getByTestId('bid-price-context-active')).toHaveTextContent('$120');
+  });
 });
 
 describe('BidModal — edit mode', () => {
@@ -215,6 +266,18 @@ describe('BidModal — nomination', () => {
 });
 
 describe('BidModal — team select', () => {
+  it('shows the selected team label instead of the raw team id', () => {
+    render(
+      <BidModal player={mockPlayer} teams={mockTeams} onClose={jest.fn()} onSubmit={jest.fn()} />,
+    );
+
+    const trigger = screen.getByRole('combobox', { name: /won by/i });
+
+    expect(trigger).toHaveTextContent('Cole');
+    expect(trigger).toHaveTextContent('coreschke');
+    expect(trigger).not.toHaveTextContent(/^1$/);
+  });
+
   it('opens the Won By select and lists both teams as options', async () => {
     const user = userEvent.setup();
     render(

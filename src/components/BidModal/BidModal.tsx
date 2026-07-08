@@ -41,6 +41,9 @@ export default function BidModal({
   const [price, setPrice] = useState<string>(existingBid ? String(existingBid.price) : '');
   const [teamId, setTeamId] = useState<number>(existingBid?.teamId ?? teams[0]?.id ?? 0);
   const [error, setError] = useState<string>('');
+  const selectedTeam = teams.find((team) => team.id === teamId);
+  const hasProjectionContext =
+    player.projectionAuctionValue !== null && player.projectionAuctionValue !== undefined;
 
   function handleSubmit() {
     const p = Number(price);
@@ -58,7 +61,14 @@ export default function BidModal({
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent showCloseButton={false} className="w-[360px] flex flex-col">
+      <DialogContent
+        showCloseButton={false}
+        className="flex flex-col"
+        style={{
+          width: '360px',
+          maxWidth: 'calc(100vw - 32px)',
+        }}
+      >
         <DialogTitle className="sr-only">{isEdit ? 'Edit Bid' : 'Log Bid'}</DialogTitle>
 
         {/* Header */}
@@ -76,6 +86,52 @@ export default function BidModal({
           </div>
         </div>
 
+        {hasProjectionContext && (
+          <div
+            data-testid="bid-price-context"
+            className="rounded-md border border-border-subtle bg-card/45 p-2.5"
+          >
+            <div className="font-label mb-2 text-[10px] font-bold tracking-wide text-muted-foreground uppercase">
+              Price context
+            </div>
+            <div className="grid grid-cols-3 gap-2 text-center">
+              <div>
+                <div className="font-label text-[9px] font-bold tracking-wide text-muted-foreground uppercase">
+                  Dynasty
+                </div>
+                <div
+                  data-testid="bid-price-context-dynasty"
+                  className="font-mono text-xs font-bold tabular-nums"
+                >
+                  ${player.baseBudget ?? player.budget}
+                </div>
+              </div>
+              <div>
+                <div className="font-label text-[9px] font-bold tracking-wide text-muted-foreground uppercase">
+                  Projection
+                </div>
+                <div
+                  data-testid="bid-price-context-projection"
+                  className="font-mono text-xs font-bold tabular-nums"
+                >
+                  ${player.projectionAuctionValue}
+                </div>
+              </div>
+              <div>
+                <div className="font-label text-[9px] font-bold tracking-wide text-muted-foreground uppercase">
+                  Active
+                </div>
+                <div
+                  data-testid="bid-price-context-active"
+                  className="font-mono text-xs font-bold tabular-nums"
+                >
+                  ${player.budget}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Price */}
         <div className="gap-xs flex flex-col">
           <Label
@@ -92,7 +148,7 @@ export default function BidModal({
             value={price}
             onChange={(e) => setPrice(e.target.value)}
             autoFocus
-            className="font-mono text-body-lg font-bold"
+            className="font-mono text-body-lg rounded-md bg-background font-bold focus-visible:border-border focus-visible:ring-1 focus-visible:ring-border"
           />
         </div>
 
@@ -104,13 +160,24 @@ export default function BidModal({
           >
             Won By
           </Label>
-          <Select value={teamId} onValueChange={(value) => value != null && setTeamId(value)}>
-            <SelectTrigger id="bid-team" aria-label="Won By" className="w-full">
-              <SelectValue />
+          <Select
+            value={String(teamId)}
+            onValueChange={(value) => value != null && setTeamId(Number(value))}
+          >
+            <SelectTrigger
+              id="bid-team"
+              aria-label="Won By"
+              className="w-full focus-visible:border-border focus-visible:ring-1 focus-visible:ring-border"
+            >
+              <SelectValue>
+                {selectedTeam
+                  ? `${selectedTeam.displayName ?? selectedTeam.handle} (${selectedTeam.handle})`
+                  : 'Select team'}
+              </SelectValue>
             </SelectTrigger>
             <SelectContent>
               {teams.map((t) => (
-                <SelectItem key={t.id} value={t.id}>
+                <SelectItem key={t.id} value={String(t.id)}>
                   {t.displayName ?? t.handle} ({t.handle})
                 </SelectItem>
               ))}

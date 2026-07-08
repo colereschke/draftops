@@ -264,8 +264,8 @@ export default function AuctionSheet({
 
       <div className="flex flex-wrap gap-4 border-t border-border-subtle px-5 py-2.5 text-[10px] text-muted-foreground/40">
         <span>
-          Source: 2QB auction values (FantasyCalc CSV) scaled 5× to $1,000 budget · TE premium ~18%
-          applied
+          Source: active target uses projection VOR when available · fallback uses adjusted ETR
+          dynasty values
         </span>
         <span className="ml-auto">
           PKG target for 2027 kicker = $109 (1st+2nd+3rd bundled w/ SF speculative premium)

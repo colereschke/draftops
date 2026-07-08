@@ -1,9 +1,10 @@
 import { notFound } from 'next/navigation';
 import { prisma } from '@/lib/db';
 import AuctionSheet from '@/components/AuctionSheet/AuctionSheet';
-import type { ClaimedBid, LeagueTeam, Player, Position } from '@/types';
+import type { ClaimedBid, LeagueTeam } from '@/types';
 import { auth } from '@/auth';
 import { getDraft } from '@/lib/draft';
+import { mapPlayersWithDraftValues } from '@/lib/playerValueMapping';
 
 export default async function DraftHomePage({ params }: { params: Promise<{ draftId: string }> }) {
   const draftId = parseInt((await params).draftId, 10);
@@ -12,7 +13,7 @@ export default async function DraftHomePage({ params }: { params: Promise<{ draf
   const draft = await getDraft(session.user.id, draftId);
   if (!draft) notFound();
 
-  const [rawBids, teams, nominatedEntries, dbPlayers] = await Promise.all([
+  const [rawBids, teams, nominatedEntries, dbPlayers, draftValues] = await Promise.all([
     prisma.auctionResult.findMany({
       where: { draftId },
       select: {
@@ -34,6 +35,22 @@ export default async function DraftHomePage({ params }: { params: Promise<{ draf
       select: { playerName: true },
     }),
     prisma.player.findMany({ where: { draftId }, orderBy: { sfRank: 'asc' } }),
+    prisma.draftPlayerValue.findMany({
+      where: { draftId },
+      select: {
+        playerId: true,
+        projectionSourceId: true,
+        projectedPoints: true,
+        replacementPoints: true,
+        vor: true,
+        projectionAuctionValue: true,
+        fallbackAuctionValue: true,
+        activeAuctionValue: true,
+        valueSource: true,
+        updatedAt: true,
+      },
+      orderBy: { updatedAt: 'desc' },
+    }),
   ]);
 
   const claimedBids: ClaimedBid[] = rawBids.map((r) => ({
@@ -45,18 +62,7 @@ export default async function DraftHomePage({ params }: { params: Promise<{ draf
     teamHandle: r.team.handle,
   }));
 
-  const players: Player[] = dbPlayers.map((p) => ({
-    player: p.name,
-    team: p.nflTeam,
-    pos: p.pos as Position,
-    age: p.age,
-    sfRank: p.sfRank,
-    budget: p.budget,
-    ceiling: p.ceiling,
-    floor: p.floor,
-    notes: p.notes,
-    sleeperId: p.sleeperId,
-  }));
+  const players = mapPlayersWithDraftValues(dbPlayers, draftValues);
 
   return (
     <AuctionSheet

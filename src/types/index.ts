@@ -11,6 +11,14 @@ export interface Player {
   floor: number;
   notes: string;
   sleeperId?: string | null;
+  baseBudget?: number;
+  baseCeiling?: number;
+  baseFloor?: number;
+  projectionAuctionValue?: number | null;
+  projectedPoints?: number | null;
+  replacementPoints?: number | null;
+  vor?: number | null;
+  valueSource?: string;
 }
 
 export interface TeamStats {

@@ -2,24 +2,37 @@ from draftops_projections.match_etr_values import match_etr_value_row
 from draftops_projections.models import SleeperPlayer
 
 
-def sleeper(**overrides: object) -> SleeperPlayer:
-    data = {
-        "sleeper_id": "1",
-        "full_name": "Jayden Daniels",
-        "first_name": "Jayden",
-        "last_name": "Daniels",
-        "search_full_name": "jayden daniels",
-        "normalized_name": "jayden daniels",
-        "team": "WAS",
-        "position": "QB",
-        "fantasy_positions": ("QB",),
-        "age": 25.0,
-        "years_exp": 2,
-        "active": True,
-        "status": "Active",
-    }
-    data.update(overrides)
-    return SleeperPlayer(**data)
+def sleeper(
+    *,
+    sleeper_id: str = "1",
+    full_name: str = "Jayden Daniels",
+    first_name: str = "Jayden",
+    last_name: str = "Daniels",
+    search_full_name: str = "jayden daniels",
+    normalized_name: str = "jayden daniels",
+    team: str = "WAS",
+    position: str = "QB",
+    fantasy_positions: tuple[str, ...] = ("QB",),
+    age: float | None = 25.0,
+    years_exp: int | None = 2,
+    active: bool = True,
+    status: str = "Active",
+) -> SleeperPlayer:
+    return SleeperPlayer(
+        sleeper_id=sleeper_id,
+        full_name=full_name,
+        first_name=first_name,
+        last_name=last_name,
+        search_full_name=search_full_name,
+        normalized_name=normalized_name,
+        team=team,
+        position=position,
+        fantasy_positions=fantasy_positions,
+        age=age,
+        years_exp=years_exp,
+        active=active,
+        status=status,
+    )
 
 
 def test_matches_etr_wft_to_sleeper_was_alias() -> None:

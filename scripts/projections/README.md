@@ -6,9 +6,11 @@ Sleeper NFL player database.
 ## Setup
 
 ```bash
-python3 -m venv .venv
-.venv/bin/python -m pip install -e '.[dev]'
+uv sync --extra dev
 ```
+
+This creates a local `.venv` from the committed `uv.lock`. You can also run `make projections-setup`
+from the repo root.
 
 ## Inputs
 
@@ -24,7 +26,13 @@ Both paths are ignored by git.
 ## Generate CSVs
 
 ```bash
-.venv/bin/python scripts/projections/generate_master_csv.py
+uv run python scripts/projections/generate_master_csv.py
+```
+
+Shortcut:
+
+```bash
+make projections-generate
 ```
 
 Outputs are written to ignored local files:
@@ -43,7 +51,7 @@ After generating/refreshing Sleeper player data, match the original ETR dynasty 
 IDs so rankings values can be joined to projection values:
 
 ```bash
-.venv/bin/python -m draftops_projections.match_etr_values \
+uv run python -m draftops_projections.match_etr_values \
   --etr-csv existing_project_docs/auction-tool/src/Dynasty_Rankings.csv \
   --sleeper-json data/raw/sleeper_players.json \
   --output-csv data/generated/etr_sleeper_matches.csv
@@ -115,11 +123,17 @@ Do not manually edit generated CSVs.
 ## Checks
 
 ```bash
-.venv/bin/python -m pytest scripts/projections/tests -q
-.venv/bin/python -m ruff format scripts/projections
-.venv/bin/python -m ruff check scripts/projections
-.venv/bin/python -m ruff format --check scripts/projections
-.venv/bin/python -m mypy
+uv run --extra dev pytest scripts/projections/tests -q
+uv run --extra dev ruff format scripts/projections
+uv run --extra dev ruff check scripts/projections
+uv run --extra dev ruff format --check scripts/projections
+uv run --extra dev mypy
+```
+
+Shortcut:
+
+```bash
+make projections-check
 ```
 
 ## Scope

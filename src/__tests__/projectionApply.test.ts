@@ -1,4 +1,6 @@
 import {
+  getSleeperIdUpdates,
+  resolvePlayerSleeperIds,
   type CsvProjectionRow,
   groupProjectionRowsBySource,
   joinPlayersToProjectionRows,
@@ -49,6 +51,46 @@ it('joins players to projection rows by sleeperId', () => {
       isRookie: false,
     },
   ]);
+});
+
+it('only updates player sleeper IDs when the resolved ID changed', () => {
+  const players = resolvePlayerSleeperIds(
+    [
+      { id: 1, name: 'Already Set', pos: 'QB', sleeperId: '10', budget: 20 },
+      { id: 2, name: 'Needs ID', pos: 'RB', sleeperId: null, budget: 15 },
+      { id: 3, name: 'Still Missing', pos: 'WR', sleeperId: null, budget: 10 },
+    ],
+    new Map([['Needs ID', '20']]),
+  );
+
+  expect(players).toEqual([
+    {
+      id: 1,
+      name: 'Already Set',
+      pos: 'QB',
+      sleeperId: '10',
+      budget: 20,
+      shouldUpdateSleeperId: false,
+    },
+    {
+      id: 2,
+      name: 'Needs ID',
+      pos: 'RB',
+      sleeperId: '20',
+      budget: 15,
+      shouldUpdateSleeperId: true,
+    },
+    {
+      id: 3,
+      name: 'Still Missing',
+      pos: 'WR',
+      sleeperId: null,
+      budget: 10,
+      shouldUpdateSleeperId: false,
+    },
+  ]);
+
+  expect(getSleeperIdUpdates(players)).toEqual([{ id: 2, sleeperId: '20' }]);
 });
 
 it('groups projection rows by source metadata', () => {

@@ -21,6 +21,15 @@ export interface PlayerJoinRow {
   budget: number;
 }
 
+export interface ResolvedPlayerJoinRow extends PlayerJoinRow {
+  shouldUpdateSleeperId: boolean;
+}
+
+export interface SleeperIdUpdate {
+  id: number;
+  sleeperId: string;
+}
+
 export interface ProjectionJoinRow {
   sleeperId: string;
   position: VorPosition;
@@ -77,6 +86,31 @@ export interface ProjectionSourceInput {
 export interface ProjectionSourceGroup {
   source: ProjectionSourceInput;
   rows: CsvProjectionRow[];
+}
+
+const WRITE_BATCH_SIZE = 50;
+const WRITE_TRANSACTION_TIMEOUT_MS = 60_000;
+
+export function resolvePlayerSleeperIds(
+  players: PlayerJoinRow[],
+  etrMatches: Map<string, string>,
+): ResolvedPlayerJoinRow[] {
+  return players.map((player) => {
+    const resolvedSleeperId = player.sleeperId ?? etrMatches.get(player.name) ?? null;
+    return {
+      ...player,
+      sleeperId: resolvedSleeperId,
+      shouldUpdateSleeperId: player.sleeperId !== resolvedSleeperId && resolvedSleeperId !== null,
+    };
+  });
+}
+
+export function getSleeperIdUpdates(players: ResolvedPlayerJoinRow[]): SleeperIdUpdate[] {
+  return players.flatMap((player) =>
+    player.shouldUpdateSleeperId && player.sleeperId
+      ? [{ id: player.id, sleeperId: player.sleeperId }]
+      : [],
+  );
 }
 
 export function joinPlayersToProjectionRows(
@@ -226,93 +260,98 @@ async function main(): Promise<void> {
       where: { draftId: draft.id },
       select: { id: true, name: true, pos: true, sleeperId: true, budget: true },
     });
-    const playersWithSleeperIds = players.map((player) => ({
-      ...player,
-      sleeperId: player.sleeperId ?? etrMatches.get(player.name) ?? null,
-    }));
+    const playersWithSleeperIds = resolvePlayerSleeperIds(players, etrMatches);
     let appliedCount = 0;
 
-    await prisma.$transaction(async (tx) => {
-      for (const player of playersWithSleeperIds) {
-        if (!player.sleeperId) continue;
-        await tx.player.update({
-          where: { id: player.id },
-          data: { sleeperId: player.sleeperId },
-        });
+    for (const batch of chunk(getSleeperIdUpdates(playersWithSleeperIds), WRITE_BATCH_SIZE)) {
+      await prisma.$transaction(
+        batch.map((player) =>
+          prisma.player.update({
+            where: { id: player.id },
+            data: { sleeperId: player.sleeperId },
+          }),
+        ),
+        { timeout: WRITE_TRANSACTION_TIMEOUT_MS },
+      );
+    }
+
+    for (const group of projectionGroups) {
+      const source =
+        (await prisma.projectionSource.findFirst({
+          where: {
+            name: group.source.name,
+            season: group.source.season,
+            projectionDate: group.source.projectionDate,
+          },
+        })) ??
+        (await prisma.projectionSource.create({
+          data: {
+            name: group.source.name,
+            season: group.source.season,
+            projectionDate: group.source.projectionDate,
+          },
+        }));
+
+      for (const batch of chunk(group.rows, WRITE_BATCH_SIZE)) {
+        await prisma.$transaction(
+          batch.map((projection) =>
+            prisma.playerProjection.upsert({
+              where: {
+                sleeperId_projectionSourceId: {
+                  sleeperId: projection.sleeperId,
+                  projectionSourceId: source.id,
+                },
+              },
+              create: playerProjectionData(projection, source.id),
+              update: playerProjectionData(projection, source.id),
+            }),
+          ),
+          { timeout: WRITE_TRANSACTION_TIMEOUT_MS },
+        );
       }
 
-      for (const group of projectionGroups) {
-        const source =
-          (await tx.projectionSource.findFirst({
-            where: {
-              name: group.source.name,
-              season: group.source.season,
-              projectionDate: group.source.projectionDate,
-            },
-          })) ??
-          (await tx.projectionSource.create({
-            data: {
-              name: group.source.name,
-              season: group.source.season,
-              projectionDate: group.source.projectionDate,
-            },
-          }));
-
-        for (const projection of group.rows) {
-          await tx.playerProjection.upsert({
-            where: {
-              sleeperId_projectionSourceId: {
-                sleeperId: projection.sleeperId,
-                projectionSourceId: source.id,
-              },
-            },
-            create: playerProjectionData(projection, source.id),
-            update: playerProjectionData(projection, source.id),
-          });
-        }
-
-        const joined = joinPlayersToProjectionRows(
-          playersWithSleeperIds,
-          group.rows.map((row) => ({
-            sleeperId: row.sleeperId,
-            position: row.position,
-            projectedPoints: row.projectedPoints,
-            isRookie: row.isRookie,
-          })),
-        );
-        const projectionInputs: ProjectionValueInput[] = joined.map((row) => ({
+      const joined = joinPlayersToProjectionRows(
+        playersWithSleeperIds,
+        group.rows.map((row) => ({
           sleeperId: row.sleeperId,
-          name: String(row.playerId),
           position: row.position,
           projectedPoints: row.projectedPoints,
-          fallbackAuctionValue: row.fallbackAuctionValue,
           isRookie: row.isRookie,
-        }));
-        const values = calculateProjectionValues({
-          players: projectionInputs,
-          teamCount: draft.teamCount,
-          rosterSize: draft.rosterSize,
-          budget: draft.budget,
-          startingLineup: toStartingLineup(draft.startingLineup),
-          targetRoster: toTargetRoster(draft.targetRoster),
-          scoringSettings,
-          activateProjectionValues: false,
-        });
-        const valuesBySleeperId = new Map(values.map((value) => [value.sleeperId, value]));
-
-        for (const row of joined) {
-          const value = valuesBySleeperId.get(row.sleeperId);
-          if (!value) continue;
-          const data = {
-            projectedPoints: row.projectedPoints,
-            replacementPoints: value.replacementPoints,
-            vor: value.vor,
-            projectionAuctionValue: value.projectionAuctionValue,
-            fallbackAuctionValue: row.fallbackAuctionValue,
-            activeAuctionValue: value.activeAuctionValue,
-            valueSource: 'fallback',
-          };
-          await tx.draftPlayerValue.upsert({
+        })),
+      );
+      const projectionInputs: ProjectionValueInput[] = joined.map((row) => ({
+        sleeperId: row.sleeperId,
+        name: String(row.playerId),
+        position: row.position,
+        projectedPoints: row.projectedPoints,
+        fallbackAuctionValue: row.fallbackAuctionValue,
+        isRookie: row.isRookie,
+      }));
+      const values = calculateProjectionValues({
+        players: projectionInputs,
+        teamCount: draft.teamCount,
+        rosterSize: draft.rosterSize,
+        budget: draft.budget,
+        startingLineup: toStartingLineup(draft.startingLineup),
+        targetRoster: toTargetRoster(draft.targetRoster),
+        scoringSettings,
+        activateProjectionValues: false,
+      });
+      const valuesBySleeperId = new Map(values.map((value) => [value.sleeperId, value]));
+      const draftPlayerValueWrites = joined.flatMap((row) => {
+        const value = valuesBySleeperId.get(row.sleeperId);
+        if (!value) return [];
+        const data = {
+          projectedPoints: row.projectedPoints,
+          replacementPoints: value.replacementPoints,
+          vor: value.vor,
+          projectionAuctionValue: value.projectionAuctionValue,
+          fallbackAuctionValue: row.fallbackAuctionValue,
+          activeAuctionValue: value.activeAuctionValue,
+          valueSource: 'fallback',
+        };
+        return [
+          prisma.draftPlayerValue.upsert({
             where: {
               draftId_playerId_projectionSourceId: {
                 draftId: draft.id,
@@ -327,11 +366,15 @@ async function main(): Promise<void> {
               ...data,
             },
             update: data,
-          });
-        }
-        appliedCount += joined.length;
+          }),
+        ];
+      });
+
+      for (const batch of chunk(draftPlayerValueWrites, WRITE_BATCH_SIZE)) {
+        await prisma.$transaction(batch, { timeout: WRITE_TRANSACTION_TIMEOUT_MS });
       }
-    });
+      appliedCount += joined.length;
+    }
 
     console.log(`Applied projection values to ${appliedCount} player-source row(s).`);
   } finally {
@@ -407,6 +450,14 @@ function sourceKey(source: ProjectionSourceInput): string {
     source.season,
     source.projectionDate ? source.projectionDate.toISOString() : '',
   ].join('|');
+}
+
+function chunk<T>(items: T[], size: number): T[][] {
+  const batches: T[][] = [];
+  for (let index = 0; index < items.length; index += size) {
+    batches.push(items.slice(index, index + size));
+  }
+  return batches;
 }
 
 function playerProjectionData(projection: CsvProjectionRow, projectionSourceId: number) {

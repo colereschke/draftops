@@ -108,4 +108,37 @@ describe('ThreatBoard', () => {
     );
     expect(screen.getByTestId('threat-pos-QB')).toHaveAttribute('aria-pressed', 'true');
   });
+
+  it('shows no re-sync pill when the board already matches the live nomination', () => {
+    render(
+      <ThreatBoard
+        teams={teams}
+        tendencies={tendencies}
+        livePosition="WR"
+        liveName="Puka Nacua"
+        ownerHandle="you"
+      />,
+    );
+    expect(screen.queryByTestId('threat-live-resync')).not.toBeInTheDocument();
+  });
+
+  it('offers a live re-sync pill when an override diverges from the live nomination, and jumps back on click', async () => {
+    render(
+      <ThreatBoard
+        teams={teams}
+        tendencies={tendencies}
+        livePosition="WR"
+        liveName="Puka Nacua"
+        ownerHandle="you"
+      />,
+    );
+    // Override to QB while WR is live -> pill appears naming the live position.
+    await userEvent.click(screen.getByTestId('threat-pos-QB'));
+    const pill = screen.getByTestId('threat-live-resync');
+    expect(pill).toHaveTextContent('WR');
+    // Clicking it clears the override and snaps back to the live WR board.
+    await userEvent.click(pill);
+    expect(screen.getByTestId('threat-pos-WR')).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.queryByTestId('threat-live-resync')).not.toBeInTheDocument();
+  });
 });

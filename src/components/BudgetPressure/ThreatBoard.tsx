@@ -49,6 +49,13 @@ export default function ThreatBoard({
   const [overridePos, setOverridePos] = useState<AppetitePos | null>(null);
   const selectedPos: AppetitePos = overridePos ?? livePosition ?? 'QB';
 
+  // When a manual override is active AND a live nomination exists at a different
+  // position, the board (showing the override) and the "…up" chip disagree. Rather
+  // than silently snap the view, surface a one-click "jump to live" pill. Clearing
+  // the override re-derives selectedPos back to livePosition.
+  // NOTE: possible pivot point — could become auto-resync on a new nomination.
+  const showResync = overridePos !== null && livePosition !== null && overridePos !== livePosition;
+
   const ranked = useMemo(() => {
     return teams
       .map((team) => {
@@ -98,6 +105,20 @@ export default function ThreatBoard({
           >
             {liveName} up · {livePosition}
           </span>
+        )}
+        {showResync && livePosition && (
+          <button
+            type="button"
+            data-testid="threat-live-resync"
+            onClick={() => setOverridePos(null)}
+            aria-label={`Jump to live nomination at ${livePosition}`}
+            className="font-label inline-flex cursor-pointer items-center gap-1.5 rounded border border-primary bg-background px-2 py-1 text-[11px] tracking-wide text-foreground uppercase focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+          >
+            <span aria-hidden style={{ color: 'var(--primary)' }}>
+              ●
+            </span>
+            Live: {livePosition} — jump
+          </button>
         )}
       </div>
 

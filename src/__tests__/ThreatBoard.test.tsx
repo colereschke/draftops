@@ -109,6 +109,37 @@ describe('ThreatBoard', () => {
     expect(screen.getByTestId('threat-pos-QB')).toHaveAttribute('aria-pressed', 'true');
   });
 
+  it('colors the Max Bid figure by capacity so flush vs tapped-out reads at a glance', () => {
+    render(
+      <ThreatBoard
+        teams={teams}
+        tendencies={tendencies}
+        livePosition="WR"
+        liveName="Puka Nacua"
+        ownerHandle="you"
+      />,
+    );
+    // rival_b has buyingPower 340 → maxBid 341 (>150) → "young" (green) accent.
+    expect(screen.getByTestId('threat-bid-rival_b')).toHaveStyle({ color: 'var(--age-young)' });
+    // you has buyingPower 190 → maxBid 191 (>150) → green as well; use a fresh broke team.
+  });
+
+  it('colors a tapped-out team red', () => {
+    const broke = [stats(9, 'broke', 10)];
+    const brokeTend = [tend(9, 'broke', 'neutral')];
+    render(
+      <ThreatBoard
+        teams={broke}
+        tendencies={brokeTend}
+        livePosition="WR"
+        liveName="Puka Nacua"
+        ownerHandle="you"
+      />,
+    );
+    // buyingPower 10 → maxBid 11 (<50) → red.
+    expect(screen.getByTestId('threat-bid-broke')).toHaveStyle({ color: 'var(--age-old)' });
+  });
+
   it('shows no re-sync pill when the board already matches the live nomination', () => {
     render(
       <ThreatBoard

@@ -17,6 +17,14 @@ export type Appetite = 'overpays' | 'neutral' | 'thrifty' | 'no-read';
 // alongside the tendency types, rather than reaching into the constants file.
 export type { AppetitePos } from './tendencies.constants';
 
+// Single source for the appetite → accent color mapping shared by /teams (DossierCard)
+// and /budget (ThreatBoard). `neutral`/`no-read` render in the default text color.
+export function appetiteColor(appetite: Appetite): string | undefined {
+  if (appetite === 'overpays') return 'var(--age-old)';
+  if (appetite === 'thrifty') return 'var(--age-young)';
+  return undefined;
+}
+
 export interface PositionTendency {
   position: AppetitePos;
   buys: number;
@@ -54,8 +62,8 @@ function isAppetitePos(pos: string): pos is AppetitePos {
   return (APPETITE_POSITIONS as readonly string[]).includes(pos);
 }
 
-function classifyAppetite(buys: number, overPct: number | null): Appetite {
-  if (buys < MIN_BUYS_FOR_READ) return 'no-read';
+function classifyAppetite(valuedBuys: number, overPct: number | null): Appetite {
+  if (valuedBuys < MIN_BUYS_FOR_READ) return 'no-read';
   if (overPct === null) return 'neutral';
   if (overPct > OVERPAY_PCT) return 'overpays';
   if (overPct < THRIFTY_PCT) return 'thrifty';
@@ -83,6 +91,7 @@ export function computeTendencies(
     let totalValue = 0;
     let totalDelta = 0;
     let totalBuys = 0;
+    let totalMatchedBuys = 0;
     let topBuy = 0;
 
     for (const r of team.results) {
@@ -100,6 +109,7 @@ export function computeTendencies(
         a.deltaSum += r.price - val;
         totalValue += val;
         totalDelta += r.price - val;
+        totalMatchedBuys += 1;
       }
     }
 
@@ -116,11 +126,18 @@ export function computeTendencies(
         avgDelta: a.matchedBuys > 0 ? a.deltaSum / a.matchedBuys : null,
         overPct,
         spendShare: totalSpend > 0 ? a.spend / totalSpend : 0,
-        appetite: classifyAppetite(a.buys, overPct),
+        appetite: classifyAppetite(a.matchedBuys, overPct),
       };
     }
 
-    const overallOverPct = totalValue > 0 ? totalDelta / totalValue : null;
+    // Overall over% is null until enough *value-matched* buys back it — the honesty
+    // gate lives here so both consumers (aggression below, the /teams dossier "% vs
+    // value" label) stay silent on a thin sample. PICK/PKG and off-list buys inflate
+    // totalBuys but never touch value, so they must not clear this gate.
+    const overallOverPct =
+      totalMatchedBuys >= MIN_BUYS_FOR_AGGRESSION && totalValue > 0
+        ? totalDelta / totalValue
+        : null;
 
     let lean: AppetitePos | 'balanced' = 'balanced';
     if (totalSpend >= MIN_SPEND_FOR_LEAN) {
@@ -135,8 +152,10 @@ export function computeTendencies(
       if (best && bestShare > LEAN_SHARE_THRESHOLD) lean = best;
     }
 
+    // overallOverPct is already sample-gated above, so a non-null value here means the
+    // read is trustworthy.
     let aggression: ManagerTendency['aggression'] = 'neutral';
-    if (totalBuys >= MIN_BUYS_FOR_AGGRESSION && overallOverPct !== null) {
+    if (overallOverPct !== null) {
       if (overallOverPct > AGG_PCT) aggression = 'aggressive';
       else if (overallOverPct < -AGG_PCT) aggression = 'disciplined';
     }

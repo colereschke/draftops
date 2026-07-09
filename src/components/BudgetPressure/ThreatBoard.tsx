@@ -3,6 +3,7 @@
 import { useState, useMemo } from 'react';
 import type { TeamStats } from '@/types';
 import type { Appetite, AppetitePos, ManagerTendency } from '@/lib/tendencies';
+import { appetiteColor } from '@/lib/tendencies';
 import { APPETITE_POSITIONS } from '@/lib/tendencies.constants';
 import { maxBid, threatScore } from '@/lib/threat';
 import { cn } from '@/lib/utils';
@@ -30,10 +31,12 @@ const APPETITE_LABEL: Record<Appetite, string> = {
   'no-read': '—',
 };
 
-function appetiteColor(appetite: Appetite): string | undefined {
-  if (appetite === 'overpays') return 'var(--age-old)';
-  if (appetite === 'thrifty') return 'var(--age-young)';
-  return undefined;
+// Color the Max Bid figure so flush vs. tapped-out teams read at a glance, matching the
+// buying-power scale the previous Budget Pressure board used.
+function maxBidColor(bid: number): string {
+  if (bid > 150) return 'var(--age-young)';
+  if (bid >= 50) return 'var(--primary)';
+  return 'var(--age-old)';
 }
 
 export default function ThreatBoard({
@@ -56,10 +59,11 @@ export default function ThreatBoard({
   // NOTE: possible pivot point — could become auto-resync on a new nomination.
   const showResync = overridePos !== null && livePosition !== null && overridePos !== livePosition;
 
-  const ranked = useMemo(() => {
-    return teams
+  const { ranked, maxThreat } = useMemo(() => {
+    const tendencyById = new Map(tendencies.map((t) => [t.teamId, t]));
+    const rows = teams
       .map((team) => {
-        const tendency = tendencies.find((t) => t.teamId === team.id);
+        const tendency = tendencyById.get(team.id);
         const appetite: Appetite = tendency ? tendency.positions[selectedPos].appetite : 'no-read';
         return {
           team,
@@ -69,9 +73,8 @@ export default function ThreatBoard({
         };
       })
       .sort((a, b) => b.threat - a.threat);
+    return { ranked: rows, maxThreat: Math.max(...rows.map((r) => r.threat), 1) };
   }, [teams, tendencies, selectedPos]);
-
-  const maxThreat = Math.max(...ranked.map((r) => r.threat), 1);
 
   return (
     <div className="overflow-x-auto px-5 pb-10">
@@ -163,7 +166,11 @@ export default function ThreatBoard({
                     {row.team.displayName ?? row.team.handle}
                   </span>
                 </TableCell>
-                <TableCell className="text-center font-mono text-[13px] text-foreground tabular-nums">
+                <TableCell
+                  data-testid={`threat-bid-${row.team.handle}`}
+                  className="text-center font-mono text-[13px] font-bold tabular-nums"
+                  style={{ color: maxBidColor(row.bid) }}
+                >
                   ${row.bid}
                 </TableCell>
                 <TableCell

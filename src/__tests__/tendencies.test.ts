@@ -69,6 +69,17 @@ describe('computeTendencies — baselines and activity', () => {
     expect(t.topBuy).toBe(500);
   });
 
+  it('requires matched valued buys to classify positional appetite', () => {
+    const [t] = computeTendencies(
+      [team({ results: [buy('QB1', 'QB', 130), buy('Unmatched QB', 'QB', 20)] })],
+      players,
+    );
+    expect(t.positions.QB.buys).toBe(2);
+    expect(t.positions.QB.valueSum).toBe(100);
+    expect(t.positions.QB.overPct).toBeCloseTo(0.3);
+    expect(t.positions.QB.appetite).toBe('no-read');
+  });
+
   it('excludes PICK/PKG from per-position appetite but counts activity', () => {
     const [t] = computeTendencies(
       [team({ results: [buy('Matt Gay', 'PKG', 112), buy('QB1', 'QB', 100)] })],
@@ -117,6 +128,36 @@ describe('computeTendencies — lean and aggression', () => {
     );
     expect(t.overallOverPct).toBeCloseTo(0.2);
     expect(t.aggression).toBe('aggressive');
+  });
+
+  it('does not read aggression from pick/package activity — only value-matched buys count', () => {
+    // One matched QB overpaid hard, padded with two pick packages. totalBuys clears the
+    // gate but only 1 buy carries value, so the overall read must stay untrusted.
+    const [t] = computeTendencies(
+      [
+        team({
+          results: [
+            buy('QB1', 'QB', 200),
+            buy('Matt Gay', 'PKG', 112),
+            buy('2028 Pick', 'PKG', 70),
+          ],
+        }),
+      ],
+      players,
+    );
+    expect(t.buys).toBe(3);
+    expect(t.overallOverPct).toBeNull();
+    expect(t.aggression).toBe('neutral');
+  });
+
+  it('withholds the overall over% read until enough matched buys back it', () => {
+    // Two matched overpays: real signal, but below MIN_BUYS_FOR_AGGRESSION.
+    const [t] = computeTendencies(
+      [team({ results: [buy('QB1', 'QB', 150), buy('RB1', 'RB', 150)] })],
+      players,
+    );
+    expect(t.overallOverPct).toBeNull();
+    expect(t.aggression).toBe('neutral');
   });
 
   it('cold start: empty results → balanced/neutral/no-read', () => {

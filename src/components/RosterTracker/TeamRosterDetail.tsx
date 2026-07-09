@@ -1,11 +1,14 @@
 import type { RosterEntry, Position } from '@/types';
 import { POS_COLORS } from '@/lib/posColors';
+import { APPETITE_POSITIONS } from '@/lib/tendencies.constants';
 
 interface TeamRosterDetailProps {
   results: RosterEntry[];
 }
 
-const GROUP_ORDER: Position[] = ['QB', 'RB', 'WR', 'TE', 'PICK', 'PKG'];
+// Appetite positions first (shared order with the dossier chips and threat board),
+// then the non-appetite draft-capital buckets.
+const GROUP_ORDER: Position[] = [...APPETITE_POSITIONS, 'PICK', 'PKG'];
 
 export default function TeamRosterDetail({ results }: TeamRosterDetailProps) {
   if (results.length === 0) {

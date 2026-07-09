@@ -174,7 +174,7 @@ describe('DossierCard', () => {
     expect(screen.queryByText(/\$390/)).not.toBeInTheDocument();
   });
 
-  it('calls onToggle when the expander is clicked', async () => {
+  it('calls onToggle when the card face is clicked (not just the chevron)', async () => {
     const onToggle = jest.fn();
     render(
       <DossierCard
@@ -187,5 +187,47 @@ describe('DossierCard', () => {
     );
     await userEvent.click(screen.getByTestId('dossier-expand-1'));
     expect(onToggle).toHaveBeenCalledWith(1);
+  });
+
+  it('toggles the roster from the keyboard', async () => {
+    const onToggle = jest.fn();
+    render(
+      <DossierCard
+        team={team()}
+        tendency={tendency()}
+        isOwner={false}
+        isExpanded={false}
+        onToggle={onToggle}
+      />,
+    );
+    screen.getByTestId('dossier-expand-1').focus();
+    await userEvent.keyboard('{Enter}');
+    expect(onToggle).toHaveBeenCalledWith(1);
+  });
+
+  it('shows a pick-package badge on the face when the team holds packages', () => {
+    render(
+      <DossierCard
+        team={team({ pkgCount: 2 })}
+        tendency={tendency()}
+        isOwner={false}
+        isExpanded={false}
+        onToggle={noop}
+      />,
+    );
+    expect(screen.getByTestId('dossier-pkg-1')).toHaveTextContent('2× PKG');
+  });
+
+  it('omits the package badge when the team holds none', () => {
+    render(
+      <DossierCard
+        team={team({ pkgCount: 0 })}
+        tendency={tendency()}
+        isOwner={false}
+        isExpanded={false}
+        onToggle={noop}
+      />,
+    );
+    expect(screen.queryByTestId('dossier-pkg-1')).not.toBeInTheDocument();
   });
 });

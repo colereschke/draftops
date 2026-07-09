@@ -3,7 +3,9 @@
 import { ChevronRight } from 'lucide-react';
 import type { TeamWithRoster } from '@/types';
 import type { Appetite, AppetitePos, ManagerTendency } from '@/lib/tendencies';
+import { appetiteColor } from '@/lib/tendencies';
 import { APPETITE_POSITIONS } from '@/lib/tendencies.constants';
+import { POS_COLORS } from '@/lib/posColors';
 import { cn } from '@/lib/utils';
 import TeamRosterDetail from './TeamRosterDetail';
 
@@ -26,12 +28,6 @@ const AGGRESSION_COLOR: Record<ManagerTendency['aggression'], string | undefined
   neutral: undefined,
   disciplined: 'var(--age-young)',
 };
-
-function appetiteColor(appetite: Appetite): string | undefined {
-  if (appetite === 'overpays') return 'var(--age-old)';
-  if (appetite === 'thrifty') return 'var(--age-young)';
-  return undefined;
-}
 
 function leanLabel(lean: ManagerTendency['lean']): string {
   return lean === 'balanced' ? 'Balanced' : `${lean}-heavy`;
@@ -72,9 +68,26 @@ export default function DossierCard({
       style={{ borderLeft: `3px solid ${isOwner ? 'var(--primary)' : 'var(--border)'}` }}
       data-testid={`dossier-card-${team.id}`}
     >
-      <div className="px-4 pt-3 pb-3">
+      {/* The whole face toggles the roster drawer — a full-width target, not just the
+          chevron. It is the only interactive element here (the chips below are inert),
+          so a role="button" div with keyboard support is safe and a11y-correct. */}
+      <div
+        role="button"
+        tabIndex={0}
+        onClick={() => onToggle(team.id)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            onToggle(team.id);
+          }
+        }}
+        aria-expanded={isExpanded}
+        aria-label={`${isExpanded ? 'Collapse' : 'Expand'} roster for ${team.handle}`}
+        data-testid={`dossier-expand-${team.id}`}
+        className="w-full cursor-pointer px-4 pt-3 pb-3 text-left focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+      >
         <div className="flex items-start justify-between gap-2">
-          <div>
+          <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1">
             <span
               className={cn('text-[14px]', isOwner ? 'font-bold' : 'font-semibold text-foreground')}
               style={isOwner ? { color: 'var(--primary)' } : undefined}
@@ -82,24 +95,30 @@ export default function DossierCard({
               {team.handle}
             </span>
             {team.displayName && (
-              <span className="ml-1.5 text-[11px] text-muted-foreground">{team.displayName}</span>
+              <span className="text-[11px] text-muted-foreground">{team.displayName}</span>
+            )}
+            {team.pkgCount > 0 && (
+              <span
+                data-testid={`dossier-pkg-${team.id}`}
+                title={`Holds ${team.pkgCount} pick package${team.pkgCount > 1 ? 's' : ''}`}
+                className="font-label rounded text-[9px] font-bold tracking-wide"
+                style={{
+                  background: POS_COLORS.PKG.badge,
+                  color: POS_COLORS.PKG.badgeText,
+                  padding: '2px 5px',
+                }}
+              >
+                {team.pkgCount}× PKG
+              </span>
             )}
           </div>
-          <button
-            type="button"
-            onClick={() => onToggle(team.id)}
-            aria-expanded={isExpanded}
-            aria-label={`${isExpanded ? 'Collapse' : 'Expand'} roster for ${team.handle}`}
-            data-testid={`dossier-expand-${team.id}`}
-            className="inline-flex cursor-pointer items-center justify-center rounded-sm border-0 bg-transparent p-0 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-          >
-            <ChevronRight
-              className={cn(
-                'size-4 text-muted-foreground transition-transform duration-150',
-                isExpanded && 'rotate-90',
-              )}
-            />
-          </button>
+          <ChevronRight
+            aria-hidden
+            className={cn(
+              'size-4 shrink-0 text-muted-foreground transition-transform duration-150',
+              isExpanded && 'rotate-90',
+            )}
+          />
         </div>
 
         <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[12px]">

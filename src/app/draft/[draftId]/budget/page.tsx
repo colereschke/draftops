@@ -4,12 +4,10 @@ import { prisma } from '@/lib/db';
 import { getDraft } from '@/lib/draft';
 import { computeTeamStats } from '@/lib/budget';
 import { computeTendencies } from '@/lib/tendencies';
-import type { AppetitePos } from '@/lib/tendencies.constants';
+import { resolveLiveNomination } from '@/lib/liveNomination';
 import BudgetPressureView from '@/components/BudgetPressure';
 
 export const dynamic = 'force-dynamic';
-
-const APPETITE_SET = new Set<string>(['QB', 'RB', 'WR', 'TE']);
 
 export default async function BudgetPage({ params }: { params: Promise<{ draftId: string }> }) {
   const draftId = parseInt((await params).draftId, 10);
@@ -27,17 +25,8 @@ export default async function BudgetPage({ params }: { params: Promise<{ draftId
   const players = dbPlayers.map((p) => ({ player: p.name, budget: p.budget }));
   const posByName = new Map(dbPlayers.map((p) => [p.name, p.pos]));
 
-  // Most recently nominated player whose position is one of the four board positions.
-  let livePosition: AppetitePos | null = null;
-  let liveName: string | null = null;
-  for (const n of nominated) {
-    const pos = posByName.get(n.playerName);
-    if (pos && APPETITE_SET.has(pos)) {
-      livePosition = pos as AppetitePos;
-      liveName = n.playerName;
-      break;
-    }
-  }
+  // Anchor the board to the most heavily nominated position (ties → most recent).
+  const live = resolveLiveNomination(nominated, posByName);
 
   const tendencies = computeTendencies(teams, players);
 
@@ -45,8 +34,8 @@ export default async function BudgetPage({ params }: { params: Promise<{ draftId
     <BudgetPressureView
       teams={computeTeamStats(teams, draft.rosterSize)}
       tendencies={tendencies}
-      livePosition={livePosition}
-      liveName={liveName}
+      livePosition={live?.position ?? null}
+      liveName={live?.name ?? null}
       ownerHandle={draft.ownerTeam?.handle ?? null}
     />
   );

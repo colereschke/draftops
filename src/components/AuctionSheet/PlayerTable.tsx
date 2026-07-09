@@ -125,8 +125,17 @@ export default function PlayerTable({
             return (
               <TableRow
                 key={p.player + i}
+                data-testid={`player-row-${p.sfRank}`}
+                tabIndex={0}
+                onClick={() => onRowClick(p)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault();
+                    onRowClick(p);
+                  }
+                }}
                 className={cn(
-                  'border-b-border-subtle hover:bg-card',
+                  'border-b-border-subtle cursor-pointer focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none hover:bg-card',
                   claim && 'bg-background',
                   !claim && isNominated && 'bg-[color-mix(in_srgb,var(--pos-pick)_9%,transparent)]',
                   !claim && !isNominated && i % 2 !== 0 && 'bg-card/45',
@@ -147,7 +156,10 @@ export default function PlayerTable({
                   <div className="flex items-center gap-1.5">
                     <button
                       type="button"
-                      onClick={() => onRowClick(p)}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        onRowClick(p);
+                      }}
                       aria-label={`Open bid modal for ${p.player}`}
                       className="cursor-pointer rounded-sm border-0 bg-transparent p-0 text-left text-[13px] focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
                       style={{

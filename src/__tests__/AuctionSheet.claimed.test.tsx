@@ -207,4 +207,47 @@ describe('AuctionSheet with claimed bids', () => {
     await user.click(qbPill);
     await waitFor(() => expect(screen.getByText('Justin Jefferson')).toBeInTheDocument());
   });
+
+  it('adjusts visible targets when the strategy lens changes', async () => {
+    const user = userEvent.setup();
+    renderSheet({
+      players: [
+        {
+          ...MOCK_PLAYERS[0],
+          baseBudget: 120,
+          projectionAuctionValue: 180,
+          projectedPoints: 410,
+          vor: 150,
+        },
+      ],
+    });
+
+    expect(screen.getByText('$120')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /contend/i }));
+
+    expect(screen.getByText('$153')).toBeInTheDocument();
+  });
+
+  it('passes strategy-adjusted active value into the bid modal', async () => {
+    const user = userEvent.setup();
+    renderSheet({
+      players: [
+        {
+          ...MOCK_PLAYERS[0],
+          baseBudget: 120,
+          projectionAuctionValue: 180,
+          projectedPoints: 410,
+          vor: 150,
+        },
+      ],
+    });
+
+    await user.click(screen.getByRole('button', { name: /contend/i }));
+    await user.click(screen.getByText('Josh Allen'));
+
+    expect(screen.getByTestId('bid-price-context-dynasty')).toHaveTextContent('$120');
+    expect(screen.getByTestId('bid-price-context-projection')).toHaveTextContent('$180');
+    expect(screen.getByTestId('bid-price-context-active')).toHaveTextContent('$153');
+  });
 });

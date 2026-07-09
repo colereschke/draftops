@@ -8,6 +8,7 @@ function renderControls(overrides: Partial<React.ComponentProps<typeof FilterCon
   const onSearchChange = jest.fn();
   const onShowNotesChange = jest.fn();
   const onAvailableOnlyChange = jest.fn();
+  const onStrategyLensChange = jest.fn();
   render(
     <FilterControls
       posFilter="ALL"
@@ -18,11 +19,19 @@ function renderControls(overrides: Partial<React.ComponentProps<typeof FilterCon
       onShowNotesChange={onShowNotesChange}
       availableOnly={false}
       onAvailableOnlyChange={onAvailableOnlyChange}
+      strategyLens="rebuild"
+      onStrategyLensChange={onStrategyLensChange}
       resultCount={267}
       {...overrides}
     />,
   );
-  return { onPosFilterChange, onSearchChange, onShowNotesChange, onAvailableOnlyChange };
+  return {
+    onPosFilterChange,
+    onSearchChange,
+    onShowNotesChange,
+    onAvailableOnlyChange,
+    onStrategyLensChange,
+  };
 }
 
 describe('FilterControls', () => {
@@ -71,6 +80,15 @@ describe('FilterControls', () => {
     await waitFor(() =>
       expect(onAvailableOnlyChange).toHaveBeenCalledWith(true, expect.anything()),
     );
+  });
+
+  it('calls onStrategyLensChange when a strategy lens is selected', async () => {
+    const user = userEvent.setup();
+    const { onStrategyLensChange } = renderControls();
+
+    await user.click(screen.getByRole('button', { name: /contend/i }));
+
+    await waitFor(() => expect(onStrategyLensChange).toHaveBeenCalledWith('contend'));
   });
 
   it('renders the result count', () => {

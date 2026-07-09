@@ -393,6 +393,9 @@ pnpm tsx prisma/apply-projection-values.ts --draft-id <draft-id>
 6. Add lightweight UI visibility for `DraftPlayerValue` data after the numbers pass sanity checks.
    Prefer a compact value-source badge or optional columns before making projection values the main
    displayed number.
+   When projection-aware active values are displayed as the main target, recalculate floor and
+   ceiling from the active value instead of leaving the original ranking-derived band attached to
+   a new target.
 7. Feed projection-aware lineup strength into #8 dynamic pick valuation, keeping dynasty market
    strength and redraft projection strength as separate signals.
 

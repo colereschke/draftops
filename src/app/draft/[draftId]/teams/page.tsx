@@ -3,6 +3,7 @@ import { auth } from '@/auth';
 import { prisma } from '@/lib/db';
 import { getDraft } from '@/lib/draft';
 import { computeTeamStats } from '@/lib/computeTeamStats';
+import { computeTendencies } from '@/lib/tendencies';
 import RosterTracker from '@/components/RosterTracker';
 import type { Player, Position } from '@/types';
 
@@ -37,9 +38,12 @@ export default async function TeamsPage({ params }: { params: Promise<{ draftId:
     sleeperId: p.sleeperId,
   }));
 
+  const tendencies = computeTendencies(rawTeams, players);
+
   return (
     <RosterTracker
       teams={computeTeamStats(rawTeams, players, draft.rosterSize)}
+      tendencies={tendencies}
       ownerHandle={draft.ownerTeam?.handle ?? null}
     />
   );

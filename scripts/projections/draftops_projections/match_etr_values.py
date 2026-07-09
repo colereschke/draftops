@@ -6,6 +6,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
+from draftops_projections.aliases import MANUAL_ALIASES
 from draftops_projections.models import SleeperPlayer
 from draftops_projections.normalize import normalize_name, normalize_position, normalize_team
 from draftops_projections.sleeper import load_active_sleeper_players
@@ -50,6 +51,30 @@ def match_etr_value_row(
 
     if len(candidates) > 1:
         return EtrMatchResult(name, team, position, None, "ambiguous_match", 0, "ambiguous_match")
+
+    alias_name = MANUAL_ALIASES.get(normalized_name)
+    if alias_name is not None:
+        alias_candidates = [
+            player
+            for player in sleeper_players
+            if player.normalized_name == alias_name
+            and player.position == position
+            and (team == "" or player.team == team)
+        ]
+        if len(alias_candidates) == 1:
+            return EtrMatchResult(
+                name,
+                team,
+                position,
+                alias_candidates[0],
+                "alias",
+                0.95,
+                f"alias:{normalized_name}->{alias_name}",
+            )
+        if len(alias_candidates) > 1:
+            return EtrMatchResult(
+                name, team, position, None, "ambiguous_match", 0, "ambiguous_alias_match"
+            )
 
     return EtrMatchResult(name, team, position, None, "no_match", 0, "no_match")
 

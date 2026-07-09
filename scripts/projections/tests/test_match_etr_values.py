@@ -1,5 +1,6 @@
 from draftops_projections.match_etr_values import match_etr_value_row
 from draftops_projections.models import SleeperPlayer
+from draftops_projections.normalize import normalize_name
 
 
 def sleeper(
@@ -79,3 +80,30 @@ def test_ambiguous_name_position_match_stays_unmatched() -> None:
 
     assert result.sleeper is None
     assert result.notes == "ambiguous_match"
+
+
+def test_matches_etr_rows_using_manual_name_aliases() -> None:
+    alias_cases = [
+        ("Chigoziem Okonkwo", "Chig Okonkwo", "WAS", "TE"),
+        ("Christopher Rodriguez Jr.", "Chris Rodriguez Jr.", "JAX", "RB"),
+        ("Nick Singleton", "Nicholas Singleton", "TEN", "RB"),
+        ("Nathaniel Dell", "Tank Dell", "HOU", "WR"),
+    ]
+
+    for index, (etr_name, sleeper_name, team, position) in enumerate(alias_cases, start=10):
+        result = match_etr_value_row(
+            {"Player": etr_name, "Team": team, "Position": position},
+            [
+                sleeper(
+                    sleeper_id=str(index),
+                    full_name=sleeper_name,
+                    normalized_name=normalize_name(sleeper_name),
+                    team=team,
+                    position=position,
+                )
+            ],
+        )
+
+        assert result.sleeper is not None
+        assert result.sleeper.full_name == sleeper_name
+        assert result.match_method == "alias"

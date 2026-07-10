@@ -8,7 +8,9 @@ import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
+  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
@@ -19,7 +21,14 @@ interface DraftInfo {
   name: string;
 }
 
-export default function NavLinks() {
+interface NavLinksProps {
+  // 'inline' renders today's desktop row (links + draft-switcher pill).
+  // 'menu' renders bare DropdownMenuItems meant to be composed inside an
+  // already-open parent menu (the mobile hamburger in NavBar).
+  variant?: 'inline' | 'menu';
+}
+
+export default function NavLinks({ variant = 'inline' }: NavLinksProps) {
   const pathname = usePathname();
   const params = useParams();
   const draftIdParam = params?.draftId;
@@ -59,6 +68,53 @@ export default function NavLinks() {
     : [];
 
   const otherDrafts = activeDrafts.filter((d) => d.id !== draftId);
+
+  if (variant === 'menu') {
+    return (
+      <>
+        {LINKS.map(({ href, label }) => {
+          const active = pathname === href;
+          return (
+            <DropdownMenuItem
+              key={href}
+              render={<Link href={href} />}
+              className={cn(
+                'font-label text-label-sm font-bold tracking-wide uppercase',
+                active ? 'text-foreground' : 'text-muted-foreground',
+              )}
+            >
+              {label}
+            </DropdownMenuItem>
+          );
+        })}
+        {hasDraftId && currentDraftName && (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuGroup>
+              <DropdownMenuLabel className="font-label text-label-sm tracking-wide uppercase">
+                {currentDraftName}
+              </DropdownMenuLabel>
+              {otherDrafts.map((d) => (
+                <DropdownMenuItem
+                  key={d.id}
+                  render={<Link href={`/draft/${d.id}`} />}
+                  className="font-label text-label-sm"
+                >
+                  {d.name}
+                </DropdownMenuItem>
+              ))}
+              <DropdownMenuItem
+                render={<Link href="/drafts" />}
+                className="font-label text-label-sm text-muted-foreground"
+              >
+                All Drafts
+              </DropdownMenuItem>
+            </DropdownMenuGroup>
+          </>
+        )}
+      </>
+    );
+  }
 
   return (
     <nav className="gap-lg flex flex-wrap items-center">

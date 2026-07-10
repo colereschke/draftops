@@ -52,6 +52,12 @@ export interface JoinedProjectionRow {
   isRookie: boolean;
 }
 
+interface DraftPlayerValueDeleteWhere {
+  draftId: number;
+  projectionSourceId: number;
+  playerId?: { notIn: number[] };
+}
+
 interface EtrMatchRow {
   name: string;
   sleeperId: string;
@@ -393,6 +399,10 @@ async function main(): Promise<void> {
         ];
       });
 
+      await prisma.draftPlayerValue.deleteMany({
+        where: buildStaleDraftPlayerValueDeleteWhere(draft.id, source.id, joined),
+      });
+
       for (const batch of chunk(draftPlayerValueWrites, WRITE_BATCH_SIZE)) {
         await prisma.$transaction(batch, { timeout: WRITE_TRANSACTION_TIMEOUT_MS });
       }
@@ -525,6 +535,18 @@ export function buildDraftPlayerValueData(
     activeAuctionValue: marketValue.activeAuctionValue,
     valueSource: marketValue.valueSource,
   };
+}
+
+export function buildStaleDraftPlayerValueDeleteWhere(
+  draftId: number,
+  projectionSourceId: number,
+  joined: JoinedProjectionRow[],
+): DraftPlayerValueDeleteWhere {
+  const currentPlayerIds = joined.map((row) => row.playerId);
+  if (currentPlayerIds.length === 0) {
+    return { draftId, projectionSourceId };
+  }
+  return { draftId, projectionSourceId, playerId: { notIn: currentPlayerIds } };
 }
 
 function toNumber(value: string): number {

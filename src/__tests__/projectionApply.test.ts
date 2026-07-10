@@ -1,4 +1,5 @@
 import {
+  buildStaleDraftPlayerValueDeleteWhere,
   buildDraftPlayerValueData,
   getSleeperIdUpdates,
   resolvePlayerSleeperIds,
@@ -230,5 +231,34 @@ it('builds draft value data with projection-adjusted market values active', () =
     fallbackAuctionValue: 100,
     activeAuctionValue: 118,
     valueSource: 'projection_adjusted_market',
+  });
+});
+
+it('builds a stale draft value delete filter for players missing from the current source', () => {
+  const where = buildStaleDraftPlayerValueDeleteWhere(1, 2, [
+    {
+      playerId: 10,
+      sleeperId: 'current',
+      position: 'TE',
+      projectedPoints: 250,
+      baselineProjectedPoints: 200,
+      fallbackAuctionValue: 100,
+      isRookie: false,
+    },
+  ]);
+
+  expect(where).toEqual({
+    draftId: 1,
+    projectionSourceId: 2,
+    playerId: { notIn: [10] },
+  });
+});
+
+it('builds a source-wide stale draft value delete filter when no players joined', () => {
+  const where = buildStaleDraftPlayerValueDeleteWhere(1, 2, []);
+
+  expect(where).toEqual({
+    draftId: 1,
+    projectionSourceId: 2,
   });
 });

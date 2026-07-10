@@ -207,6 +207,18 @@ describe('createDraft', () => {
     );
   });
 
+  it('does not seed legacy static future pick rows from base data', async () => {
+    await createDraft(VALID_INPUT);
+
+    const payload = mockTxPlayerCreateMany.mock.calls[0][0].data as Array<{
+      name: string;
+    }>;
+
+    expect(payload.map((p) => p.name)).not.toEqual(
+      expect.arrayContaining(['Matt Gay', '2027 1st Round Pick']),
+    );
+  });
+
   it('records base values verbatim and lifts TE budgets under a TE premium', async () => {
     await createDraft({
       ...VALID_INPUT,

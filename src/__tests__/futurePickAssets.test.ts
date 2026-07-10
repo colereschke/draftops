@@ -100,11 +100,11 @@ describe('future pick asset generation', () => {
   );
 
   it.each([
-    ['packages', ['JaMarr Chase', 'Legacy Pick Package']],
-    ['individual', ['JaMarr Chase', 'Legacy 2027 1st']],
+    ['packages', ['JaMarr Chase']],
+    ['individual', ['JaMarr Chase']],
     ['none', ['JaMarr Chase']],
   ] satisfies Array<[FuturePickAuctionMode, string[]]>)(
-    'treats untagged legacy PICK and PKG rows as future pick assets in %s mode',
+    'hides untagged legacy PICK and PKG rows in %s mode',
     (mode, expectedNames) => {
       const basePlayer: Player = {
         player: 'JaMarr Chase',

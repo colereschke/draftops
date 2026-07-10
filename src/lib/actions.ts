@@ -5,7 +5,11 @@ import { redirect } from 'next/navigation';
 import { auth } from '@/auth';
 import { prisma } from '@/lib/db';
 import { getDraft } from '@/lib/draft';
-import { generateFuturePickAssets, getNextFuturePickYear } from '@/lib/futurePickAssets';
+import {
+  generateFuturePickAssets,
+  getNextFuturePickYear,
+  withoutStaticFuturePickRows,
+} from '@/lib/futurePickAssets';
 import type { FuturePickAuctionMode, Position, StartingSlot, ScoringSettings } from '@/types';
 import { players as BASE_PLAYERS } from '@/data/players';
 import { adjustPlayerValues } from '@/lib/valueAdjustment';
@@ -159,7 +163,7 @@ export async function createDraft(data: {
       year: nextPickYear,
       startingRank: 900,
     });
-    const seededPlayers = [...valued, ...futurePickAssets];
+    const seededPlayers = [...withoutStaticFuturePickRows(valued), ...futurePickAssets];
 
     await tx.player.createMany({
       data: seededPlayers.map((p) => ({

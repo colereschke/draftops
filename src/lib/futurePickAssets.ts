@@ -100,18 +100,20 @@ export function filterFuturePickAssetsForMode(
   mode: FuturePickAuctionMode,
 ): Player[] {
   return players.filter((player) => {
-    const assetKind = player.futurePickAssetKind ?? getLegacyFuturePickAssetKind(player);
-    if (!assetKind) return true;
+    const assetKind = player.futurePickAssetKind;
+    if (!assetKind) return !isStaticFuturePickRow(player);
     if (mode === 'none') return false;
     if (mode === 'packages') return assetKind === 'package';
     return assetKind === 'pick';
   });
 }
 
-function getLegacyFuturePickAssetKind(player: Player): 'package' | 'pick' | null {
-  if (player.pos === 'PKG') return 'package';
-  if (player.pos === 'PICK') return 'pick';
-  return null;
+export function withoutStaticFuturePickRows(players: Player[]): Player[] {
+  return players.filter((player) => !isStaticFuturePickRow(player));
+}
+
+function isStaticFuturePickRow(player: Player): boolean {
+  return !player.futurePickAssetKind && (player.pos === 'PKG' || player.pos === 'PICK');
 }
 
 function ordinal(round: 1 | 2 | 3): string {

@@ -1,6 +1,6 @@
 import { createDraft } from '@/lib/actions';
 import type { StartingSlot } from '@/types';
-import { players as BASE_PLAYERS } from '@/data/players';
+import { players as BASE_PLAYERS, PKG_PLAYERS } from '@/data/players';
 
 const mockAuth = jest.fn();
 const mockTransaction = jest.fn();
@@ -12,6 +12,7 @@ const mockTxDraftCreate = jest.fn();
 const mockTxDraftUpdate = jest.fn();
 const mockTxTeamCreate = jest.fn();
 const mockTxPlayerCreateMany = jest.fn().mockResolvedValue({ count: 270 });
+const mockTxUserRankingSetFindUnique = jest.fn();
 
 jest.mock('@/auth', () => ({ auth: () => mockAuth() }));
 jest.mock('next/navigation', () => ({ redirect: (...args: unknown[]) => mockRedirect(...args) }));
@@ -76,6 +77,7 @@ beforeEach(() => {
       draft: { create: mockTxDraftCreate, update: mockTxDraftUpdate },
       team: { create: mockTxTeamCreate },
       player: { createMany: mockTxPlayerCreateMany },
+      userRankingSet: { findUnique: mockTxUserRankingSetFindUnique },
     }),
   );
 });
@@ -208,5 +210,38 @@ describe('createDraft', () => {
 
     expect(payload[0].sleeperId ?? null).toBeNull();
     expect('projectionAuctionValue' in payload[0]).toBe(false);
+  });
+});
+
+describe('createDraft with playerSource: custom', () => {
+  it('throws when the user has no custom ranking set', async () => {
+    mockTxUserRankingSetFindUnique.mockResolvedValue(null);
+    await expect(createDraft({ ...VALID_INPUT, playerSource: 'custom' })).rejects.toThrow(
+      'No custom ranking set found',
+    );
+  });
+
+  it('seeds from the custom ranking set plus PKG_PLAYERS', async () => {
+    mockTxUserRankingSetFindUnique.mockResolvedValue({
+      id: 7,
+      players: [
+        {
+          name: 'Custom Guy',
+          team: 'BUF',
+          pos: 'QB',
+          age: 25,
+          sfRank: 1,
+          budget: 200,
+          ceiling: 230,
+          floor: 174,
+          notes: '',
+          sleeperId: 's1',
+        },
+      ],
+    });
+    await createDraft({ ...VALID_INPUT, playerSource: 'custom' });
+    const created = mockTxPlayerCreateMany.mock.calls[0][0].data as { name: string }[];
+    expect(created.some((p) => p.name === 'Custom Guy')).toBe(true);
+    expect(created.some((p) => p.name === PKG_PLAYERS[0].player)).toBe(true);
   });
 });

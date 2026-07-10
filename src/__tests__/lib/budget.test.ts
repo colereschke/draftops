@@ -5,7 +5,7 @@ const makeTeam = (overrides: {
   handle?: string;
   displayName?: string | null;
   budget?: number;
-  results?: { price: number }[];
+  results?: { price: number; position: string }[];
 }) => ({
   id: 1,
   handle: 'testteam',
@@ -33,7 +33,15 @@ describe('computeTeamStats', () => {
 
   it('correctly computes spent from results', () => {
     const [stat] = computeTeamStats(
-      [makeTeam({ results: [{ price: 200 }, { price: 150 }, { price: 75 }] })],
+      [
+        makeTeam({
+          results: [
+            { price: 200, position: 'QB' },
+            { price: 150, position: 'RB' },
+            { price: 75, position: 'WR' },
+          ],
+        }),
+      ],
       30,
     );
     expect(stat.spent).toBe(425);
@@ -43,12 +51,32 @@ describe('computeTeamStats', () => {
     expect(stat.buyingPower).toBe(548); // 575 - 27
   });
 
+  it('does not count future pick assets as roster spots', () => {
+    const [stat] = computeTeamStats(
+      [
+        makeTeam({
+          results: [
+            { price: 109, position: 'PKG' },
+            { price: 75, position: 'PICK' },
+            { price: 200, position: 'QB' },
+          ],
+        }),
+      ],
+      30,
+    );
+
+    expect(stat.spent).toBe(384);
+    expect(stat.rosterCount).toBe(1);
+    expect(stat.rosterRemaining).toBe(29);
+    expect(stat.buyingPower).toBe(587);
+  });
+
   it('sorts by buyingPower descending', () => {
     const teams = computeTeamStats(
       [
-        makeTeam({ id: 1, handle: 'low', results: [{ price: 900 }] }),
+        makeTeam({ id: 1, handle: 'low', results: [{ price: 900, position: 'QB' }] }),
         makeTeam({ id: 2, handle: 'high', results: [] }),
-        makeTeam({ id: 3, handle: 'mid', results: [{ price: 500 }] }),
+        makeTeam({ id: 3, handle: 'mid', results: [{ price: 500, position: 'QB' }] }),
       ],
       30,
     );
@@ -67,7 +95,7 @@ describe('computeTeamStats', () => {
     // Team with $0 left but 5 spots to fill → buyingPower = 0 - 5 = -5
     const [stat] = computeTeamStats(
       [
-        makeTeam({ results: Array(25).fill({ price: 40 }) }), // 25 * 40 = 1000 spent
+        makeTeam({ results: Array(25).fill({ price: 40, position: 'WR' }) }), // 25 * 40 = 1000 spent
       ],
       30,
     );

@@ -161,8 +161,7 @@ export default function FilterControls({
         </span>
         <span>
           <b style={{ color: 'var(--pos-wr)', fontSize: 9 }}>R</b> = Rookie ·{' '}
-          <b style={{ color: 'var(--pos-pkg)', fontSize: 9 }}>PKG</b> = 2027 1st+2nd+3rd via kicker
-          bid
+          <b style={{ color: 'var(--pos-pkg)', fontSize: 9 }}>PKG</b> = next-year pick package
         </span>
       </div>
     </>

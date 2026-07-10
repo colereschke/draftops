@@ -277,7 +277,7 @@ export default function AuctionSheet({
           dynasty values
         </span>
         <span className="ml-auto">
-          PKG target for 2027 kicker = $109 (1st+2nd+3rd bundled w/ SF speculative premium)
+          PKG target = next-year 1st+2nd+3rd bundled w/ SF speculative premium
         </span>
       </div>
       {modalPlayer && (

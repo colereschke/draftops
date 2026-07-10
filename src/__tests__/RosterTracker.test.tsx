@@ -121,6 +121,94 @@ describe('RosterTracker', () => {
     expect(screen.getByTestId('roster-group-QB')).toBeInTheDocument();
   });
 
+  describe('RosterTracker — sort tiebreakers', () => {
+    it('breaks aggression ties by how extreme the over/under-value read is', async () => {
+      const user = userEvent.setup();
+      const teams = [
+        makeTeam({ id: 2, handle: 'mild', displayName: 'Mild' }),
+        makeTeam({ id: 3, handle: 'extreme', displayName: 'Extreme' }),
+        makeTeam({ id: 1, handle: 'coreschke' }),
+      ];
+      const tendencies = [
+        makeTendency({ teamId: 2, handle: 'mild', aggression: 'aggressive', overallOverPct: 0.1 }),
+        makeTendency({
+          teamId: 3,
+          handle: 'extreme',
+          aggression: 'aggressive',
+          overallOverPct: 0.4,
+        }),
+        makeTendency({
+          teamId: 1,
+          handle: 'coreschke',
+          aggression: 'aggressive',
+          overallOverPct: 0.5,
+        }),
+      ];
+      render(<RosterTracker teams={teams} tendencies={tendencies} ownerHandle="coreschke" />);
+
+      await user.selectOptions(screen.getByTestId('dossier-sort'), 'aggression');
+
+      const cards = screen.getAllByTestId(/^dossier-card-/);
+      expect(cards[0]).toHaveAttribute('data-testid', 'dossier-card-1'); // owner still pinned first
+      expect(cards[1]).toHaveAttribute('data-testid', 'dossier-card-3'); // extreme (0.4) before mild (0.1)
+      expect(cards[2]).toHaveAttribute('data-testid', 'dossier-card-2');
+    });
+
+    it('breaks lean ties by how dominant the leaning position is', async () => {
+      const user = userEvent.setup();
+      const teams = [
+        makeTeam({ id: 2, handle: 'lightRB', displayName: 'Light RB' }),
+        makeTeam({ id: 3, handle: 'heavyRB', displayName: 'Heavy RB' }),
+      ];
+      const tendencies = [
+        makeTendency({
+          teamId: 2,
+          handle: 'lightRB',
+          lean: 'RB',
+          positions: {
+            ...makeTendency().positions,
+            RB: { ...makeTendency().positions.RB, spendShare: 0.55 },
+          },
+        }),
+        makeTendency({
+          teamId: 3,
+          handle: 'heavyRB',
+          lean: 'RB',
+          positions: {
+            ...makeTendency().positions,
+            RB: { ...makeTendency().positions.RB, spendShare: 0.85 },
+          },
+        }),
+      ];
+      render(<RosterTracker teams={teams} tendencies={tendencies} ownerHandle={null} />);
+
+      await user.selectOptions(screen.getByTestId('dossier-sort'), 'lean');
+
+      const cards = screen.getAllByTestId(/^dossier-card-/);
+      expect(cards[0]).toHaveAttribute('data-testid', 'dossier-card-3'); // heavier RB lean first
+      expect(cards[1]).toHaveAttribute('data-testid', 'dossier-card-2');
+    });
+
+    it('breaks balanced-lean ties by total spend', async () => {
+      const user = userEvent.setup();
+      const teams = [
+        makeTeam({ id: 2, handle: 'lowSpend', displayName: 'Low Spend' }),
+        makeTeam({ id: 3, handle: 'highSpend', displayName: 'High Spend' }),
+      ];
+      const tendencies = [
+        makeTendency({ teamId: 2, handle: 'lowSpend', lean: 'balanced', totalSpend: 200 }),
+        makeTendency({ teamId: 3, handle: 'highSpend', lean: 'balanced', totalSpend: 500 }),
+      ];
+      render(<RosterTracker teams={teams} tendencies={tendencies} ownerHandle={null} />);
+
+      await user.selectOptions(screen.getByTestId('dossier-sort'), 'lean');
+
+      const cards = screen.getAllByTestId(/^dossier-card-/);
+      expect(cards[0]).toHaveAttribute('data-testid', 'dossier-card-3'); // higher spend first
+      expect(cards[1]).toHaveAttribute('data-testid', 'dossier-card-2');
+    });
+  });
+
   describe('RosterTracker — desktop split view', () => {
     function mockDesktop() {
       window.matchMedia = jest.fn().mockImplementation((query: string) => ({

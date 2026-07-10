@@ -44,14 +44,29 @@ export default function RosterTracker({ teams, tendencies, ownerHandle }: Roster
 
     const isOwner = (t: TeamWithRoster) => ownerHandle !== null && t.handle === ownerHandle;
 
+    // Within a lean's own bucket ('RB', 'WR', ...), rank by how dominant that
+    // lean actually is — spend share in that position. 'balanced' teams have no
+    // single dominant share to compare, so they fall back to total spend.
+    const leanStrength = (t: ManagerTendency) =>
+      t.lean === 'balanced' ? null : t.positions[t.lean].spendShare;
+
     return [...withTendency].sort((a, b) => {
       // Owner always first.
       if (isOwner(a.team) !== isOwner(b.team)) return isOwner(a.team) ? -1 : 1;
       if (sortBy === 'aggression') {
-        return AGGRESSION_RANK[b.tendency.aggression] - AGGRESSION_RANK[a.tendency.aggression];
+        const rankDiff =
+          AGGRESSION_RANK[b.tendency.aggression] - AGGRESSION_RANK[a.tendency.aggression];
+        if (rankDiff !== 0) return rankDiff;
+        // Tiebreak within the same tier by how extreme the over/under-value read is.
+        return Math.abs(b.tendency.overallOverPct ?? 0) - Math.abs(a.tendency.overallOverPct ?? 0);
       }
       if (sortBy === 'lean') {
-        return a.tendency.lean.localeCompare(b.tendency.lean);
+        const leanDiff = a.tendency.lean.localeCompare(b.tendency.lean);
+        if (leanDiff !== 0) return leanDiff;
+        const aStrength = leanStrength(a.tendency);
+        const bStrength = leanStrength(b.tendency);
+        if (aStrength !== null && bStrength !== null) return bStrength - aStrength;
+        return b.tendency.totalSpend - a.tendency.totalSpend;
       }
       return b.tendency.totalSpend - a.tendency.totalSpend; // activity
     });
@@ -68,7 +83,13 @@ export default function RosterTracker({ teams, tendencies, ownerHandle }: Roster
   const packagesHeld = teams.reduce((sum, t) => sum + t.pkgCount, 0);
 
   return (
-    <div className="min-h-screen bg-background text-foreground">
+    <div
+      className={
+        isDesktop
+          ? 'flex h-[calc(100vh-3.5rem)] flex-col bg-background text-foreground'
+          : 'min-h-screen bg-background text-foreground'
+      }
+    >
       <div className="border-b border-border bg-background px-5 py-4">
         <section className="rounded-lg border border-border-subtle bg-card px-4 py-3">
           <div className="font-label mb-1 text-[10px] tracking-[2.5px] text-muted-foreground uppercase">
@@ -94,7 +115,7 @@ export default function RosterTracker({ teams, tendencies, ownerHandle }: Roster
                 onChange={(e) => setSortBy(e.target.value as CardSort)}
                 className="rounded border border-border-subtle bg-background px-2 py-1 text-[12px] text-foreground"
               >
-                <option value="activity">Activity</option>
+                <option value="activity">Spend</option>
                 <option value="aggression">Aggression</option>
                 <option value="lean">Lean</option>
               </select>
@@ -104,8 +125,8 @@ export default function RosterTracker({ teams, tendencies, ownerHandle }: Roster
       </div>
 
       {isDesktop ? (
-        <div className="flex items-start gap-4 px-5 pt-3 pb-10">
-          <div className="flex w-[360px] shrink-0 flex-col gap-3">
+        <div className="flex min-h-0 flex-1 items-stretch gap-4 px-5 py-3">
+          <div className="flex min-h-0 w-[360px] shrink-0 flex-col gap-3 overflow-y-auto">
             {ordered.map(({ team, tendency }) => (
               <DossierCard
                 key={team.id}
@@ -119,7 +140,7 @@ export default function RosterTracker({ teams, tendencies, ownerHandle }: Roster
               />
             ))}
           </div>
-          <div className="sticky top-4 max-h-[calc(100vh-2rem)] min-w-0 flex-1 overflow-y-auto">
+          <div className="min-h-0 min-w-0 flex-1 overflow-y-auto">
             {selected && (
               <TeamDetailPane
                 team={selected.team}

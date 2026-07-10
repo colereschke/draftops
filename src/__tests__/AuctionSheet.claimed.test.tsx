@@ -80,6 +80,31 @@ describe('AuctionSheet with claimed bids', () => {
     expect(screen.queryByText('Claimed')).not.toBeInTheDocument();
   });
 
+  it('renders the generated package year in the sheet legend', () => {
+    renderSheet({
+      players: [
+        ...MOCK_PLAYERS,
+        {
+          player: "coreschke's 2027 package",
+          team: 'coreschke',
+          pos: 'PKG',
+          age: null,
+          sfRank: 900,
+          budget: 109,
+          ceiling: 131,
+          floor: 75,
+          notes: '',
+          futurePickYear: 2027,
+          futurePickOriginHandle: 'coreschke',
+          futurePickAssetKind: 'package',
+        },
+      ],
+    });
+
+    expect(screen.getByText('PKG target = 2027 1st+2nd+3rd package')).toBeInTheDocument();
+    expect(screen.queryByText(/next-year/)).not.toBeInTheDocument();
+  });
+
   it('shows a Claimed column header when at least one bid exists', () => {
     renderSheet({ claimedBids: [mockClaim] });
 

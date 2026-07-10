@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import RosterTracker from '@/components/RosterTracker/RosterTracker';
 import type { TeamWithRoster } from '@/types';
@@ -119,5 +119,65 @@ describe('RosterTracker', () => {
     );
     await userEvent.click(screen.getByTestId('dossier-expand-1'));
     expect(screen.getByTestId('roster-group-QB')).toBeInTheDocument();
+  });
+
+  describe('RosterTracker — desktop split view', () => {
+    function mockDesktop() {
+      window.matchMedia = jest.fn().mockImplementation((query: string) => ({
+        matches: true,
+        media: query,
+        addEventListener: jest.fn(),
+        removeEventListener: jest.fn(),
+      }));
+    }
+
+    afterEach(() => {
+      // Restore the default (mobile) polyfill from jest.setup.ts for other test files.
+      window.matchMedia = jest.fn().mockImplementation((query: string) => ({
+        matches: false,
+        media: query,
+        addEventListener: jest.fn(),
+        removeEventListener: jest.fn(),
+      }));
+    });
+
+    it('renders a list pane and a detail pane, defaulting selection to the owner', () => {
+      mockDesktop();
+      const teams = [makeTeam({ id: 2, handle: 'rival_b', displayName: 'B' }), makeTeam()];
+      const tendencies = [makeTendency({ teamId: 2, handle: 'rival_b' }), makeTendency()];
+      render(<RosterTracker teams={teams} tendencies={tendencies} ownerHandle="coreschke" />);
+      expect(screen.getByTestId('team-detail-pane')).toBeInTheDocument();
+      expect(screen.getByTestId('dossier-lean-1-detail')).toBeInTheDocument();
+    });
+
+    it('updates the detail pane when a different team is clicked in the list', async () => {
+      mockDesktop();
+      const teams = [makeTeam({ id: 2, handle: 'rival_b', displayName: 'B' }), makeTeam()];
+      const tendencies = [makeTendency({ teamId: 2, handle: 'rival_b' }), makeTendency()];
+      render(<RosterTracker teams={teams} tendencies={tendencies} ownerHandle="coreschke" />);
+      await userEvent.click(screen.getByTestId('dossier-expand-2'));
+      expect(screen.getByTestId('team-detail-pane')).toHaveTextContent('rival_b');
+    });
+
+    it('does not expand list cards inline in desktop mode', async () => {
+      mockDesktop();
+      render(
+        <RosterTracker
+          teams={[makeTeam()]}
+          tendencies={[makeTendency()]}
+          ownerHandle="coreschke"
+        />,
+      );
+      await userEvent.click(screen.getByTestId('dossier-expand-1'));
+      // Scoped to the list-pane DossierCard itself: with only one team, TeamDetailPane
+      // legitimately renders its own `roster-group-QB` for the selected team from the
+      // first render onward, so a document-wide query can never assert "no inline
+      // expansion" here. Scoping to the list card is what actually distinguishes
+      // "expanded inline in the list" from "shown in the detail pane".
+      expect(
+        within(screen.getByTestId('dossier-card-1')).queryByTestId('roster-group-QB'),
+      ).not.toBeInTheDocument();
+      expect(screen.getByTestId('team-detail-pane')).toHaveTextContent('coreschke');
+    });
   });
 });

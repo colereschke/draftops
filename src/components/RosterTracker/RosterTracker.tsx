@@ -3,7 +3,9 @@
 import { useState, useMemo, useCallback } from 'react';
 import type { TeamWithRoster } from '@/types';
 import type { ManagerTendency } from '@/lib/tendencies';
+import { useMediaQuery } from '@/lib/useMediaQuery';
 import DossierCard from './DossierCard';
+import TeamDetailPane from './TeamDetailPane';
 
 interface RosterTrackerProps {
   teams: TeamWithRoster[];
@@ -22,6 +24,7 @@ const AGGRESSION_RANK: Record<ManagerTendency['aggression'], number> = {
 export default function RosterTracker({ teams, tendencies, ownerHandle }: RosterTrackerProps) {
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
   const [sortBy, setSortBy] = useState<CardSort>('activity');
+  const isDesktop = useMediaQuery('(min-width: 1024px)');
 
   const tendencyById = useMemo(() => new Map(tendencies.map((t) => [t.teamId, t])), [tendencies]);
 
@@ -53,6 +56,12 @@ export default function RosterTracker({ teams, tendencies, ownerHandle }: Roster
       return b.tendency.totalSpend - a.tendency.totalSpend; // activity
     });
   }, [teams, tendencyById, sortBy, ownerHandle]);
+
+  const [selectedTeamId, setSelectedTeamId] = useState<number | null>(
+    () => ordered[0]?.team.id ?? null,
+  );
+
+  const selected = ordered.find(({ team }) => team.id === selectedTeamId) ?? ordered[0] ?? null;
 
   const totalTeams = teams.length;
   const activeManagers = tendencies.filter((t) => t.buys > 0).length;
@@ -94,18 +103,45 @@ export default function RosterTracker({ teams, tendencies, ownerHandle }: Roster
         </section>
       </div>
 
-      <div className="grid grid-cols-1 gap-3 px-5 pt-3 pb-10 sm:grid-cols-2 xl:grid-cols-3">
-        {ordered.map(({ team, tendency }) => (
-          <DossierCard
-            key={team.id}
-            team={team}
-            tendency={tendency}
-            isOwner={ownerHandle !== null && team.handle === ownerHandle}
-            isExpanded={expanded.has(team.id)}
-            onToggle={toggle}
-          />
-        ))}
-      </div>
+      {isDesktop ? (
+        <div className="flex items-start gap-4 px-5 pt-3 pb-10">
+          <div className="flex w-[360px] shrink-0 flex-col gap-3">
+            {ordered.map(({ team, tendency }) => (
+              <DossierCard
+                key={team.id}
+                team={team}
+                tendency={tendency}
+                isOwner={ownerHandle !== null && team.handle === ownerHandle}
+                isExpanded={false}
+                isSelected={team.id === selectedTeamId}
+                onToggle={setSelectedTeamId}
+              />
+            ))}
+          </div>
+          <div className="sticky top-4 min-w-0 flex-1">
+            {selected && (
+              <TeamDetailPane
+                team={selected.team}
+                tendency={selected.tendency}
+                isOwner={ownerHandle !== null && selected.team.handle === ownerHandle}
+              />
+            )}
+          </div>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 gap-3 px-5 pt-3 pb-10 sm:grid-cols-2 xl:grid-cols-3">
+          {ordered.map(({ team, tendency }) => (
+            <DossierCard
+              key={team.id}
+              team={team}
+              tendency={tendency}
+              isOwner={ownerHandle !== null && team.handle === ownerHandle}
+              isExpanded={expanded.has(team.id)}
+              onToggle={toggle}
+            />
+          ))}
+        </div>
+      )}
     </div>
   );
 }

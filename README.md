@@ -61,6 +61,36 @@ Visit any page and you'll be redirected to the Discord sign-in screen.
 - **Nomination helper** (`/nominate`) — ranks available players by rival demand score; personal watchlist sidebar persists to DB and excludes players from suggestions
 - **In-auction tracking** — "Nom" button marks a player as currently up for bidding; persists to DB so state survives page refreshes; auto-clears when the bid is logged
 
+## Dynasty Value Pipeline
+
+The value shown as the active auction target is a draft-specific dynasty value, not a raw one-year
+projection value.
+
+1. `src/data/players.ts` starts from FantasyCalc/ETR-style Superflex dynasty auction values using
+   the `2QBAuction` column on a $200 budget scale.
+2. Those values are scaled by `5x` for a $1,000 auction. Tight ends also receive the legacy
+   position-level TE-premium bump in the base seed data.
+3. When a draft is created, `createDraft` runs `adjustPlayerValues`. This applies the draft's
+   starting lineup, team count, and scoring settings to create draft-specific `Player.budget`,
+   `ceiling`, and `floor` values while preserving the original market values in
+   `baseBudget`, `baseCeiling`, and `baseFloor`.
+4. If projection values have been applied to the draft, the auction sheet uses
+   `DraftPlayerValue.activeAuctionValue`. That value is still anchored to the draft's dynasty
+   market value; projections only shape it by comparing each player's points under the draft
+   scoring settings against baseline scoring and then normalizing that lift against positional
+   peers.
+5. If a player has no row for the active projection source, the sheet falls back to the
+   draft-specific `Player.budget`.
+
+Projection application is currently manual after a draft exists:
+
+```bash
+pnpm tsx prisma/apply-projection-values.ts --draft-id <draft-id>
+```
+
+New drafts automatically get the non-projection league-setting adjustment, but they do not
+automatically import or apply projection CSVs yet.
+
 ## Make Commands
 
 ```bash

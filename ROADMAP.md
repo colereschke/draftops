@@ -178,11 +178,12 @@ Replace all hardcoded league assumptions with values pulled from the draft's set
 - `TARGET_ROSTER` → `draft.targetRoster`
 - Kicker/PKG rules → remove Cole-specific team-to-manager mappings; make PKG association configurable or document as a manual entry
 
-This milestone intentionally builds the non-projection fallback valuation model. DraftOps must
-remain useful even when no projection source is available. Projection-aware valuation will be
-handled separately in #5e, using the normalized projection data from #5d. The two systems should
-share common league-settings utilities where possible, but they should remain separable so users
-can operate DraftOps with rankings-only, projections-only, or blended values later.
+This milestone intentionally builds the non-projection fallback valuation model. DraftOps remains
+usable when no projection source is available. Current implementation status: the fallback model
+runs automatically during `createDraft`, storing adjusted `Player.budget`/`ceiling`/`floor` and
+preserving base values in `baseBudget`/`baseCeiling`/`baseFloor`. Projection-shaped active values
+are handled separately in #5e and fall back to these `Player` values when no current projection row
+exists.
 
 ---
 
@@ -351,12 +352,14 @@ value_source
 - The projection-aware model answers: "What should this player be worth based on projected
   production above replacement in this exact league?"
 
-Do not fully replace the fallback model immediately. First expose projection values as a parallel
-value source, then decide whether to blend, override, or let users choose.
+Do not blend raw projection auction dollars directly into dynasty values. The raw VOR dollar curve
+is useful as one-year roster-strength context, but it has a different shape from dynasty auction
+markets and should not drive the draft board by subtraction/blending.
 
-**Current implementation status:** draft PR opened as #27, stacked on PR #25 (`worktree-value-adjustment-algorithm`). The branch is `projection-aware-vor-engine`.
+**Current implementation status:** projection storage and projection-shaped market values are in
+PR #35 on branch `projection-aware-values`.
 
-Implemented in #27:
+Implemented:
 
 - Adds the long-term projection storage model: `ProjectionSource`, `PlayerProjection`, and
   `DraftPlayerValue`.
@@ -364,40 +367,43 @@ Implemented in #27:
 - Adds ETR dynasty ranking → Sleeper ID matching for
   `existing_project_docs/auction-tool/src/Dynasty_Rankings.csv`.
 - Adds league-specific projection scoring from normalized Mike Clay rows.
-- Adds replacement level, VOR, projection auction value allocation, and rookie-aware active value
-  behavior.
+- Adds replacement level, VOR, and projection auction value allocation as stored context.
+- Adds projection-shaped active market values: the active auction target remains anchored to the
+  draft's adjusted dynasty `Player.budget`, then projections adjust it by relative scoring lift
+  within position/value buckets.
 - Adds `prisma/apply-projection-values.ts --draft-id <id>` to apply generated projection CSVs to a
   draft.
+- Removes the old VOR-driven strategy lens from this PR; rebuild/balanced/contender handling is
+  deferred to a dedicated follow-up.
+- Ignores stale projection rows from older projection sources. Players without a current projection
+  row fall back to the draft-specific `Player.budget`.
 
-Next steps after PR #25 and #27:
+Current process:
 
-1. Merge #25 first, then review/merge #27 or retarget/rebase it if #25 changes materially.
-2. Generate or confirm `data/generated/etr_sleeper_matches.csv` exists locally.
-3. Run the apply script against a real draft:
+1. Create a draft normally. `createDraft` automatically seeds adjusted fallback dynasty values.
+2. Generate or confirm `data/generated/etr_sleeper_matches.csv` and
+   `data/generated/master_projections.csv` exist locally.
+3. Manually run the apply script against that draft:
 
 ```bash
 pnpm tsx prisma/apply-projection-values.ts --draft-id <draft-id>
 ```
 
-4. Spot-check value outputs before UI work:
+4. Spot-check value outputs:
    - high-end QBs and elite TEs
-   - rookies with low year-one projections
-   - rookies with strong projections
-   - unmatched ETR players and unmatched projection players
-   - replacement levels by QB/RB/WR/TE
-5. Decide projection activation policy:
-   - keep fallback active by default
-   - add a value-source toggle
-   - blend fallback and projection values
-   - use projection override only for selected contexts
-6. Add lightweight UI visibility for `DraftPlayerValue` data after the numbers pass sanity checks.
-   Prefer a compact value-source badge or optional columns before making projection values the main
-   displayed number.
-   When projection-aware active values are displayed as the main target, recalculate floor and
-   ceiling from the active value instead of leaving the original ranking-derived band attached to
-   a new target.
-7. Feed projection-aware lineup strength into #8 dynamic pick valuation, keeping dynasty market
+   - target-heavy TEs vs. efficiency/TD-driven TEs
+   - rookies with weak or strong year-one projections
+   - free agents and unmatched players, which should fall back cleanly
+   - replacement levels by QB/RB/WR/TE for future roster-strength work
+
+Next steps:
+
+1. Automate projection application after draft creation or provide an explicit UI action/status so
+   new drafts do not depend on remembering the script.
+2. Feed projection-aware lineup strength into #8 dynamic pick valuation, keeping dynasty market
    strength and redraft projection strength as separate signals.
+3. Rebuild the strategy lens in a follow-up PR using a shape-preserving signal, not raw VOR-dollar
+   deltas.
 
 Rookie policy for #5e: low rookie projections should not reduce active fallback/dynasty value, but
 strong rookie projections can raise active value when projection values are explicitly activated.

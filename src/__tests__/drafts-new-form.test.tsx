@@ -1,6 +1,8 @@
 import React from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import NewDraftPage from '@/app/drafts/new/page';
+import { createDraft } from '@/lib/actions';
 import type { SleeperImportResult } from '@/lib/sleeper';
 import { DEFAULT_SCORING_SETTINGS } from '@/types';
 
@@ -13,6 +15,15 @@ const mockImportFromSleeper = jest.fn();
 jest.mock('@/lib/sleeper-actions', () => ({
   importFromSleeper: (...args: unknown[]) => mockImportFromSleeper(...args),
 }));
+
+const mockGetRankingSummary = jest.fn();
+jest.mock('@/lib/rankings-actions', () => ({
+  getRankingSummary: (...args: unknown[]) => mockGetRankingSummary(...args),
+}));
+
+beforeEach(() => {
+  mockGetRankingSummary.mockResolvedValue(null);
+});
 
 const MOCK_IMPORT_RESULT: SleeperImportResult = {
   leagueName: 'Dynasty Warlords',
@@ -247,6 +258,51 @@ describe('NewDraftPage — Sleeper import banner', () => {
       const input = screen.getByTestId<HTMLInputElement>('scoring-passYdsPerPoint');
       expect(input.value).toBe('20');
       expect(input.step).toBe('any');
+    });
+  });
+});
+
+describe('player pool source', () => {
+  it('does not show a source selector when the user has no custom ranking set', async () => {
+    mockGetRankingSummary.mockResolvedValue(null);
+    render(<NewDraftPage />);
+    await waitFor(() => {
+      expect(mockGetRankingSummary).toHaveBeenCalled();
+    });
+    expect(screen.queryByTestId('player-source-custom')).not.toBeInTheDocument();
+  });
+
+  it('shows a source selector when a custom ranking set exists, defaulting to ETR', async () => {
+    mockGetRankingSummary.mockResolvedValue({
+      fileName: 'my_rankings.csv',
+      uploadedAt: new Date('2026-07-01T00:00:00.000Z'),
+      totalCount: 267,
+      matchedCount: 260,
+      unmatchedCount: 7,
+    });
+    render(<NewDraftPage />);
+
+    expect(await screen.findByTestId('player-source-custom')).toBeInTheDocument();
+    expect(screen.getByTestId('player-source-etr')).toBeChecked();
+  });
+
+  it('passes playerSource: custom to createDraft when selected', async () => {
+    mockGetRankingSummary.mockResolvedValue({
+      fileName: 'my_rankings.csv',
+      uploadedAt: new Date('2026-07-01T00:00:00.000Z'),
+      totalCount: 267,
+      matchedCount: 260,
+      unmatchedCount: 7,
+    });
+    const user = userEvent.setup();
+    render(<NewDraftPage />);
+
+    await user.click(await screen.findByTestId('player-source-custom'));
+    fireEvent.change(screen.getByTestId('draft-name-input'), { target: { value: 'Test Draft' } });
+    fireEvent.submit(screen.getByTestId('new-draft-form'));
+
+    await waitFor(() => {
+      expect(createDraft).toHaveBeenCalledWith(expect.objectContaining({ playerSource: 'custom' }));
     });
   });
 });

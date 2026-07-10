@@ -1,9 +1,10 @@
 'use client';
 
 import Link from 'next/link';
-import { useState, useTransition } from 'react';
+import { useEffect, useState, useTransition } from 'react';
 import { createDraft } from '@/lib/actions';
 import { importFromSleeper } from '@/lib/sleeper-actions';
+import { getRankingSummary, type RankingSummary } from '@/lib/rankings-actions';
 import type { SleeperImportResult } from '@/lib/sleeper';
 import type { StartingSlot, ScoringSettings } from '@/types';
 import { DEFAULT_STARTING_LINEUP, DEFAULT_TARGET_ROSTER, DEFAULT_SCORING_SETTINGS } from '@/types';
@@ -51,6 +52,12 @@ export default function NewDraftPage() {
   const [scoringSettings, setScoringSettings] = useState<ScoringSettings>({
     ...DEFAULT_SCORING_SETTINGS,
   });
+  const [rankingSummary, setRankingSummary] = useState<RankingSummary | null>(null);
+  const [playerSource, setPlayerSource] = useState<'etr' | 'custom'>('etr');
+
+  useEffect(() => {
+    getRankingSummary().then(setRankingSummary);
+  }, []);
 
   function updateScoring<K extends keyof ScoringSettings>(key: K, value: ScoringSettings[K]) {
     setScoringSettings((prev) => ({ ...prev, [key]: value }));
@@ -162,6 +169,7 @@ export default function NewDraftPage() {
           startingLineup,
           scoringSettings,
           teams,
+          playerSource,
         });
       } catch (err) {
         setError((err as Error).message ?? 'Something went wrong.');
@@ -339,6 +347,49 @@ export default function NewDraftPage() {
             </label>
           </div>
         </div>
+
+        {rankingSummary && (
+          <div
+            style={{
+              background: 'var(--bg-surface)',
+              borderRadius: '6px',
+              padding: '1.25rem',
+              marginBottom: '1rem',
+            }}
+          >
+            <div style={sectionHeaderStyle}>Player Pool</div>
+            <label
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.5rem',
+                marginBottom: '0.5rem',
+              }}
+            >
+              <input
+                data-testid="player-source-etr"
+                type="radio"
+                name="playerSource"
+                checked={playerSource === 'etr'}
+                onChange={() => setPlayerSource('etr')}
+              />
+              <span style={labelStyle}>ETR Default</span>
+            </label>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <input
+                data-testid="player-source-custom"
+                type="radio"
+                name="playerSource"
+                checked={playerSource === 'custom'}
+                onChange={() => setPlayerSource('custom')}
+              />
+              <span style={labelStyle}>
+                My Custom Rankings ({rankingSummary.totalCount} players, uploaded{' '}
+                {rankingSummary.uploadedAt.toLocaleDateString()})
+              </span>
+            </label>
+          </div>
+        )}
 
         {/* --- Roster Settings --- */}
         <div

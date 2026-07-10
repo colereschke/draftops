@@ -1,0 +1,51 @@
+import { render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import ResolveUnmatchedList from '@/components/RankingsUpload/ResolveUnmatchedList';
+
+const mockResolve = jest.fn();
+jest.mock('@/lib/rankings-actions', () => ({
+  resolveRankingMatch: (...args: unknown[]) => mockResolve(...args),
+}));
+
+const UNMATCHED = [{ id: 1, name: 'J. Allen', team: 'BUF', pos: 'QB' }];
+const SLEEPER_OPTIONS = [
+  { id: 's1', name: 'Josh Allen', team: 'BUF', pos: 'QB' },
+  { id: 's2', name: 'Josh Jacobs', team: 'GB', pos: 'RB' },
+];
+
+beforeEach(() => {
+  jest.clearAllMocks();
+  mockResolve.mockResolvedValue(undefined);
+});
+
+describe('ResolveUnmatchedList', () => {
+  it('renders each unmatched row', () => {
+    render(<ResolveUnmatchedList unmatchedPlayers={UNMATCHED} sleeperPlayers={SLEEPER_OPTIONS} />);
+    expect(screen.getByTestId('unmatched-row-1')).toHaveTextContent('J. Allen');
+  });
+
+  it('filters Sleeper options as the user types and resolves on selection', async () => {
+    const user = userEvent.setup();
+    render(<ResolveUnmatchedList unmatchedPlayers={UNMATCHED} sleeperPlayers={SLEEPER_OPTIONS} />);
+
+    await user.type(screen.getByTestId('unmatched-search-1'), 'Josh Al');
+    const match = await screen.findByText(/Josh Allen/);
+    await user.click(match);
+
+    await waitFor(() => {
+      expect(mockResolve).toHaveBeenCalledWith(1, 's1');
+    });
+  });
+
+  it('removes a row from the list once resolved', async () => {
+    const user = userEvent.setup();
+    render(<ResolveUnmatchedList unmatchedPlayers={UNMATCHED} sleeperPlayers={SLEEPER_OPTIONS} />);
+
+    await user.type(screen.getByTestId('unmatched-search-1'), 'Josh Al');
+    await user.click(await screen.findByText(/Josh Allen/));
+
+    await waitFor(() => {
+      expect(screen.queryByTestId('unmatched-row-1')).not.toBeInTheDocument();
+    });
+  });
+});

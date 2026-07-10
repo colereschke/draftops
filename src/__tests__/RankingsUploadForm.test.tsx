@@ -1,0 +1,72 @@
+import { render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import RankingsUploadForm from '@/components/RankingsUpload/RankingsUploadForm';
+
+const mockUpload = jest.fn();
+jest.mock('@/lib/rankings-actions', () => ({
+  uploadRankingsCsv: (...args: unknown[]) => mockUpload(...args),
+}));
+
+beforeEach(() => {
+  jest.clearAllMocks();
+});
+
+function makeFile(contents: string, name = 'rankings.csv') {
+  return new File([contents], name, { type: 'text/csv' });
+}
+
+describe('RankingsUploadForm', () => {
+  it('shows upload prompt with no existing summary', () => {
+    render(<RankingsUploadForm summary={null} />);
+    expect(screen.getByTestId('rankings-upload-button')).toHaveTextContent('Upload CSV');
+  });
+
+  it('shows the summary card when a ranking set exists', () => {
+    render(
+      <RankingsUploadForm
+        summary={{
+          fileName: 'my_rankings.csv',
+          uploadedAt: '2026-07-01T00:00:00.000Z',
+          totalCount: 267,
+          matchedCount: 260,
+          unmatchedCount: 7,
+        }}
+      />,
+    );
+    expect(screen.getByTestId('rankings-summary')).toHaveTextContent('267');
+    expect(screen.getByTestId('rankings-upload-button')).toHaveTextContent('Re-upload CSV');
+  });
+
+  it('uploads the selected file and shows no errors on success', async () => {
+    mockUpload.mockResolvedValue({ ok: true });
+    render(<RankingsUploadForm summary={null} />);
+    const input = screen.getByTestId('rankings-upload-button').querySelector('input')!;
+    const user = userEvent.setup();
+
+    await user.upload(
+      input,
+      makeFile('Player,Team,Position,Age,2QBAuction\nJosh Allen,BUF,QB,30.1,$51'),
+    );
+
+    await waitFor(() => {
+      expect(mockUpload).toHaveBeenCalledWith(
+        'rankings.csv',
+        'Player,Team,Position,Age,2QBAuction\nJosh Allen,BUF,QB,30.1,$51',
+      );
+    });
+    expect(screen.queryByTestId('rankings-upload-errors')).not.toBeInTheDocument();
+  });
+
+  it('displays returned errors without throwing', async () => {
+    mockUpload.mockResolvedValue({ ok: false, errors: ['Missing required column(s): Age'] });
+    render(<RankingsUploadForm summary={null} />);
+    const input = screen.getByTestId('rankings-upload-button').querySelector('input')!;
+    const user = userEvent.setup();
+
+    await user.upload(input, makeFile('Player,Team\nJosh Allen,BUF'));
+
+    expect(await screen.findByTestId('rankings-upload-errors')).toHaveTextContent(
+      'Missing required column(s): Age',
+    );
+  });
+});

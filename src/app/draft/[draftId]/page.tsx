@@ -6,6 +6,8 @@ import { auth } from '@/auth';
 import { getDraft } from '@/lib/draft';
 import { mapPlayersWithDraftValues } from '@/lib/playerValueMapping';
 import { filterFuturePickAssetsForMode, fromPrismaFuturePickMode } from '@/lib/futurePickAssets';
+import { applyDynamicPickValues } from '@/lib/dynamicPickValues';
+import { DEFAULT_STARTING_LINEUP, type StartingSlot } from '@/types';
 
 export default async function DraftHomePage({ params }: { params: Promise<{ draftId: string }> }) {
   const draftId = parseInt((await params).draftId, 10);
@@ -63,8 +65,18 @@ export default async function DraftHomePage({ params }: { params: Promise<{ draf
     teamHandle: r.team.handle,
   }));
 
+  const dynamicPlayers = applyDynamicPickValues({
+    players: mapPlayersWithDraftValues(dbPlayers, draftValues),
+    bids: rawBids.map((bid) => ({
+      player: bid.player,
+      price: bid.price,
+      teamHandle: bid.team.handle,
+    })),
+    startingLineup: (draft.startingLineup ?? DEFAULT_STARTING_LINEUP) as StartingSlot[],
+  });
+
   const players = filterFuturePickAssetsForMode(
-    mapPlayersWithDraftValues(dbPlayers, draftValues),
+    dynamicPlayers,
     fromPrismaFuturePickMode(draft.futurePickAuctionMode),
   );
 

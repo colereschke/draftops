@@ -190,7 +190,7 @@ describe('createDraft', () => {
     expect(payload).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          name: 'coreschke 2027 Pick Package',
+          name: "coreschke's 2027 package",
           pos: 'PKG',
           futurePickOriginHandle: 'coreschke',
           futurePickAssetKind: 'package',

@@ -45,7 +45,7 @@ describe('future pick asset generation', () => {
     expect(assets).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          player: 'coreschke 2027 Pick Package',
+          player: "coreschke's 2027 package",
           pos: 'PKG',
           team: 'coreschke',
           futurePickOriginHandle: 'coreschke',
@@ -65,7 +65,7 @@ describe('future pick asset generation', () => {
   });
 
   it.each([
-    ['packages', ['coreschke 2027 Pick Package', 'chappy72 2027 Pick Package']],
+    ['packages', ["coreschke's 2027 package", "chappy72's 2027 package"]],
     [
       'individual',
       [

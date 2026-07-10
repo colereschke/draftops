@@ -51,7 +51,7 @@ export function generateFuturePickAssets({
   return teams.flatMap((team, teamIndex) => {
     const rankBase = startingRank + teamIndex * 4;
     const packageAsset: Player = {
-      player: `${team.handle} ${year} Pick Package`,
+      player: `${team.handle}'s ${year} package`,
       team: team.handle,
       pos: 'PKG',
       age: null,

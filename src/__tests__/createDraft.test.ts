@@ -6,6 +6,7 @@ const mockAuth = jest.fn();
 const mockTransaction = jest.fn();
 const mockRevalidatePath = jest.fn();
 const mockRedirect = jest.fn();
+const mockApplyProjectionValuesToDraft = jest.fn();
 
 // Mock tx client
 const mockTxDraftCreate = jest.fn();
@@ -22,6 +23,9 @@ jest.mock('@/lib/db', () => ({
   prisma: {
     $transaction: (...args: unknown[]) => mockTransaction(...args),
   },
+}));
+jest.mock('@/lib/projectionApplication', () => ({
+  applyProjectionValuesToDraft: (...args: unknown[]) => mockApplyProjectionValuesToDraft(...args),
 }));
 
 const MOCK_SESSION = { user: { id: '123456789', name: 'Cole' } };
@@ -71,6 +75,7 @@ beforeEach(() => {
     .mockResolvedValueOnce({ id: 10, handle: 'coreschke' })
     .mockResolvedValueOnce({ id: 11, handle: 'team2' });
   mockTxDraftUpdate.mockResolvedValue({});
+  mockApplyProjectionValuesToDraft.mockResolvedValue({ projectionSourceId: 7, appliedCount: 250 });
   mockTransaction.mockImplementation((callback) =>
     callback({
       draft: { create: mockTxDraftCreate, update: mockTxDraftUpdate },
@@ -156,6 +161,23 @@ describe('createDraft', () => {
   it('redirects to /draft/[id] after creation', async () => {
     await createDraft(VALID_INPUT);
     expect(mockRedirect).toHaveBeenCalledWith('/draft/5');
+  });
+
+  it('applies stored projections to the new draft before redirecting', async () => {
+    await createDraft(VALID_INPUT);
+
+    expect(mockApplyProjectionValuesToDraft).toHaveBeenCalledWith(
+      expect.objectContaining({ $transaction: expect.any(Function) }),
+      { draftId: 5 },
+    );
+    expect(mockRedirect).toHaveBeenCalledWith('/draft/5');
+  });
+
+  it('fails loudly when automatic projection application fails', async () => {
+    mockApplyProjectionValuesToDraft.mockRejectedValue(new Error('No projection source found'));
+
+    await expect(createDraft(VALID_INPUT)).rejects.toThrow('No projection source found');
+    expect(mockRedirect).not.toHaveBeenCalled();
   });
 
   it('seeds players from base ETR data into the Player table', async () => {

@@ -8,6 +8,7 @@ import { getDraft } from '@/lib/draft';
 import type { Position, StartingSlot, ScoringSettings } from '@/types';
 import { players as BASE_PLAYERS } from '@/data/players';
 import { adjustPlayerValues } from '@/lib/valueAdjustment';
+import { applyProjectionValuesToDraft } from '@/lib/projectionApplication';
 
 export async function logBid(data: {
   player: string;
@@ -166,6 +167,8 @@ export async function createDraft(data: {
 
     return draft.id;
   });
+
+  await applyProjectionValuesToDraft(prisma, { draftId });
 
   redirect(`/draft/${draftId}`);
 }

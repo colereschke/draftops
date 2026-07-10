@@ -1,6 +1,6 @@
 'use client';
 
-import { useSyncExternalStore } from 'react';
+import { useCallback, useSyncExternalStore } from 'react';
 
 function subscribe(query: string, callback: () => void) {
   const mql = window.matchMedia(query);
@@ -9,8 +9,12 @@ function subscribe(query: string, callback: () => void) {
 }
 
 export function useMediaQuery(query: string): boolean {
+  const subscribeToQuery = useCallback(
+    (callback: () => void) => subscribe(query, callback),
+    [query],
+  );
   return useSyncExternalStore(
-    (callback) => subscribe(query, callback),
+    subscribeToQuery,
     () => window.matchMedia(query).matches,
     () => false,
   );

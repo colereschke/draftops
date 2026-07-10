@@ -1,5 +1,6 @@
 import {
   FUTURE_PICK_AUCTION_MODES,
+  excludeStaticFuturePickRows,
   filterFuturePickAssetsForMode,
   fromPrismaFuturePickMode,
   generateFuturePickAssets,
@@ -145,4 +146,44 @@ describe('future pick asset generation', () => {
       expect(visible.map((p) => p.player)).toEqual(expectedNames);
     },
   );
+
+  it('excludes static future pick rows from seed inputs', () => {
+    const basePlayer: Player = {
+      player: 'JaMarr Chase',
+      team: 'CIN',
+      pos: 'WR',
+      age: 26,
+      sfRank: 1,
+      budget: 250,
+      ceiling: 288,
+      floor: 218,
+      notes: '',
+    };
+    const legacyPackage: Player = {
+      player: 'Matt Gay',
+      team: 'coreschke',
+      pos: 'PKG',
+      age: null,
+      sfRank: 900,
+      budget: 109,
+      ceiling: 131,
+      floor: 75,
+      notes: '',
+    };
+    const legacyPick: Player = {
+      player: '2027 1st Round Pick',
+      team: 'FA',
+      pos: 'PICK',
+      age: null,
+      sfRank: 901,
+      budget: 75,
+      ceiling: 90,
+      floor: 52,
+      notes: '',
+    };
+
+    expect(excludeStaticFuturePickRows([basePlayer, legacyPackage, legacyPick])).toEqual([
+      basePlayer,
+    ]);
+  });
 });

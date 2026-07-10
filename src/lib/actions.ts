@@ -6,9 +6,9 @@ import { auth } from '@/auth';
 import { prisma } from '@/lib/db';
 import { getDraft } from '@/lib/draft';
 import {
+  excludeStaticFuturePickRows,
   generateFuturePickAssets,
   getNextFuturePickYear,
-  withoutStaticFuturePickRows,
 } from '@/lib/futurePickAssets';
 import type { FuturePickAuctionMode, Position, StartingSlot, ScoringSettings } from '@/types';
 import { players as BASE_PLAYERS } from '@/data/players';
@@ -163,7 +163,7 @@ export async function createDraft(data: {
       year: nextPickYear,
       startingRank: 900,
     });
-    const seededPlayers = [...withoutStaticFuturePickRows(valued), ...futurePickAssets];
+    const seededPlayers = [...excludeStaticFuturePickRows(valued), ...futurePickAssets];
 
     await tx.player.createMany({
       data: seededPlayers.map((p) => ({

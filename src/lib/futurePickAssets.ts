@@ -108,8 +108,8 @@ export function filterFuturePickAssetsForMode(
   });
 }
 
-export function withoutStaticFuturePickRows(players: Player[]): Player[] {
-  return players.filter((player) => !isStaticFuturePickRow(player));
+export function excludeStaticFuturePickRows(players: Player[]): Player[] {
+  return players.filter((player) => !(player.pos === 'PICK' || player.pos === 'PKG'));
 }
 
 function isStaticFuturePickRow(player: Player): boolean {

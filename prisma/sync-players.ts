@@ -7,9 +7,9 @@ import { PrismaPg } from '@prisma/adapter-pg';
 import { Pool } from 'pg';
 import { players as BASE_PLAYERS } from '../src/data/players';
 import {
+  excludeStaticFuturePickRows,
   generateFuturePickAssets,
   getNextFuturePickYear,
-  withoutStaticFuturePickRows,
 } from '../src/lib/futurePickAssets';
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
@@ -38,7 +38,7 @@ async function main() {
       year: getNextFuturePickYear(draft.createdAt),
       startingRank: 900,
     });
-    const seedPlayers = [...withoutStaticFuturePickRows(BASE_PLAYERS), ...futurePickAssets];
+    const seedPlayers = [...excludeStaticFuturePickRows(BASE_PLAYERS), ...futurePickAssets];
     const missing = seedPlayers.filter((p) => !existingNames.has(p.player));
 
     if (missing.length === 0) {

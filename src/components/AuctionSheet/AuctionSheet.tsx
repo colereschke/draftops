@@ -4,7 +4,6 @@
 import { useState, useMemo, useOptimistic, useTransition } from 'react';
 import type { Player, Position, ClaimedBid, LeagueTeam } from '@/types';
 import { logBid, updateBid, deleteBid } from '@/lib/actions';
-import { applyStrategyLens, type StrategyLens } from '@/lib/strategyValue';
 import BidModal from '@/components/BidModal';
 import AuctionHeader from './AuctionHeader';
 import FilterControls, { type PositionFilter } from './FilterControls';
@@ -40,7 +39,6 @@ export default function AuctionSheet({
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
   const [showNotes, setShowNotes] = useState<boolean>(false);
   const [availableOnly, setAvailableOnly] = useState<boolean>(false);
-  const [strategyLens, setStrategyLens] = useState<StrategyLens>('rebuild');
   const [modalPlayer, setModalPlayer] = useState<Player | null>(null);
   const [modalError, setModalError] = useState<string>('');
   const [, startTransition] = useTransition();
@@ -65,11 +63,6 @@ export default function AuctionSheet({
   const nominatedSet = useMemo(
     () => new Set([...nominatedPlayers, ...extraNominated]),
     [nominatedPlayers, extraNominated],
-  );
-
-  const strategyPlayers = useMemo(
-    () => applyStrategyLens(players, strategyLens),
-    [players, strategyLens],
   );
 
   const mySpent = useMemo(() => {
@@ -190,7 +183,7 @@ export default function AuctionSheet({
   const remaining = ownerBudget - mySpent;
 
   const filtered = useMemo<Player[]>(() => {
-    let data = [...strategyPlayers];
+    let data = [...players];
     if (posFilter !== 'ALL') data = data.filter((p) => p.pos === posFilter);
     if (availableOnly) data = data.filter((p) => !claimMap.has(p.player));
     if (search) {
@@ -211,7 +204,7 @@ export default function AuctionSheet({
       return 0;
     });
     return data;
-  }, [posFilter, search, availableOnly, claimMap, sortBy, sortDir, strategyPlayers]);
+  }, [posFilter, search, availableOnly, claimMap, sortBy, sortDir, players]);
 
   const handleSort = (col: SortKey) => {
     if (sortBy === col) {
@@ -225,14 +218,14 @@ export default function AuctionSheet({
   const posStats = useMemo(() => {
     const stats = {} as Record<'QB' | 'RB' | 'WR' | 'TE', { count: number; total: number }>;
     (['QB', 'RB', 'WR', 'TE'] as const).forEach((pos) => {
-      const pp = strategyPlayers.filter((p) => p.pos === pos && !claimMap.has(p.player));
+      const pp = players.filter((p) => p.pos === pos && !claimMap.has(p.player));
       stats[pos] = { count: pp.length, total: pp.reduce((s, p) => s + p.budget, 0) };
     });
     return stats;
-  }, [claimMap, strategyPlayers]);
+  }, [claimMap, players]);
 
   const grandTotal = Object.values(posStats).reduce((s, v) => s + v.total, 0);
-  const totalPlayerCount = strategyPlayers.filter(
+  const totalPlayerCount = players.filter(
     (p) => !(['PKG', 'PICK'] as Position[]).includes(p.pos),
   ).length;
 
@@ -255,8 +248,6 @@ export default function AuctionSheet({
         onShowNotesChange={setShowNotes}
         availableOnly={availableOnly}
         onAvailableOnlyChange={setAvailableOnly}
-        strategyLens={strategyLens}
-        onStrategyLensChange={setStrategyLens}
         resultCount={filtered.length}
       />
       <PlayerTable
@@ -273,8 +264,8 @@ export default function AuctionSheet({
 
       <div className="flex flex-wrap gap-4 border-t border-border-subtle px-5 py-2.5 text-[10px] text-muted-foreground/40">
         <span>
-          Source: active target uses projection VOR when available · fallback uses adjusted ETR
-          dynasty values
+          Source: active target uses projection-shaped dynasty values when available · fallback uses
+          adjusted ETR dynasty values
         </span>
         <span className="ml-auto">
           PKG target for 2027 kicker = $109 (1st+2nd+3rd bundled w/ SF speculative premium)

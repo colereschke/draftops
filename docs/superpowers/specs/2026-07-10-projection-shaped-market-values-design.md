@@ -27,6 +27,9 @@ dynasty market value as the anchor. The engine should answer:
 
 - Do not build a UI toggle for active versus fallback values in this pass.
 - Do not replace dynasty startup value with pure one-year redraft VOR.
+- Do not use pure VOR dollars to drive rebuild, balanced, or contender draft-board lenses in this
+  pass. Lens valuation should be redesigned separately so it cannot blend incompatible dollar
+  curves into the auction target.
 - Do not store raw projection stats on `Player`.
 - Do not require projections for DraftOps to work. Missing projection data must still fall back to
   the existing adjusted market values.
@@ -197,3 +200,15 @@ and tests before the next live use.
 
 The app remains usable before projection import because player rows still carry fallback market
 values and `mapPlayersWithDraftValues` already falls back when no draft value row exists.
+
+## Strategy Lens Deferral
+
+The prior draft-board strategy lens blended dynasty market dollars toward one-year projection VOR
+dollars. That blend is intentionally removed from this PR because the two curves have different
+shapes: dynasty startup prices are convex at the top of the board, while projection VOR dollars are
+spread more evenly across the player pool. Subtracting one from the other can make elite win-now
+players look worse in contender mode for structural reasons unrelated to their actual auction value.
+
+Future strategy-lens work should be a separate PR. Reasonable options are a projection-rank lens, an
+age/lifecycle lens, or retiring the draft-board lens in favor of post-draft roster VOR analysis. The
+projection-shaped market value layer in this PR remains focused on scoring-fit calibration only.

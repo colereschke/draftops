@@ -8,7 +8,6 @@ function renderControls(overrides: Partial<React.ComponentProps<typeof FilterCon
   const onSearchChange = jest.fn();
   const onShowNotesChange = jest.fn();
   const onAvailableOnlyChange = jest.fn();
-  const onStrategyLensChange = jest.fn();
   render(
     <FilterControls
       posFilter="ALL"
@@ -19,8 +18,6 @@ function renderControls(overrides: Partial<React.ComponentProps<typeof FilterCon
       onShowNotesChange={onShowNotesChange}
       availableOnly={false}
       onAvailableOnlyChange={onAvailableOnlyChange}
-      strategyLens="rebuild"
-      onStrategyLensChange={onStrategyLensChange}
       resultCount={267}
       {...overrides}
     />,
@@ -30,7 +27,6 @@ function renderControls(overrides: Partial<React.ComponentProps<typeof FilterCon
     onSearchChange,
     onShowNotesChange,
     onAvailableOnlyChange,
-    onStrategyLensChange,
   };
 }
 
@@ -82,18 +78,16 @@ describe('FilterControls', () => {
     );
   });
 
-  it('calls onStrategyLensChange when a strategy lens is selected', async () => {
-    const user = userEvent.setup();
-    const { onStrategyLensChange } = renderControls();
-
-    await user.click(screen.getByRole('button', { name: /contend/i }));
-
-    await waitFor(() => expect(onStrategyLensChange).toHaveBeenCalledWith('contend'));
-  });
-
   it('renders the result count', () => {
     renderControls({ resultCount: 42 });
 
     expect(screen.getByText('42 players shown')).toBeInTheDocument();
+  });
+
+  it('does not render strategy lens controls while lens valuation is deferred', () => {
+    renderControls();
+
+    expect(screen.queryByText('Strategy')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /contend/i })).not.toBeInTheDocument();
   });
 });

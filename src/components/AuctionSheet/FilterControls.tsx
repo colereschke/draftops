@@ -2,7 +2,6 @@
 
 import type { Position } from '@/types';
 import { POS_COLORS } from '@/lib/posColors';
-import type { StrategyLens } from '@/lib/strategyValue';
 import { Toggle } from '@/components/ui/toggle';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { Input } from '@/components/ui/input';
@@ -10,11 +9,6 @@ import { Input } from '@/components/ui/input';
 export type PositionFilter = 'ALL' | Position;
 
 const POSITIONS: PositionFilter[] = ['ALL', 'QB', 'RB', 'WR', 'TE', 'PICK', 'PKG'];
-const STRATEGY_LENSES: Array<{ value: StrategyLens; label: string }> = [
-  { value: 'rebuild', label: 'Rebuild' },
-  { value: 'balanced', label: 'Balanced' },
-  { value: 'contend', label: 'Contend' },
-];
 
 interface FilterControlsProps {
   posFilter: PositionFilter;
@@ -25,8 +19,6 @@ interface FilterControlsProps {
   onShowNotesChange: (value: boolean) => void;
   availableOnly: boolean;
   onAvailableOnlyChange: (value: boolean) => void;
-  strategyLens: StrategyLens;
-  onStrategyLensChange: (value: StrategyLens) => void;
   resultCount: number;
 }
 
@@ -39,8 +31,6 @@ export default function FilterControls({
   onShowNotesChange,
   availableOnly,
   onAvailableOnlyChange,
-  strategyLens,
-  onStrategyLensChange,
   resultCount,
 }: FilterControlsProps) {
   return (
@@ -83,41 +73,6 @@ export default function FilterControls({
           placeholder="Search player or team..."
           className="w-[210px] rounded-md bg-background text-[12px] focus-visible:border-border focus-visible:ring-1 focus-visible:ring-border"
         />
-
-        <div className="flex items-center gap-1.5">
-          <span className="font-label text-[10px] tracking-[1.5px] text-muted-foreground uppercase">
-            Strategy
-          </span>
-          <ToggleGroup
-            value={[strategyLens]}
-            onValueChange={(vals) =>
-              onStrategyLensChange((vals[0] as StrategyLens | undefined) ?? 'rebuild')
-            }
-            className="gap-[3px]"
-          >
-            {STRATEGY_LENSES.map((lens) => {
-              const active = lens.value === strategyLens;
-              return (
-                <ToggleGroupItem
-                  key={lens.value}
-                  value={lens.value}
-                  className="font-label h-8 rounded-md border border-border bg-background px-2.5 text-[11px] font-semibold tracking-wide text-muted-foreground hover:bg-accent hover:text-foreground"
-                  style={
-                    active
-                      ? {
-                          borderColor: 'var(--text-secondary)',
-                          background: 'var(--accent)',
-                          color: 'var(--text-primary)',
-                        }
-                      : undefined
-                  }
-                >
-                  {lens.label}
-                </ToggleGroupItem>
-              );
-            })}
-          </ToggleGroup>
-        </div>
 
         <Toggle
           pressed={showNotes}

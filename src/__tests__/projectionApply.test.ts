@@ -1,4 +1,5 @@
 import {
+  buildDraftPlayerValueData,
   getSleeperIdUpdates,
   resolvePlayerSleeperIds,
   type CsvProjectionRow,
@@ -186,4 +187,48 @@ it('parses projection rows with both draft and baseline scoring points', () => {
 
   expect(rows[0].projectedPoints).toBeGreaterThan(rows[0].baselineProjectedPoints);
   expect(rows[0].baselineProjectedPoints).toBeGreaterThan(0);
+});
+
+it('builds draft value data with projection-adjusted market values active', () => {
+  const data = buildDraftPlayerValueData(
+    {
+      playerId: 1,
+      sleeperId: 'high-volume-te',
+      position: 'TE',
+      projectedPoints: 250,
+      baselineProjectedPoints: 200,
+      fallbackAuctionValue: 100,
+      isRookie: false,
+    },
+    {
+      replacementPoints: 180,
+      vor: 70,
+      projectionAuctionValue: 160,
+    },
+    {
+      sleeperId: 'high-volume-te',
+      name: '1',
+      position: 'TE',
+      projectedPoints: 250,
+      baselineProjectedPoints: 200,
+      fallbackAuctionValue: 100,
+      isRookie: false,
+      activeAuctionValue: 118,
+      rawScoringLift: 1.25,
+      relativeScoringLift: 1.23,
+      projectionMarketMultiplier: 1.18,
+      marketBucket: 'elite',
+      valueSource: 'projection_adjusted_market',
+    },
+  );
+
+  expect(data).toEqual({
+    projectedPoints: 250,
+    replacementPoints: 180,
+    vor: 70,
+    projectionAuctionValue: 160,
+    fallbackAuctionValue: 100,
+    activeAuctionValue: 118,
+    valueSource: 'projection_adjusted_market',
+  });
 });

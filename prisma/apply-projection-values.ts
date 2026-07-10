@@ -1,5 +1,9 @@
 import { config as dotenvConfig } from 'dotenv';
 import { readFileSync } from 'node:fs';
+import {
+  calculateProjectionMarketValues,
+  type ProjectionMarketValueOutput,
+} from '@/lib/projectionMarketValue';
 import { calculateProjectedPoints, type ProjectionStats } from '@/lib/projectionScoring';
 import { calculateProjectionValues, type ProjectionValueInput } from '@/lib/projectionVor';
 import {
@@ -348,21 +352,27 @@ async function main(): Promise<void> {
         startingLineup: toStartingLineup(draft.startingLineup),
         targetRoster: toTargetRoster(draft.targetRoster),
         scoringSettings,
-        activateProjectionValues: false,
       });
       const valuesBySleeperId = new Map(values.map((value) => [value.sleeperId, value]));
+      const projectionMarketValues = calculateProjectionMarketValues({
+        players: joined.map((row) => ({
+          sleeperId: row.sleeperId,
+          name: String(row.playerId),
+          position: row.position,
+          projectedPoints: row.projectedPoints,
+          baselineProjectedPoints: row.baselineProjectedPoints,
+          fallbackAuctionValue: row.fallbackAuctionValue,
+          isRookie: row.isRookie,
+        })),
+      });
+      const marketValuesBySleeperId = new Map(
+        projectionMarketValues.map((value) => [value.sleeperId, value]),
+      );
       const draftPlayerValueWrites = joined.flatMap((row) => {
         const value = valuesBySleeperId.get(row.sleeperId);
-        if (!value) return [];
-        const data = {
-          projectedPoints: row.projectedPoints,
-          replacementPoints: value.replacementPoints,
-          vor: value.vor,
-          projectionAuctionValue: value.projectionAuctionValue,
-          fallbackAuctionValue: row.fallbackAuctionValue,
-          activeAuctionValue: value.activeAuctionValue,
-          valueSource: 'fallback',
-        };
+        const marketValue = marketValuesBySleeperId.get(row.sleeperId);
+        if (!value || !marketValue) return [];
+        const data = buildDraftPlayerValueData(row, value, marketValue);
         return [
           prisma.draftPlayerValue.upsert({
             where: {
@@ -494,6 +504,26 @@ function playerProjectionData(projection: CsvProjectionRow, projectionSourceId: 
     baseFantasyPoints: projection.baseFantasyPoints,
     projectionRank: projection.projectionRank,
     projectionSourceId,
+  };
+}
+
+export function buildDraftPlayerValueData(
+  row: JoinedProjectionRow,
+  value: {
+    replacementPoints: number | null;
+    vor: number | null;
+    projectionAuctionValue: number | null;
+  },
+  marketValue: ProjectionMarketValueOutput,
+) {
+  return {
+    projectedPoints: row.projectedPoints,
+    replacementPoints: value.replacementPoints,
+    vor: value.vor,
+    projectionAuctionValue: value.projectionAuctionValue,
+    fallbackAuctionValue: row.fallbackAuctionValue,
+    activeAuctionValue: marketValue.activeAuctionValue,
+    valueSource: marketValue.valueSource,
   };
 }
 

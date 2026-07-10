@@ -28,7 +28,7 @@ describe('mapPlayersWithDraftValues', () => {
           projectionAuctionValue: 170,
           fallbackAuctionValue: 120,
           activeAuctionValue: 170,
-          valueSource: 'projection',
+          valueSource: 'projection_adjusted_market',
           updatedAt: new Date('2026-07-08T12:00:00.000Z'),
         },
       ],
@@ -39,7 +39,7 @@ describe('mapPlayersWithDraftValues', () => {
     expect(player.ceiling).toBe(196);
     expect(player.baseBudget).toBe(120);
     expect(player.projectionAuctionValue).toBe(170);
-    expect(player.valueSource).toBe('projection');
+    expect(player.valueSource).toBe('projection_adjusted_market');
     expect(player.projectedPoints).toBe(410.5);
     expect(player.vor).toBe(150.4);
   });

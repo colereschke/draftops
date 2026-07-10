@@ -75,6 +75,7 @@ const team = (over: Partial<TeamWithRoster> = {}): TeamWithRoster => ({
   rosterRemaining: 24,
   buyingPower: 366,
   pkgCount: 0,
+  avgAge: null,
   results: [],
   ...over,
 });

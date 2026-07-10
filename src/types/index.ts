@@ -34,6 +34,7 @@ export interface TeamStats {
   rosterRemaining: number;
   buyingPower: number;
   pkgCount: number;
+  avgAge: number | null;
 }
 
 export interface AuctionResultEntry {

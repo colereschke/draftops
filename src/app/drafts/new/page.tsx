@@ -56,7 +56,9 @@ export default function NewDraftPage() {
   const [playerSource, setPlayerSource] = useState<'etr' | 'custom'>('etr');
 
   useEffect(() => {
-    getRankingSummary().then(setRankingSummary);
+    getRankingSummary()
+      .then(setRankingSummary)
+      .catch((err) => console.error('Failed to load ranking summary:', err));
   }, []);
 
   function updateScoring<K extends keyof ScoringSettings>(key: K, value: ScoringSettings[K]) {

@@ -83,11 +83,18 @@ export function filterFuturePickAssetsForMode(
   mode: FuturePickAuctionMode,
 ): Player[] {
   return players.filter((player) => {
-    if (!player.futurePickAssetKind) return true;
+    const assetKind = player.futurePickAssetKind ?? getLegacyFuturePickAssetKind(player);
+    if (!assetKind) return true;
     if (mode === 'none') return false;
-    if (mode === 'packages') return player.futurePickAssetKind === 'package';
-    return player.futurePickAssetKind === 'pick';
+    if (mode === 'packages') return assetKind === 'package';
+    return assetKind === 'pick';
   });
+}
+
+function getLegacyFuturePickAssetKind(player: Player): 'package' | 'pick' | null {
+  if (player.pos === 'PKG') return 'package';
+  if (player.pos === 'PICK') return 'pick';
+  return null;
 }
 
 function ordinal(round: 1 | 2 | 3): string {

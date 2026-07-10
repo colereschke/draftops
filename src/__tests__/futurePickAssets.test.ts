@@ -84,4 +84,51 @@ describe('future pick asset generation', () => {
       expect(visible.map((p) => p.player)).toEqual(['JaMarr Chase', ...expectedNames]);
     },
   );
+
+  it.each([
+    ['packages', ['JaMarr Chase', 'Legacy Pick Package']],
+    ['individual', ['JaMarr Chase', 'Legacy 2027 1st']],
+    ['none', ['JaMarr Chase']],
+  ] satisfies Array<[FuturePickAuctionMode, string[]]>)(
+    'treats untagged legacy PICK and PKG rows as future pick assets in %s mode',
+    (mode, expectedNames) => {
+      const basePlayer: Player = {
+        player: 'JaMarr Chase',
+        team: 'CIN',
+        pos: 'WR',
+        age: 26,
+        sfRank: 1,
+        budget: 250,
+        ceiling: 288,
+        floor: 218,
+        notes: '',
+      };
+      const legacyPackage: Player = {
+        player: 'Legacy Pick Package',
+        team: 'coreschke',
+        pos: 'PKG',
+        age: null,
+        sfRank: 900,
+        budget: 109,
+        ceiling: 131,
+        floor: 75,
+        notes: '',
+      };
+      const legacyPick: Player = {
+        player: 'Legacy 2027 1st',
+        team: 'coreschke',
+        pos: 'PICK',
+        age: null,
+        sfRank: 901,
+        budget: 75,
+        ceiling: 90,
+        floor: 52,
+        notes: '',
+      };
+
+      const visible = filterFuturePickAssetsForMode([basePlayer, legacyPackage, legacyPick], mode);
+
+      expect(visible.map((p) => p.player)).toEqual(expectedNames);
+    },
+  );
 });

@@ -5,7 +5,8 @@ import { redirect } from 'next/navigation';
 import { auth } from '@/auth';
 import { prisma } from '@/lib/db';
 import { getDraft } from '@/lib/draft';
-import type { Position, StartingSlot, ScoringSettings } from '@/types';
+import { generateFuturePickAssets } from '@/lib/futurePickAssets';
+import type { FuturePickAuctionMode, Position, StartingSlot, ScoringSettings } from '@/types';
 import { players as BASE_PLAYERS } from '@/data/players';
 import { adjustPlayerValues } from '@/lib/valueAdjustment';
 
@@ -87,10 +88,17 @@ interface TeamInput {
   isMine: boolean;
 }
 
+function toPrismaFuturePickMode(mode: FuturePickAuctionMode): 'PACKAGES' | 'INDIVIDUAL' | 'NONE' {
+  if (mode === 'individual') return 'INDIVIDUAL';
+  if (mode === 'none') return 'NONE';
+  return 'PACKAGES';
+}
+
 export async function createDraft(data: {
   name: string;
   budgetPerTeam: number;
   rosterSize: number;
+  futurePickAuctionMode: FuturePickAuctionMode;
   targetRoster: Partial<Record<Position, number>>;
   startingLineup: StartingSlot[];
   scoringSettings: ScoringSettings;
@@ -118,6 +126,7 @@ export async function createDraft(data: {
         teamCount: data.teams.length,
         rosterSize: data.rosterSize,
         budget: data.budgetPerTeam,
+        futurePickAuctionMode: toPrismaFuturePickMode(data.futurePickAuctionMode),
         startingLineup: data.startingLineup,
         scoringSettings: data.scoringSettings,
         targetRoster: data.targetRoster,
@@ -144,9 +153,16 @@ export async function createDraft(data: {
       scoringSettings: data.scoringSettings,
       teamCount: data.teams.length,
     });
+    const nextPickYear = new Date().getFullYear() + 1;
+    const futurePickAssets = generateFuturePickAssets({
+      teams: coerced,
+      year: nextPickYear,
+      startingRank: 900,
+    });
+    const seededPlayers = [...valued, ...futurePickAssets];
 
     await tx.player.createMany({
-      data: valued.map((p) => ({
+      data: seededPlayers.map((p) => ({
         name: p.player,
         nflTeam: p.team,
         pos: p.pos,
@@ -155,11 +171,15 @@ export async function createDraft(data: {
         budget: p.budget,
         ceiling: p.ceiling,
         floor: p.floor,
-        baseBudget: p.baseBudget,
-        baseCeiling: p.baseCeiling,
-        baseFloor: p.baseFloor,
+        baseBudget: p.baseBudget ?? p.budget,
+        baseCeiling: p.baseCeiling ?? p.ceiling,
+        baseFloor: p.baseFloor ?? p.floor,
         sleeperId: null,
         notes: p.notes,
+        futurePickYear: p.futurePickYear ?? null,
+        futurePickRound: p.futurePickRound ?? null,
+        futurePickOriginHandle: p.futurePickOriginHandle ?? null,
+        futurePickAssetKind: p.futurePickAssetKind ?? null,
         draftId: draft.id,
       })),
     });

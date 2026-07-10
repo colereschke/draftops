@@ -30,6 +30,7 @@ const VALID_INPUT = {
   name: "Cole's Draft 2025",
   budgetPerTeam: 1000,
   rosterSize: 30,
+  futurePickAuctionMode: 'packages' as const,
   targetRoster: { QB: 4, RB: 9, WR: 11, TE: 3 },
   startingLineup: [
     'QB',
@@ -117,6 +118,7 @@ describe('createDraft', () => {
         teamCount: 2,
         rosterSize: 30,
         budget: 1000,
+        futurePickAuctionMode: 'PACKAGES',
         startingLineup: VALID_INPUT.startingLineup,
         scoringSettings: VALID_INPUT.scoringSettings,
         targetRoster: VALID_INPUT.targetRoster,
@@ -171,6 +173,37 @@ describe('createDraft', () => {
       ceiling: expect.any(Number),
       floor: expect.any(Number),
     });
+  });
+
+  it('seeds origin-team future pick assets for all teams', async () => {
+    await createDraft(VALID_INPUT);
+
+    const payload = mockTxPlayerCreateMany.mock.calls[0][0].data as Array<{
+      name: string;
+      pos: string;
+      futurePickOriginHandle?: string | null;
+      futurePickAssetKind?: string | null;
+      futurePickRound?: number | null;
+    }>;
+
+    expect(payload).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: 'coreschke 2027 Pick Package',
+          pos: 'PKG',
+          futurePickOriginHandle: 'coreschke',
+          futurePickAssetKind: 'package',
+          futurePickRound: null,
+        }),
+        expect.objectContaining({
+          name: 'team2 2027 1st',
+          pos: 'PICK',
+          futurePickOriginHandle: 'team2',
+          futurePickAssetKind: 'pick',
+          futurePickRound: 1,
+        }),
+      ]),
+    );
   });
 
   it('records base values verbatim and lifts TE budgets under a TE premium', async () => {

@@ -1,4 +1,4 @@
-import type { Player, Position } from '@/types';
+import type { FuturePickAssetKind, Player, Position } from '@/types';
 
 export interface DbPlayerValueRow {
   id: number;
@@ -12,6 +12,10 @@ export interface DbPlayerValueRow {
   floor: number;
   notes: string;
   sleeperId: string | null;
+  futurePickYear?: number | null;
+  futurePickRound?: number | null;
+  futurePickOriginHandle?: string | null;
+  futurePickAssetKind?: string | null;
 }
 
 export interface DraftPlayerValueRow {
@@ -66,6 +70,10 @@ export function mapPlayersWithDraftValues(
       projectedPoints: draftValue.projectedPoints,
       replacementPoints: draftValue.replacementPoints,
       vor: draftValue.vor,
+      futurePickYear: player.futurePickYear ?? null,
+      futurePickRound: player.futurePickRound ?? null,
+      futurePickOriginHandle: player.futurePickOriginHandle ?? null,
+      futurePickAssetKind: normalizeFuturePickAssetKind(player.futurePickAssetKind ?? null),
       valueSource: draftValue.valueSource,
     };
   });
@@ -86,8 +94,17 @@ function mapFallbackPlayer(player: DbPlayerValueRow): Player {
     baseBudget: player.budget,
     baseCeiling: player.ceiling,
     baseFloor: player.floor,
+    futurePickYear: player.futurePickYear ?? null,
+    futurePickRound: player.futurePickRound ?? null,
+    futurePickOriginHandle: player.futurePickOriginHandle ?? null,
+    futurePickAssetKind: normalizeFuturePickAssetKind(player.futurePickAssetKind ?? null),
     valueSource: 'fallback',
   };
+}
+
+function normalizeFuturePickAssetKind(value: string | null): FuturePickAssetKind | null {
+  if (value === 'package' || value === 'pick') return value;
+  return null;
 }
 
 function compareDraftValueRows(a: DraftPlayerValueRow, b: DraftPlayerValueRow): number {

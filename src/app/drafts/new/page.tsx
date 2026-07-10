@@ -5,7 +5,7 @@ import { useState, useTransition } from 'react';
 import { createDraft } from '@/lib/actions';
 import { importFromSleeper } from '@/lib/sleeper-actions';
 import type { SleeperImportResult } from '@/lib/sleeper';
-import type { StartingSlot, ScoringSettings } from '@/types';
+import type { FuturePickAuctionMode, StartingSlot, ScoringSettings } from '@/types';
 import { DEFAULT_STARTING_LINEUP, DEFAULT_TARGET_ROSTER, DEFAULT_SCORING_SETTINGS } from '@/types';
 
 interface TeamRow {
@@ -39,6 +39,8 @@ export default function NewDraftPage() {
   const [ownerUsername, setOwnerUsername] = useState('');
   const [importState, setImportState] = useState<ImportState>({ status: 'idle' });
   const [rosterSize, setRosterSize] = useState(30);
+  const [futurePickAuctionMode, setFuturePickAuctionMode] =
+    useState<FuturePickAuctionMode>('packages');
   const [targetRoster, setTargetRoster] = useState<Record<'QB' | 'RB' | 'WR' | 'TE', number>>({
     QB: DEFAULT_TARGET_ROSTER.QB ?? 4,
     RB: DEFAULT_TARGET_ROSTER.RB ?? 9,
@@ -158,6 +160,7 @@ export default function NewDraftPage() {
           name: name.trim(),
           budgetPerTeam: budget,
           rosterSize,
+          futurePickAuctionMode,
           targetRoster,
           startingLineup,
           scoringSettings,
@@ -628,6 +631,31 @@ export default function NewDraftPage() {
               ))}
             </div>
           </div>
+        </div>
+
+        {/* --- Future Picks --- */}
+        <div
+          style={{
+            background: 'var(--bg-surface)',
+            borderRadius: '6px',
+            padding: '1.25rem',
+            marginBottom: '1rem',
+          }}
+        >
+          <div style={sectionHeaderStyle}>Future Picks</div>
+          <label style={labelStyle}>
+            Next-year pick auction mode
+            <select
+              data-testid="future-pick-auction-mode"
+              value={futurePickAuctionMode}
+              onChange={(e) => setFuturePickAuctionMode(e.target.value as FuturePickAuctionMode)}
+              style={inputStyle}
+            >
+              <option value="packages">Team packages</option>
+              <option value="individual">Individual team picks</option>
+              <option value="none">Not auctioned</option>
+            </select>
+          </label>
         </div>
 
         {/* --- Team Roster Table --- */}

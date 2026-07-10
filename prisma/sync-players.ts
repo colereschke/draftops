@@ -6,6 +6,7 @@ import { PrismaClient } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { Pool } from 'pg';
 import { players as BASE_PLAYERS } from '../src/data/players';
+import { generateFuturePickAssets } from '../src/lib/futurePickAssets';
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 const adapter = new PrismaPg(pool);
@@ -17,7 +18,9 @@ const prisma = new PrismaClient({ adapter });
 // duplicates existing ones. Safe to re-run whenever src/data/players.ts
 // gains new players (rookies, new pick-year packages, etc).
 async function main() {
-  const drafts = await prisma.draft.findMany({ select: { id: true } });
+  const drafts = await prisma.draft.findMany({
+    select: { id: true, teams: { select: { handle: true, displayName: true } } },
+  });
   console.log(`Found ${drafts.length} draft(s).`);
 
   for (const draft of drafts) {
@@ -26,7 +29,13 @@ async function main() {
       select: { name: true },
     });
     const existingNames = new Set(existing.map((p) => p.name));
-    const missing = BASE_PLAYERS.filter((p) => !existingNames.has(p.player));
+    const futurePickAssets = generateFuturePickAssets({
+      teams: draft.teams,
+      year: new Date().getFullYear() + 1,
+      startingRank: 900,
+    });
+    const seedPlayers = [...BASE_PLAYERS, ...futurePickAssets];
+    const missing = seedPlayers.filter((p) => !existingNames.has(p.player));
 
     if (missing.length === 0) {
       console.log(`  Draft ${draft.id}: up to date (${existing.length} players).`);
@@ -48,6 +57,10 @@ async function main() {
         baseFloor: p.floor,
         sleeperId: null,
         notes: p.notes,
+        futurePickYear: p.futurePickYear ?? null,
+        futurePickRound: p.futurePickRound ?? null,
+        futurePickOriginHandle: p.futurePickOriginHandle ?? null,
+        futurePickAssetKind: p.futurePickAssetKind ?? null,
         draftId: draft.id,
       })),
     });

@@ -66,14 +66,23 @@ export default function TeamRosterDetail({ results }: TeamRosterDetailProps) {
                     >
                       ${result.price}
                     </span>
-                    {delta !== null && delta !== 0 && (
-                      <span
-                        className="min-w-11 text-right font-mono text-[11px] tabular-nums"
-                        style={{ color: delta > 0 ? 'var(--age-old)' : 'var(--age-young)' }}
-                      >
-                        {delta > 0 ? `+$${delta}` : `-$${Math.abs(delta)}`}
-                      </span>
-                    )}
+                    <span
+                      className="min-w-11 text-right font-mono text-[11px] tabular-nums"
+                      style={{
+                        color:
+                          delta !== null && delta !== 0
+                            ? delta > 0
+                              ? 'var(--age-old)'
+                              : 'var(--age-young)'
+                            : 'var(--text-muted)',
+                      }}
+                    >
+                      {delta !== null && delta !== 0
+                        ? delta > 0
+                          ? `+$${delta}`
+                          : `-$${Math.abs(delta)}`
+                        : '—'}
+                    </span>
                   </div>
                 );
               })}

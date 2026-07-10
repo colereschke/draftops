@@ -259,4 +259,65 @@ describe('DossierCard', () => {
     );
     expect(screen.getByTestId('dossier-avg-age-1')).toHaveTextContent('Avg age: —');
   });
+
+  it('applies a highlight background when isSelected is true', () => {
+    render(
+      <DossierCard
+        team={team()}
+        tendency={tendency()}
+        isOwner={false}
+        isExpanded={false}
+        isSelected={true}
+        onToggle={noop}
+      />,
+    );
+    expect(screen.getByTestId('dossier-card-1')).toHaveClass('bg-accent');
+  });
+
+  it('does not apply the selected highlight by default', () => {
+    render(
+      <DossierCard
+        team={team()}
+        tendency={tendency()}
+        isOwner={false}
+        isExpanded={false}
+        onToggle={noop}
+      />,
+    );
+    expect(screen.getByTestId('dossier-card-1')).not.toHaveClass('bg-accent');
+  });
+
+  it('uses disclosure semantics in expand mode (default)', () => {
+    render(
+      <DossierCard
+        team={team()}
+        tendency={tendency()}
+        isOwner={false}
+        isExpanded={false}
+        onToggle={noop}
+      />,
+    );
+    const control = screen.getByTestId('dossier-expand-1');
+    expect(control).toHaveAttribute('aria-expanded', 'false');
+    expect(control).not.toHaveAttribute('aria-pressed');
+    expect(control).toHaveAttribute('aria-label', 'Expand roster for rival_a');
+  });
+
+  it('uses selection semantics in select mode, with no false disclosure affordance', () => {
+    render(
+      <DossierCard
+        team={team()}
+        tendency={tendency()}
+        isOwner={false}
+        isExpanded={false}
+        isSelected={true}
+        mode="select"
+        onToggle={noop}
+      />,
+    );
+    const control = screen.getByTestId('dossier-expand-1');
+    expect(control).not.toHaveAttribute('aria-expanded');
+    expect(control).toHaveAttribute('aria-pressed', 'true');
+    expect(control).toHaveAttribute('aria-label', 'Show roster for rival_a');
+  });
 });

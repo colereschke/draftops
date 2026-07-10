@@ -187,4 +187,39 @@ describe('applyDynamicPickValues', () => {
       adjusted.find((player) => player.player === 'other weak 2028 Pick Package')!.budget + 1,
     );
   });
+
+  it('uses active auction value for the value-over-expectation signal', () => {
+    const players = [
+      p({
+        player: 'Adjusted QB',
+        pos: 'QB',
+        budget: 200,
+        baseBudget: 100,
+        projectedPoints: 120,
+        vor: 20,
+        age: 25,
+      }),
+      p({
+        player: "origin's 2027 package",
+        pos: 'PKG',
+        team: 'origin',
+        budget: 109,
+        ceiling: 131,
+        floor: 75,
+        futurePickOriginHandle: 'origin',
+        futurePickAssetKind: 'package',
+        futurePickYear: 2027,
+      }),
+    ];
+
+    const adjusted = applyDynamicPickValues({
+      players,
+      bids: [bid('Adjusted QB', 'origin', 120)],
+      startingLineup: lineup,
+    });
+
+    expect(
+      adjusted.find((player) => player.player === "origin's 2027 package")!.budget,
+    ).toBeLessThan(109);
+  });
 });

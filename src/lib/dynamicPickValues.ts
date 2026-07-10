@@ -91,10 +91,7 @@ function computeOriginSignals(
   const signalsByOrigin = new Map<string, OriginSignals>();
 
   for (const [origin, roster] of rosterByOrigin) {
-    const value = roster.playerRoster.reduce(
-      (sum, player) => sum + (player.baseBudget ?? player.budget),
-      0,
-    );
+    const value = roster.playerRoster.reduce((sum, player) => sum + player.budget, 0);
     const vor = roster.playerRoster.reduce((sum, player) => sum + (player.vor ?? 0), 0);
     const ages = roster.playerRoster
       .map((player) => player.age)

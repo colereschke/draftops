@@ -1,5 +1,3 @@
-import type { Position } from '@/types';
-
 type MarketValuePosition = 'QB' | 'RB' | 'WR' | 'TE';
 type ValueSource = 'fallback' | 'projection_adjusted_market';
 type MarketBucket = 'elite' | 'starter' | 'depth';
@@ -19,11 +17,17 @@ export interface ProjectionMarketValueOutput extends ProjectionMarketValueInput 
   rawScoringLift: number | null;
   relativeScoringLift: number | null;
   projectionMarketMultiplier: number;
+  marketBucket: MarketBucket;
   valueSource: ValueSource;
 }
 
-interface ProjectionMarketValueSettings {
+export interface ProjectionMarketValueSettings {
   players: ProjectionMarketValueInput[];
+}
+
+interface PlayerWithBucket extends ProjectionMarketValueInput {
+  marketBucket: MarketBucket;
+  rawScoringLift: number | null;
 }
 
 interface CalibrationBand {
@@ -45,8 +49,10 @@ const POSITION_BANDS: Record<MarketValuePosition, CalibrationBand> = {
 export function calculateProjectionMarketValues(
   settings: ProjectionMarketValueSettings,
 ): ProjectionMarketValueOutput[] {
-  const rawValues = settings.players.map((player) => ({
+  const bucketBySleeperId = calculateBuckets(settings.players);
+  const rawValues: PlayerWithBucket[] = settings.players.map((player) => ({
     ...player,
+    marketBucket: bucketBySleeperId.get(player.sleeperId) ?? 'depth',
     rawScoringLift: calculateRawLift(player),
   }));
   const peerAverageByKey = calculatePeerAverages(rawValues);
@@ -96,9 +102,7 @@ function calculateRawLift(player: ProjectionMarketValueInput): number | null {
   return player.projectedPoints / player.baselineProjectedPoints;
 }
 
-function calculatePeerAverages(
-  players: Array<ProjectionMarketValueInput & { rawScoringLift: number | null }>,
-): Map<string, number> {
+function calculatePeerAverages(players: PlayerWithBucket[]): Map<string, number> {
   const buckets = new Map<string, number[]>();
 
   for (const player of players) {
@@ -117,26 +121,40 @@ function calculatePeerAverages(
   );
 }
 
-function peerKey(player: Pick<ProjectionMarketValueInput, 'position' | 'fallbackAuctionValue'>) {
-  return `${player.position}:${marketBucket(player)}`;
+function calculateBuckets(players: ProjectionMarketValueInput[]): Map<string, MarketBucket> {
+  const result = new Map<string, MarketBucket>();
+
+  for (const position of ['QB', 'RB', 'WR', 'TE'] as const) {
+    const positionalPlayers = players
+      .filter((player) => player.position === position)
+      .slice()
+      .sort((a, b) => b.fallbackAuctionValue - a.fallbackAuctionValue);
+
+    positionalPlayers.forEach((player, index) => {
+      const percentile = positionalPlayers.length <= 1 ? 0 : index / positionalPlayers.length;
+      result.set(player.sleeperId, bucketForPercentile(percentile));
+    });
+  }
+
+  return result;
 }
 
-function marketBucket(
-  player: Pick<ProjectionMarketValueInput, 'fallbackAuctionValue'>,
-): MarketBucket {
-  if (player.fallbackAuctionValue >= 75) return 'elite';
-  if (player.fallbackAuctionValue >= 25) return 'starter';
+function bucketForPercentile(percentile: number): MarketBucket {
+  if (percentile < 0.2) return 'elite';
+  if (percentile < 0.5) return 'starter';
   return 'depth';
 }
 
-function calculateMultiplier(position: Position, relativeScoringLift: number): number {
-  const band = isMarketValuePosition(position) ? POSITION_BANDS[position] : DEFAULT_BAND;
+function peerKey(player: Pick<PlayerWithBucket, 'position' | 'marketBucket'>): string {
+  return `${player.position}:${player.marketBucket}`;
+}
+
+function calculateMultiplier(position: MarketValuePosition, relativeScoringLift: number): number {
+  const band = POSITION_BANDS[position];
   return clamp(1 + (relativeScoringLift - 1) * SENSITIVITY, band.floor, band.ceiling);
 }
 
-function fallbackOutput(
-  player: ProjectionMarketValueInput & { rawScoringLift: number | null },
-): ProjectionMarketValueOutput {
+function fallbackOutput(player: PlayerWithBucket): ProjectionMarketValueOutput {
   return {
     ...player,
     activeAuctionValue: player.fallbackAuctionValue,
@@ -144,10 +162,6 @@ function fallbackOutput(
     projectionMarketMultiplier: 1,
     valueSource: 'fallback',
   };
-}
-
-function isMarketValuePosition(position: string): position is MarketValuePosition {
-  return position === 'QB' || position === 'RB' || position === 'WR' || position === 'TE';
 }
 
 function clamp(value: number, floor: number, ceiling: number): number {

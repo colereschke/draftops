@@ -42,6 +42,10 @@ describe('calculateProjectionMarketValues', () => {
           baselineProjectedPoints: 200,
           projectedPoints: 220,
         }),
+        player({ sleeperId: 'te4', position: 'TE', fallbackAuctionValue: 60 }),
+        player({ sleeperId: 'te5', position: 'TE', fallbackAuctionValue: 40 }),
+        player({ sleeperId: 'te6', position: 'TE', fallbackAuctionValue: 20 }),
+        player({ sleeperId: 'te7', position: 'TE', fallbackAuctionValue: 10 }),
       ],
     });
 
@@ -75,6 +79,10 @@ describe('calculateProjectionMarketValues', () => {
           baselineProjectedPoints: 200,
           projectedPoints: 220,
         }),
+        player({ sleeperId: 'wr3', position: 'WR', fallbackAuctionValue: 60 }),
+        player({ sleeperId: 'wr4', position: 'WR', fallbackAuctionValue: 40 }),
+        player({ sleeperId: 'wr5', position: 'WR', fallbackAuctionValue: 20 }),
+        player({ sleeperId: 'wr6', position: 'WR', fallbackAuctionValue: 10 }),
       ],
     });
 
@@ -167,6 +175,10 @@ describe('calculateProjectionMarketValues', () => {
           baselineProjectedPoints: 100,
           projectedPoints: 120,
         }),
+        player({ sleeperId: 'wr3', position: 'WR', fallbackAuctionValue: 60 }),
+        player({ sleeperId: 'wr4', position: 'WR', fallbackAuctionValue: 40 }),
+        player({ sleeperId: 'wr5', position: 'WR', fallbackAuctionValue: 20 }),
+        player({ sleeperId: 'wr6', position: 'WR', fallbackAuctionValue: 10 }),
       ],
     });
 
@@ -195,11 +207,62 @@ describe('calculateProjectionMarketValues', () => {
           baselineProjectedPoints: 100,
           projectedPoints: 105,
         }),
+        player({ sleeperId: 'wr3', position: 'WR', fallbackAuctionValue: 60 }),
+        player({ sleeperId: 'wr4', position: 'WR', fallbackAuctionValue: 40 }),
+        player({ sleeperId: 'wr5', position: 'WR', fallbackAuctionValue: 20 }),
+        player({ sleeperId: 'wr6', position: 'WR', fallbackAuctionValue: 10 }),
       ],
     });
 
     const rookie = values.find((value) => value.sleeperId === 'rookie')!;
     expect(rookie.activeAuctionValue).toBeGreaterThan(75);
     expect(rookie.valueSource).toBe('projection_adjusted_market');
+  });
+
+  it('uses fallback value percentile within position for peer buckets', () => {
+    const values = calculateProjectionMarketValues({
+      players: [
+        player({
+          sleeperId: 'te1',
+          name: 'Elite TE',
+          position: 'TE',
+          fallbackAuctionValue: 65,
+          baselineProjectedPoints: 100,
+          projectedPoints: 130,
+        }),
+        player({
+          sleeperId: 'te2',
+          name: 'Starter TE',
+          position: 'TE',
+          fallbackAuctionValue: 45,
+          baselineProjectedPoints: 100,
+          projectedPoints: 100,
+        }),
+        player({
+          sleeperId: 'te3',
+          name: 'Depth TE',
+          position: 'TE',
+          fallbackAuctionValue: 5,
+          baselineProjectedPoints: 100,
+          projectedPoints: 100,
+        }),
+        player({
+          sleeperId: 'wr1',
+          name: 'Elite WR',
+          position: 'WR',
+          fallbackAuctionValue: 150,
+          baselineProjectedPoints: 100,
+          projectedPoints: 100,
+        }),
+      ],
+    });
+
+    const eliteTe = values.find((value) => value.sleeperId === 'te1')!;
+    const starterTe = values.find((value) => value.sleeperId === 'te2')!;
+
+    expect(eliteTe.marketBucket).toBe('elite');
+    expect(starterTe.marketBucket).toBe('starter');
+    expect(eliteTe.relativeScoringLift).toBeCloseTo(1);
+    expect(starterTe.relativeScoringLift).toBeCloseTo(1);
   });
 });

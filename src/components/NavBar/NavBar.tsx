@@ -76,7 +76,6 @@ export default function NavBar({ session }: { session: Session | null }) {
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="min-w-48">
             <NavLinks variant="menu" />
-            <DropdownMenuSeparator />
             <DropdownMenuItem
               render={<a href={FEEDBACK_URL} target="_blank" rel="noopener noreferrer" />}
               className="font-label text-label-sm font-bold tracking-wide uppercase"

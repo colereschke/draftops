@@ -70,6 +70,9 @@ export default function NavLinks({ variant = 'inline' }: NavLinksProps) {
   const otherDrafts = activeDrafts.filter((d) => d.id !== draftId);
 
   if (variant === 'menu') {
+    // Nothing to show outside a draft — skip rendering so the caller doesn't end up
+    // with a leading separator over an empty section.
+    if (LINKS.length === 0) return null;
     return (
       <>
         {LINKS.map(({ href, label }) => {
@@ -112,6 +115,7 @@ export default function NavLinks({ variant = 'inline' }: NavLinksProps) {
             </DropdownMenuGroup>
           </>
         )}
+        <DropdownMenuSeparator />
       </>
     );
   }

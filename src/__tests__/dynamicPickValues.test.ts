@@ -137,4 +137,54 @@ describe('applyDynamicPickValues', () => {
       Math.ceil(72 * 0.85),
     );
   });
+
+  it('treats future capital as a rebuild amplifier only when the roster is weak', () => {
+    const players = [
+      p({ player: 'Weak WR', budget: 100, projectedPoints: 40, vor: 2, age: 23 }),
+      p({
+        player: 'extra pick',
+        pos: 'PICK',
+        budget: 75,
+        ceiling: 90,
+        floor: 52,
+      }),
+      p({
+        player: 'weak 2028 Pick Package',
+        pos: 'PKG',
+        team: 'weak',
+        budget: 109,
+        ceiling: 131,
+        floor: 75,
+        futurePickOriginHandle: 'weak',
+        futurePickAssetKind: 'package',
+        futurePickYear: 2028,
+      }),
+      p({ player: 'Other Weak WR', budget: 100, projectedPoints: 40, vor: 2, age: 23 }),
+      p({
+        player: 'other weak 2028 Pick Package',
+        pos: 'PKG',
+        team: 'other-weak',
+        budget: 109,
+        ceiling: 131,
+        floor: 75,
+        futurePickOriginHandle: 'other-weak',
+        futurePickAssetKind: 'package',
+        futurePickYear: 2028,
+      }),
+    ];
+
+    const adjusted = applyDynamicPickValues({
+      players,
+      bids: [
+        bid('Weak WR', 'weak', 100),
+        bid('extra pick', 'weak', 1),
+        bid('Other Weak WR', 'other-weak', 100),
+      ],
+      startingLineup: lineup,
+    });
+
+    expect(adjusted.find((player) => player.player === 'weak 2028 Pick Package')!.budget).toBe(
+      adjusted.find((player) => player.player === 'other weak 2028 Pick Package')!.budget + 1,
+    );
+  });
 });

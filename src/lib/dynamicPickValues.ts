@@ -171,9 +171,10 @@ function rebuildSignal(signals: OriginSignals): number {
   const weakLineup = 1 - normalizeStrength(signals.lineupPoints, 120, 750);
   const weakVor = 1 - normalizeStrength(signals.vor, 0, 180);
   const ageRisk = signals.avgAge === null ? 0 : normalizeStrength(signals.avgAge, 26, 31);
-  const limitedFutureCapital = 1 - normalizeStrength(signals.futureCapital, 0, 120);
+  const weakRoster = weakLineup * 0.45 + weakVor * 0.35 + ageRisk * 0.2;
+  const futureCapitalTankSignal = normalizeStrength(signals.futureCapital, 0, 120) * weakRoster;
 
-  return clamp(weakLineup * 0.4 + weakVor * 0.3 + ageRisk * 0.2 + limitedFutureCapital * 0.1, 0, 1);
+  return clamp(weakRoster * 0.85 + futureCapitalTankSignal * 0.15, 0, 1);
 }
 
 function getDirection(adjustment: number): 'up' | 'down' | 'flat' {

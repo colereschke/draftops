@@ -111,4 +111,31 @@ describe('NavBar', () => {
     expect(within(menu).getByRole('menuitem', { name: 'Team Rosters' })).toBeInTheDocument();
     expect(within(menu).getByRole('menuitem', { name: 'Value Sheet' })).toBeInTheDocument();
   });
+
+  it('links to /rankings from the account dropdown', async () => {
+    const user = userEvent.setup();
+    render(<NavBar session={MOCK_SESSION} />);
+
+    await user.click(screen.getByRole('button', { name: /cole/i }));
+
+    await waitFor(() => {
+      expect(screen.getByRole('menuitem', { name: /rankings/i })).toHaveAttribute(
+        'href',
+        '/rankings',
+      );
+    });
+  });
+
+  it('links to /rankings from the mobile hamburger menu', async () => {
+    const user = userEvent.setup();
+    render(<NavBar session={MOCK_SESSION} />);
+
+    await user.click(screen.getByRole('button', { name: /open menu/i }));
+
+    const menu = await screen.findByRole('menu');
+    expect(within(menu).getByRole('menuitem', { name: /rankings/i })).toHaveAttribute(
+      'href',
+      '/rankings',
+    );
+  });
 });

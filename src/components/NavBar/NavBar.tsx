@@ -1,4 +1,5 @@
 import type { Session } from 'next-auth';
+import Link from 'next/link';
 import { ChevronDownIcon, LogOutIcon, Menu } from 'lucide-react';
 import { signOut } from '@/auth';
 import { Button } from '@/components/ui/button';
@@ -46,6 +47,13 @@ export default function NavBar({ session }: { session: Session | null }) {
               <ChevronDownIcon className="size-3.5" />
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="min-w-36">
+              <DropdownMenuItem
+                render={<Link href="/rankings" />}
+                className="font-label text-label-sm w-full font-bold tracking-wide uppercase"
+              >
+                Rankings
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
               <form
                 action={async () => {
                   'use server';
@@ -82,6 +90,14 @@ export default function NavBar({ session }: { session: Session | null }) {
             >
               Feedback
             </DropdownMenuItem>
+            {session && (
+              <DropdownMenuItem
+                render={<Link href="/rankings" />}
+                className="font-label text-label-sm font-bold tracking-wide uppercase"
+              >
+                Rankings
+              </DropdownMenuItem>
+            )}
             {session && (
               <>
                 <DropdownMenuSeparator />

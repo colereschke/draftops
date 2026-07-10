@@ -1,62 +1,24 @@
 import { config as dotenvConfig } from 'dotenv';
 import { readFileSync } from 'node:fs';
 import {
-  calculateProjectionMarketValues,
-  type ProjectionMarketValueOutput,
-} from '@/lib/projectionMarketValue';
+  applyProjectionValuesToDraft,
+  buildDraftPlayerValueData,
+  buildStaleDraftPlayerValueDeleteWhere,
+  getSleeperIdUpdates,
+  joinPlayersToProjectionRows,
+  resolvePlayerSleeperIds,
+  type VorPosition,
+} from '@/lib/projectionApplication';
 import { calculateProjectedPoints, type ProjectionStats } from '@/lib/projectionScoring';
-import { calculateProjectionValues, type ProjectionValueInput } from '@/lib/projectionVor';
-import {
-  DEFAULT_SCORING_SETTINGS,
-  DEFAULT_STARTING_LINEUP,
-  DEFAULT_TARGET_ROSTER,
-  type Position,
-  type ScoringSettings,
-  type StartingSlot,
-} from '@/types';
+import { DEFAULT_SCORING_SETTINGS, type ScoringSettings } from '@/types';
 
-type VorPosition = 'QB' | 'RB' | 'WR' | 'TE';
-
-export interface PlayerJoinRow {
-  id: number;
-  name: string;
-  pos: string;
-  sleeperId: string | null;
-  budget: number;
-}
-
-export interface ResolvedPlayerJoinRow extends PlayerJoinRow {
-  shouldUpdateSleeperId: boolean;
-}
-
-export interface SleeperIdUpdate {
-  id: number;
-  sleeperId: string;
-}
-
-export interface ProjectionJoinRow {
-  sleeperId: string;
-  position: VorPosition;
-  projectedPoints: number;
-  baselineProjectedPoints: number;
-  isRookie: boolean;
-}
-
-export interface JoinedProjectionRow {
-  playerId: number;
-  sleeperId: string;
-  position: VorPosition;
-  projectedPoints: number;
-  baselineProjectedPoints: number;
-  fallbackAuctionValue: number;
-  isRookie: boolean;
-}
-
-interface DraftPlayerValueDeleteWhere {
-  draftId: number;
-  projectionSourceId: number;
-  playerId?: { notIn: number[] };
-}
+export {
+  buildDraftPlayerValueData,
+  buildStaleDraftPlayerValueDeleteWhere,
+  getSleeperIdUpdates,
+  joinPlayersToProjectionRows,
+  resolvePlayerSleeperIds,
+};
 
 interface EtrMatchRow {
   name: string;
@@ -103,54 +65,6 @@ export interface ProjectionSourceGroup {
 
 const WRITE_BATCH_SIZE = 50;
 const WRITE_TRANSACTION_TIMEOUT_MS = 60_000;
-
-export function resolvePlayerSleeperIds(
-  players: PlayerJoinRow[],
-  etrMatches: Map<string, string>,
-): ResolvedPlayerJoinRow[] {
-  return players.map((player) => {
-    const resolvedSleeperId = player.sleeperId ?? etrMatches.get(player.name) ?? null;
-    return {
-      ...player,
-      sleeperId: resolvedSleeperId,
-      shouldUpdateSleeperId: player.sleeperId !== resolvedSleeperId && resolvedSleeperId !== null,
-    };
-  });
-}
-
-export function getSleeperIdUpdates(players: ResolvedPlayerJoinRow[]): SleeperIdUpdate[] {
-  return players.flatMap((player) =>
-    player.shouldUpdateSleeperId && player.sleeperId
-      ? [{ id: player.id, sleeperId: player.sleeperId }]
-      : [],
-  );
-}
-
-export function joinPlayersToProjectionRows(
-  players: PlayerJoinRow[],
-  projections: ProjectionJoinRow[],
-): JoinedProjectionRow[] {
-  const projectionsBySleeperId = new Map(
-    projections.map((projection) => [projection.sleeperId, projection]),
-  );
-
-  return players.flatMap((player) => {
-    if (!player.sleeperId) return [];
-    const projection = projectionsBySleeperId.get(player.sleeperId);
-    if (!projection) return [];
-    return [
-      {
-        playerId: player.id,
-        sleeperId: player.sleeperId,
-        position: projection.position,
-        projectedPoints: projection.projectedPoints,
-        baselineProjectedPoints: projection.baselineProjectedPoints,
-        fallbackAuctionValue: player.budget,
-        isRookie: projection.isRookie,
-      },
-    ];
-  });
-}
 
 export function readEtrMatchRows(path: string): EtrMatchRow[] {
   return parseCsv(readFileSync(path, 'utf-8'))
@@ -241,6 +155,83 @@ export function groupProjectionRowsBySource(rows: CsvProjectionRow[]): Projectio
   return Array.from(groups.values());
 }
 
+interface ProjectionImportPrisma {
+  projectionSource: {
+    findFirst(args: {
+      where: { name: string; season: number; projectionDate: Date | null };
+    }): Promise<{ id: number } | null>;
+    create(args: {
+      data: { name: string; season: number; projectionDate: Date | null };
+    }): Promise<{ id: number }>;
+  };
+  playerProjection: {
+    upsert(args: {
+      where: {
+        sleeperId_projectionSourceId: {
+          sleeperId: string;
+          projectionSourceId: number;
+        };
+      };
+      create: ReturnType<typeof playerProjectionData>;
+      update: ReturnType<typeof playerProjectionData>;
+    }): unknown;
+  };
+  $transaction(operations: unknown[], options?: { timeout: number }): Promise<unknown[]>;
+}
+
+export interface ProjectionImportResult {
+  projectionSourceId: number;
+  importedCount: number;
+}
+
+export async function importProjectionRows(
+  prisma: ProjectionImportPrisma,
+  rows: CsvProjectionRow[],
+): Promise<ProjectionImportResult[]> {
+  const projectionGroups = groupProjectionRowsBySource(rows);
+  const results: ProjectionImportResult[] = [];
+
+  for (const group of projectionGroups) {
+    const source =
+      (await prisma.projectionSource.findFirst({
+        where: {
+          name: group.source.name,
+          season: group.source.season,
+          projectionDate: group.source.projectionDate,
+        },
+      })) ??
+      (await prisma.projectionSource.create({
+        data: {
+          name: group.source.name,
+          season: group.source.season,
+          projectionDate: group.source.projectionDate,
+        },
+      }));
+
+    for (const batch of chunk(group.rows, WRITE_BATCH_SIZE)) {
+      await prisma.$transaction(
+        batch.map((projection) =>
+          prisma.playerProjection.upsert({
+            where: {
+              sleeperId_projectionSourceId: {
+                sleeperId: projection.sleeperId,
+                projectionSourceId: source.id,
+              },
+            },
+            create: playerProjectionData(projection, source.id),
+            update: playerProjectionData(projection, source.id),
+          }),
+        ),
+        { timeout: WRITE_TRANSACTION_TIMEOUT_MS },
+      );
+    }
+
+    results.push({ projectionSourceId: source.id, importedCount: group.rows.length });
+  }
+
+  return results;
+}
+
 async function main(): Promise<void> {
   dotenvConfig({ path: '.env.local' });
   const args = parseArgs(process.argv.slice(2));
@@ -276,140 +267,15 @@ async function main(): Promise<void> {
       readEtrMatchRows(args.etrMatchesCsv).map((row) => [row.name, row.sleeperId]),
     );
     const projectionRows = readProjectionRows(args.projectionsCsv, scoringSettings);
-    const projectionGroups = groupProjectionRowsBySource(projectionRows);
-
-    const players = await prisma.player.findMany({
-      where: { draftId: draft.id },
-      select: { id: true, name: true, pos: true, sleeperId: true, budget: true },
+    const importResults = await importProjectionRows(prisma, projectionRows);
+    const projectionSourceId = importResults.at(-1)?.projectionSourceId;
+    const applyResult = await applyProjectionValuesToDraft(prisma, {
+      draftId: draft.id,
+      projectionSourceId,
+      etrMatches,
     });
-    const playersWithSleeperIds = resolvePlayerSleeperIds(players, etrMatches);
-    let appliedCount = 0;
 
-    for (const batch of chunk(getSleeperIdUpdates(playersWithSleeperIds), WRITE_BATCH_SIZE)) {
-      await prisma.$transaction(
-        batch.map((player) =>
-          prisma.player.update({
-            where: { id: player.id },
-            data: { sleeperId: player.sleeperId },
-          }),
-        ),
-        { timeout: WRITE_TRANSACTION_TIMEOUT_MS },
-      );
-    }
-
-    for (const group of projectionGroups) {
-      const source =
-        (await prisma.projectionSource.findFirst({
-          where: {
-            name: group.source.name,
-            season: group.source.season,
-            projectionDate: group.source.projectionDate,
-          },
-        })) ??
-        (await prisma.projectionSource.create({
-          data: {
-            name: group.source.name,
-            season: group.source.season,
-            projectionDate: group.source.projectionDate,
-          },
-        }));
-
-      for (const batch of chunk(group.rows, WRITE_BATCH_SIZE)) {
-        await prisma.$transaction(
-          batch.map((projection) =>
-            prisma.playerProjection.upsert({
-              where: {
-                sleeperId_projectionSourceId: {
-                  sleeperId: projection.sleeperId,
-                  projectionSourceId: source.id,
-                },
-              },
-              create: playerProjectionData(projection, source.id),
-              update: playerProjectionData(projection, source.id),
-            }),
-          ),
-          { timeout: WRITE_TRANSACTION_TIMEOUT_MS },
-        );
-      }
-
-      const joined = joinPlayersToProjectionRows(
-        playersWithSleeperIds,
-        group.rows.map((row) => ({
-          sleeperId: row.sleeperId,
-          position: row.position,
-          projectedPoints: row.projectedPoints,
-          baselineProjectedPoints: row.baselineProjectedPoints,
-          isRookie: row.isRookie,
-        })),
-      );
-      const projectionInputs: ProjectionValueInput[] = joined.map((row) => ({
-        sleeperId: row.sleeperId,
-        name: String(row.playerId),
-        position: row.position,
-        projectedPoints: row.projectedPoints,
-        fallbackAuctionValue: row.fallbackAuctionValue,
-        isRookie: row.isRookie,
-      }));
-      const values = calculateProjectionValues({
-        players: projectionInputs,
-        teamCount: draft.teamCount,
-        rosterSize: draft.rosterSize,
-        budget: draft.budget,
-        startingLineup: toStartingLineup(draft.startingLineup),
-        targetRoster: toTargetRoster(draft.targetRoster),
-        scoringSettings,
-      });
-      const valuesBySleeperId = new Map(values.map((value) => [value.sleeperId, value]));
-      const projectionMarketValues = calculateProjectionMarketValues({
-        players: joined.map((row) => ({
-          sleeperId: row.sleeperId,
-          name: String(row.playerId),
-          position: row.position,
-          projectedPoints: row.projectedPoints,
-          baselineProjectedPoints: row.baselineProjectedPoints,
-          fallbackAuctionValue: row.fallbackAuctionValue,
-          isRookie: row.isRookie,
-        })),
-      });
-      const marketValuesBySleeperId = new Map(
-        projectionMarketValues.map((value) => [value.sleeperId, value]),
-      );
-      const draftPlayerValueWrites = joined.flatMap((row) => {
-        const value = valuesBySleeperId.get(row.sleeperId);
-        const marketValue = marketValuesBySleeperId.get(row.sleeperId);
-        if (!value || !marketValue) return [];
-        const data = buildDraftPlayerValueData(row, value, marketValue);
-        return [
-          prisma.draftPlayerValue.upsert({
-            where: {
-              draftId_playerId_projectionSourceId: {
-                draftId: draft.id,
-                playerId: row.playerId,
-                projectionSourceId: source.id,
-              },
-            },
-            create: {
-              draftId: draft.id,
-              playerId: row.playerId,
-              projectionSourceId: source.id,
-              ...data,
-            },
-            update: data,
-          }),
-        ];
-      });
-
-      await prisma.draftPlayerValue.deleteMany({
-        where: buildStaleDraftPlayerValueDeleteWhere(draft.id, source.id, joined),
-      });
-
-      for (const batch of chunk(draftPlayerValueWrites, WRITE_BATCH_SIZE)) {
-        await prisma.$transaction(batch, { timeout: WRITE_TRANSACTION_TIMEOUT_MS });
-      }
-      appliedCount += joined.length;
-    }
-
-    console.log(`Applied projection values to ${appliedCount} player-source row(s).`);
+    console.log(`Applied projection values to ${applyResult.appliedCount} player-source row(s).`);
   } finally {
     await prisma.$disconnect();
     await pool.end();
@@ -513,40 +379,9 @@ function playerProjectionData(projection: CsvProjectionRow, projectionSourceId: 
     recTd: projection.recTd,
     baseFantasyPoints: projection.baseFantasyPoints,
     projectionRank: projection.projectionRank,
+    isRookie: projection.isRookie,
     projectionSourceId,
   };
-}
-
-export function buildDraftPlayerValueData(
-  row: JoinedProjectionRow,
-  value: {
-    replacementPoints: number | null;
-    vor: number | null;
-    projectionAuctionValue: number | null;
-  },
-  marketValue: ProjectionMarketValueOutput,
-) {
-  return {
-    projectedPoints: row.projectedPoints,
-    replacementPoints: value.replacementPoints,
-    vor: value.vor,
-    projectionAuctionValue: value.projectionAuctionValue,
-    fallbackAuctionValue: row.fallbackAuctionValue,
-    activeAuctionValue: marketValue.activeAuctionValue,
-    valueSource: marketValue.valueSource,
-  };
-}
-
-export function buildStaleDraftPlayerValueDeleteWhere(
-  draftId: number,
-  projectionSourceId: number,
-  joined: JoinedProjectionRow[],
-): DraftPlayerValueDeleteWhere {
-  const currentPlayerIds = joined.map((row) => row.playerId);
-  if (currentPlayerIds.length === 0) {
-    return { draftId, projectionSourceId };
-  }
-  return { draftId, projectionSourceId, playerId: { notIn: currentPlayerIds } };
 }
 
 function toNumber(value: string): number {
@@ -561,31 +396,9 @@ function toVorPosition(position: string): VorPosition | null {
   return null;
 }
 
-function toStartingLineup(value: unknown): StartingSlot[] {
-  if (!Array.isArray(value)) return [...DEFAULT_STARTING_LINEUP];
-  const slots = value.filter(isStartingSlot);
-  return slots.length > 0 ? slots : [...DEFAULT_STARTING_LINEUP];
-}
-
-function isStartingSlot(value: unknown): value is StartingSlot {
-  return (
-    value === 'QB' ||
-    value === 'RB' ||
-    value === 'WR' ||
-    value === 'TE' ||
-    value === 'FLEX' ||
-    value === 'SUPER_FLEX'
-  );
-}
-
 function toScoringSettings(value: unknown): ScoringSettings {
   if (value === null || typeof value !== 'object') return { ...DEFAULT_SCORING_SETTINGS };
   return { ...DEFAULT_SCORING_SETTINGS, ...(value as Partial<ScoringSettings>) };
-}
-
-function toTargetRoster(value: unknown): Partial<Record<Position, number>> {
-  if (value === null || typeof value !== 'object') return DEFAULT_TARGET_ROSTER;
-  return value as Partial<Record<Position, number>>;
 }
 
 if (require.main === module) {

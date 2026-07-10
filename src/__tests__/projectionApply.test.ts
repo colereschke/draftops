@@ -5,6 +5,7 @@ import {
   resolvePlayerSleeperIds,
   type CsvProjectionRow,
   groupProjectionRowsBySource,
+  importProjectionRows,
   joinPlayersToProjectionRows,
   parseProjectionRows,
 } from '../../prisma/apply-projection-values';
@@ -261,4 +262,60 @@ it('builds a source-wide stale draft value delete filter when no players joined'
     draftId: 1,
     projectionSourceId: 2,
   });
+});
+
+it('imports projection rows into source and player projection tables', async () => {
+  const projectionSourceFindFirst = jest.fn().mockResolvedValue(null);
+  const projectionSourceCreate = jest.fn().mockResolvedValue({ id: 7 });
+  const playerProjectionUpsert = jest.fn().mockResolvedValue({});
+  const transaction = jest.fn().mockImplementation(async (operations) => Promise.all(operations));
+  const prisma = {
+    projectionSource: {
+      findFirst: projectionSourceFindFirst,
+      create: projectionSourceCreate,
+    },
+    playerProjection: {
+      upsert: playerProjectionUpsert,
+    },
+    $transaction: transaction,
+  };
+  const projectionDate = new Date('2026-06-01T00:00:00.000Z');
+
+  const result = await importProjectionRows(prisma, [
+    projectionRow({
+      sleeperId: '10',
+      position: 'QB',
+      projectedPoints: 300,
+      baselineProjectedPoints: 280,
+      isRookie: true,
+      projectionSource: 'mike_clay',
+      projectionDate,
+      projectionSeason: 2026,
+    }),
+  ]);
+
+  expect(result).toEqual([{ projectionSourceId: 7, importedCount: 1 }]);
+  expect(projectionSourceCreate).toHaveBeenCalledWith({
+    data: { name: 'mike_clay', season: 2026, projectionDate },
+  });
+  expect(playerProjectionUpsert).toHaveBeenCalledWith(
+    expect.objectContaining({
+      where: {
+        sleeperId_projectionSourceId: {
+          sleeperId: '10',
+          projectionSourceId: 7,
+        },
+      },
+      create: expect.objectContaining({
+        sleeperId: '10',
+        isRookie: true,
+        projectionSourceId: 7,
+      }),
+      update: expect.objectContaining({
+        sleeperId: '10',
+        isRookie: true,
+        projectionSourceId: 7,
+      }),
+    }),
+  );
 });

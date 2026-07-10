@@ -119,7 +119,7 @@ export default function RosterTracker({ teams, tendencies, ownerHandle }: Roster
               />
             ))}
           </div>
-          <div className="sticky top-4 min-w-0 flex-1">
+          <div className="sticky top-4 max-h-[calc(100vh-2rem)] min-w-0 flex-1 overflow-y-auto">
             {selected && (
               <TeamDetailPane
                 team={selected.team}

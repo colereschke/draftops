@@ -6,7 +6,7 @@ import { PrismaClient } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { Pool } from 'pg';
 import { players as BASE_PLAYERS } from '../src/data/players';
-import { generateFuturePickAssets } from '../src/lib/futurePickAssets';
+import { generateFuturePickAssets, getNextFuturePickYear } from '../src/lib/futurePickAssets';
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 const adapter = new PrismaPg(pool);
@@ -19,7 +19,7 @@ const prisma = new PrismaClient({ adapter });
 // gains new players (rookies, new pick-year packages, etc).
 async function main() {
   const drafts = await prisma.draft.findMany({
-    select: { id: true, teams: { select: { handle: true, displayName: true } } },
+    select: { id: true, createdAt: true, teams: { select: { handle: true, displayName: true } } },
   });
   console.log(`Found ${drafts.length} draft(s).`);
 
@@ -31,7 +31,7 @@ async function main() {
     const existingNames = new Set(existing.map((p) => p.name));
     const futurePickAssets = generateFuturePickAssets({
       teams: draft.teams,
-      year: new Date().getFullYear() + 1,
+      year: getNextFuturePickYear(draft.createdAt),
       startingRank: 900,
     });
     const seedPlayers = [...BASE_PLAYERS, ...futurePickAssets];

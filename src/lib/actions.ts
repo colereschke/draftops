@@ -5,7 +5,7 @@ import { redirect } from 'next/navigation';
 import { auth } from '@/auth';
 import { prisma } from '@/lib/db';
 import { getDraft } from '@/lib/draft';
-import { generateFuturePickAssets } from '@/lib/futurePickAssets';
+import { generateFuturePickAssets, getNextFuturePickYear } from '@/lib/futurePickAssets';
 import type { FuturePickAuctionMode, Position, StartingSlot, ScoringSettings } from '@/types';
 import { players as BASE_PLAYERS } from '@/data/players';
 import { adjustPlayerValues } from '@/lib/valueAdjustment';
@@ -153,7 +153,7 @@ export async function createDraft(data: {
       scoringSettings: data.scoringSettings,
       teamCount: data.teams.length,
     });
-    const nextPickYear = new Date().getFullYear() + 1;
+    const nextPickYear = getNextFuturePickYear(draft.createdAt);
     const futurePickAssets = generateFuturePickAssets({
       teams: coerced,
       year: nextPickYear,

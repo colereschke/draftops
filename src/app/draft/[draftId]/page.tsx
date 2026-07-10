@@ -5,6 +5,7 @@ import type { ClaimedBid, LeagueTeam } from '@/types';
 import { auth } from '@/auth';
 import { getDraft } from '@/lib/draft';
 import { mapPlayersWithDraftValues } from '@/lib/playerValueMapping';
+import { filterFuturePickAssetsForMode, fromPrismaFuturePickMode } from '@/lib/futurePickAssets';
 
 export default async function DraftHomePage({ params }: { params: Promise<{ draftId: string }> }) {
   const draftId = parseInt((await params).draftId, 10);
@@ -62,7 +63,10 @@ export default async function DraftHomePage({ params }: { params: Promise<{ draf
     teamHandle: r.team.handle,
   }));
 
-  const players = mapPlayersWithDraftValues(dbPlayers, draftValues);
+  const players = filterFuturePickAssetsForMode(
+    mapPlayersWithDraftValues(dbPlayers, draftValues),
+    fromPrismaFuturePickMode(draft.futurePickAuctionMode),
+  );
 
   return (
     <AuctionSheet

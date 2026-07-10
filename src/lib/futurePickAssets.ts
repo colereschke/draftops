@@ -26,6 +26,23 @@ export function isFuturePickAuctionMode(value: unknown): value is FuturePickAuct
   );
 }
 
+export function getNextFuturePickYear(createdAt: Date | string | null | undefined): number {
+  const createdDate =
+    createdAt instanceof Date
+      ? createdAt
+      : createdAt
+        ? new Date(createdAt)
+        : new Date('2026-01-01');
+  const createdYear = createdDate.getUTCFullYear();
+  return createdYear + 1;
+}
+
+export function fromPrismaFuturePickMode(mode: string | null | undefined): FuturePickAuctionMode {
+  if (mode === 'INDIVIDUAL') return 'individual';
+  if (mode === 'NONE') return 'none';
+  return 'packages';
+}
+
 export function generateFuturePickAssets({
   teams,
   year,

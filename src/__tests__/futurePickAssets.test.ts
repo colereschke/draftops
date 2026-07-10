@@ -1,7 +1,9 @@
 import {
   FUTURE_PICK_AUCTION_MODES,
   filterFuturePickAssetsForMode,
+  fromPrismaFuturePickMode,
   generateFuturePickAssets,
+  getNextFuturePickYear,
   isFuturePickAuctionMode,
 } from '@/lib/futurePickAssets';
 import type { FuturePickAuctionMode, Player } from '@/types';
@@ -19,6 +21,18 @@ describe('future pick auction mode helpers', () => {
     expect(isFuturePickAuctionMode('none')).toBe(true);
     expect(isFuturePickAuctionMode('package')).toBe(false);
     expect(isFuturePickAuctionMode(null)).toBe(false);
+  });
+
+  it('derives next future pick year from draft creation year', () => {
+    expect(getNextFuturePickYear(new Date('2026-07-10T12:00:00.000Z'))).toBe(2027);
+    expect(getNextFuturePickYear(new Date('2027-01-01T00:00:00.000Z'))).toBe(2028);
+  });
+
+  it('maps Prisma future pick auction mode values to app modes', () => {
+    expect(fromPrismaFuturePickMode('PACKAGES')).toBe('packages');
+    expect(fromPrismaFuturePickMode('INDIVIDUAL')).toBe('individual');
+    expect(fromPrismaFuturePickMode('NONE')).toBe('none');
+    expect(fromPrismaFuturePickMode(null)).toBe('packages');
   });
 });
 

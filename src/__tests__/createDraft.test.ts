@@ -25,6 +25,7 @@ jest.mock('@/lib/db', () => ({
 }));
 
 const MOCK_SESSION = { user: { id: '123456789', name: 'Cole' } };
+const MOCK_DRAFT_CREATED_AT = new Date('2026-07-10T12:00:00.000Z');
 
 const VALID_INPUT = {
   name: "Cole's Draft 2025",
@@ -67,7 +68,7 @@ const VALID_INPUT = {
 beforeEach(() => {
   jest.clearAllMocks();
   mockAuth.mockResolvedValue(MOCK_SESSION);
-  mockTxDraftCreate.mockResolvedValue({ id: 5 });
+  mockTxDraftCreate.mockResolvedValue({ id: 5, createdAt: MOCK_DRAFT_CREATED_AT });
   mockTxTeamCreate
     .mockResolvedValueOnce({ id: 10, handle: 'coreschke' })
     .mockResolvedValueOnce({ id: 11, handle: 'team2' });

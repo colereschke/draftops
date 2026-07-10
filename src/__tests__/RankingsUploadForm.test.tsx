@@ -69,4 +69,23 @@ describe('RankingsUploadForm', () => {
       'Missing required column(s): Age',
     );
   });
+
+  it('shows a generic error and resets the file input when the upload throws', async () => {
+    mockUpload.mockRejectedValue(new Error('Unauthorized'));
+    render(<RankingsUploadForm summary={null} />);
+    const input = screen
+      .getByTestId('rankings-upload-button')
+      .querySelector('input')! as HTMLInputElement;
+    const user = userEvent.setup();
+
+    await user.upload(
+      input,
+      makeFile('Player,Team,Position,Age,2QBAuction\nJosh Allen,BUF,QB,30.1,$51'),
+    );
+
+    expect(await screen.findByTestId('rankings-upload-errors')).toHaveTextContent(
+      'Upload failed — please try again.',
+    );
+    expect(input.value).toBe('');
+  });
 });

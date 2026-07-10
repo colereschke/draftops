@@ -67,6 +67,7 @@ function UnmatchedRow({
 }) {
   const [search, setSearch] = useState('');
   const [isPending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
 
   const results = useMemo(() => {
     if (!search.trim()) return [];
@@ -75,9 +76,14 @@ function UnmatchedRow({
   }, [search, sleeperPlayers]);
 
   function pick(sleeperId: string) {
+    setError(null);
     startTransition(async () => {
-      await resolveRankingMatch(player.id, sleeperId);
-      onResolved();
+      try {
+        await resolveRankingMatch(player.id, sleeperId);
+        onResolved();
+      } catch {
+        setError('Failed to resolve — try again.');
+      }
     });
   }
 
@@ -111,12 +117,28 @@ function UnmatchedRow({
         />
         <CommandList>
           {results.map((r) => (
-            <CommandItem key={r.id} onSelect={() => pick(r.id)} disabled={isPending}>
+            <CommandItem
+              key={r.id}
+              data-testid={`unmatched-result-${r.id}`}
+              onSelect={() => pick(r.id)}
+              disabled={isPending}
+            >
               {r.name} · {r.team || 'FA'} · {r.pos}
             </CommandItem>
           ))}
         </CommandList>
       </Command>
+      {error && (
+        <span
+          style={{
+            color: '#e05050',
+            fontFamily: 'var(--font-barlow)',
+            fontSize: '0.8rem',
+          }}
+        >
+          {error}
+        </span>
+      )}
     </div>
   );
 }

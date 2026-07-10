@@ -29,7 +29,7 @@ describe('ResolveUnmatchedList', () => {
     render(<ResolveUnmatchedList unmatchedPlayers={UNMATCHED} sleeperPlayers={SLEEPER_OPTIONS} />);
 
     await user.type(screen.getByTestId('unmatched-search-1'), 'Josh Al');
-    const match = await screen.findByText(/Josh Allen/);
+    const match = await screen.findByTestId('unmatched-result-s1');
     await user.click(match);
 
     await waitFor(() => {
@@ -42,10 +42,24 @@ describe('ResolveUnmatchedList', () => {
     render(<ResolveUnmatchedList unmatchedPlayers={UNMATCHED} sleeperPlayers={SLEEPER_OPTIONS} />);
 
     await user.type(screen.getByTestId('unmatched-search-1'), 'Josh Al');
-    await user.click(await screen.findByText(/Josh Allen/));
+    await user.click(await screen.findByTestId('unmatched-result-s1'));
 
     await waitFor(() => {
       expect(screen.queryByTestId('unmatched-row-1')).not.toBeInTheDocument();
     });
+  });
+
+  it('shows an error and keeps the row visible when resolving throws', async () => {
+    mockResolve.mockRejectedValue(new Error('Unauthorized'));
+    const user = userEvent.setup();
+    render(<ResolveUnmatchedList unmatchedPlayers={UNMATCHED} sleeperPlayers={SLEEPER_OPTIONS} />);
+
+    await user.type(screen.getByTestId('unmatched-search-1'), 'Josh Al');
+    await user.click(await screen.findByTestId('unmatched-result-s1'));
+
+    await waitFor(() => {
+      expect(screen.getByText('Failed to resolve — try again.')).toBeInTheDocument();
+    });
+    expect(screen.getByTestId('unmatched-row-1')).toBeInTheDocument();
   });
 });

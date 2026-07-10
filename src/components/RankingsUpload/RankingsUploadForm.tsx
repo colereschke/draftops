@@ -25,12 +25,17 @@ export default function RankingsUploadForm({ summary }: RankingsUploadFormProps)
     if (!file) return;
     setErrors(null);
     startTransition(async () => {
-      const text = await file.text();
-      const result = await uploadRankingsCsv(file.name, text);
-      if (!result.ok) {
-        setErrors(result.errors);
+      try {
+        const text = await file.text();
+        const result = await uploadRankingsCsv(file.name, text);
+        if (!result.ok) {
+          setErrors(result.errors);
+        }
+      } catch {
+        setErrors(['Upload failed — please try again.']);
+      } finally {
+        if (fileInputRef.current) fileInputRef.current.value = '';
       }
-      if (fileInputRef.current) fileInputRef.current.value = '';
     });
   }
 

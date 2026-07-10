@@ -46,4 +46,16 @@ describe('optimizeProjectedLineupPoints', () => {
       'QB2',
     ]);
   });
+
+  it('optimizes across FLEX and SUPER_FLEX instead of greedily filling SUPER_FLEX first', () => {
+    const lineup: StartingSlot[] = ['QB', 'SUPER_FLEX', 'FLEX'];
+    const roster = [player('QB1', 'QB', 20), player('QB2', 'QB', 18), player('RB1', 'RB', 19)];
+
+    expect(optimizeProjectedLineupPoints(roster, lineup).points).toBe(57);
+    expect(optimizeProjectedLineupPoints(roster, lineup).players.map((p) => p.player)).toEqual([
+      'QB1',
+      'QB2',
+      'RB1',
+    ]);
+  });
 });

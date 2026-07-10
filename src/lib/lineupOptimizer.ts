@@ -5,6 +5,11 @@ interface OptimizedLineup {
   players: Player[];
 }
 
+interface LineupAssignment {
+  points: number;
+  players: Player[];
+}
+
 const SLOT_ORDER: Record<StartingSlot, number> = {
   QB: 0,
   RB: 1,
@@ -18,26 +23,52 @@ export function optimizeProjectedLineupPoints(
   roster: Player[],
   lineup: StartingSlot[],
 ): OptimizedLineup {
-  const selected = new Set<string>();
-  const players: Player[] = [];
   const sortedSlots = [...lineup].sort((a, b) => SLOT_ORDER[a] - SLOT_ORDER[b]);
 
-  for (const slot of sortedSlots) {
-    const candidate = roster
-      .filter((player) => !selected.has(player.player))
-      .filter((player) => isEligibleForSlot(player.pos, slot))
-      .sort((a, b) => (b.projectedPoints ?? 0) - (a.projectedPoints ?? 0))[0];
+  return assignBestLineup(roster, sortedSlots, 0, new Set(), []);
+}
 
-    if (!candidate) continue;
-
-    selected.add(candidate.player);
-    players.push(candidate);
+function assignBestLineup(
+  roster: Player[],
+  sortedSlots: StartingSlot[],
+  slotIndex: number,
+  selected: Set<string>,
+  assignedPlayers: Player[],
+): LineupAssignment {
+  if (slotIndex >= sortedSlots.length) {
+    return {
+      points: assignedPlayers.reduce((sum, player) => sum + (player.projectedPoints ?? 0), 0),
+      players: assignedPlayers,
+    };
   }
 
-  return {
-    points: players.reduce((sum, player) => sum + (player.projectedPoints ?? 0), 0),
-    players,
-  };
+  const slot = sortedSlots[slotIndex];
+  const candidates = roster
+    .filter((player) => !selected.has(player.player))
+    .filter((player) => isEligibleForSlot(player.pos, slot))
+    .sort((a, b) => (b.projectedPoints ?? 0) - (a.projectedPoints ?? 0));
+
+  if (candidates.length === 0) {
+    return assignBestLineup(roster, sortedSlots, slotIndex + 1, selected, assignedPlayers);
+  }
+
+  let best: LineupAssignment = { points: Number.NEGATIVE_INFINITY, players: [] };
+
+  for (const candidate of candidates) {
+    const nextSelected = new Set(selected);
+    nextSelected.add(candidate.player);
+
+    const assignment = assignBestLineup(roster, sortedSlots, slotIndex + 1, nextSelected, [
+      ...assignedPlayers,
+      candidate,
+    ]);
+
+    if (assignment.points > best.points) {
+      best = assignment;
+    }
+  }
+
+  return best;
 }
 
 function isEligibleForSlot(pos: Player['pos'], slot: StartingSlot): boolean {

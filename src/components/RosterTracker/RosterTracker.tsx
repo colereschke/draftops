@@ -114,6 +114,7 @@ export default function RosterTracker({ teams, tendencies, ownerHandle }: Roster
                 isOwner={ownerHandle !== null && team.handle === ownerHandle}
                 isExpanded={false}
                 isSelected={team.id === selectedTeamId}
+                mode="select"
                 onToggle={setSelectedTeamId}
               />
             ))}

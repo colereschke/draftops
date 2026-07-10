@@ -13,6 +13,11 @@ export interface DossierCardProps {
   isOwner: boolean;
   isExpanded: boolean;
   isSelected?: boolean;
+  // 'expand' (default): mobile grid — clicking discloses/collapses the inline
+  // roster on this same card. 'select': desktop split-view list — clicking
+  // picks this team into a separate detail pane; nothing on the card itself
+  // expands, so the disclosure affordance (chevron, aria-expanded) is wrong here.
+  mode?: 'expand' | 'select';
   onToggle: (id: number) => void;
 }
 
@@ -22,6 +27,7 @@ export default function DossierCard({
   isOwner,
   isExpanded,
   isSelected = false,
+  mode = 'expand',
   onToggle,
 }: DossierCardProps) {
   return (
@@ -43,18 +49,25 @@ export default function DossierCard({
             onToggle(team.id);
           }
         }}
-        aria-expanded={isExpanded}
-        aria-label={`${isExpanded ? 'Collapse' : 'Expand'} roster for ${team.handle}`}
+        aria-expanded={mode === 'expand' ? isExpanded : undefined}
+        aria-pressed={mode === 'select' ? isSelected : undefined}
+        aria-label={
+          mode === 'select'
+            ? `Show roster for ${team.handle}`
+            : `${isExpanded ? 'Collapse' : 'Expand'} roster for ${team.handle}`
+        }
         data-testid={`dossier-expand-${team.id}`}
         className="relative w-full cursor-pointer px-4 pt-3 pb-3 text-left focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
       >
-        <ChevronRight
-          aria-hidden
-          className={cn(
-            'absolute top-3 right-4 size-4 shrink-0 text-muted-foreground transition-transform duration-150',
-            isExpanded && 'rotate-90',
-          )}
-        />
+        {mode === 'expand' && (
+          <ChevronRight
+            aria-hidden
+            className={cn(
+              'absolute top-3 right-4 size-4 shrink-0 text-muted-foreground transition-transform duration-150',
+              isExpanded && 'rotate-90',
+            )}
+          />
+        )}
         <DossierFace team={team} tendency={tendency} isOwner={isOwner} />
       </div>
 

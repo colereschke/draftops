@@ -123,6 +123,30 @@ describe('calculateProjectionMarketValues', () => {
     expect(value.valueSource).toBe('fallback');
   });
 
+  it('keeps fallback active when projected points are non-positive', () => {
+    const values = calculateProjectionMarketValues({
+      players: [
+        player({
+          sleeperId: 'non-positive',
+          fallbackAuctionValue: 37,
+          baselineProjectedPoints: 100,
+          projectedPoints: 0,
+        }),
+        player({
+          sleeperId: 'same-bucket-peer',
+          fallbackAuctionValue: 38,
+          baselineProjectedPoints: 100,
+          projectedPoints: 100,
+        }),
+      ],
+    });
+
+    const value = values.find((projectionValue) => projectionValue.sleeperId === 'non-positive')!;
+    expect(value.activeAuctionValue).toBe(37);
+    expect(value.valueSource).toBe('fallback');
+    expect(value.rawScoringLift).toBeNull();
+  });
+
   it('does not let low rookie projection shape reduce active value below fallback', () => {
     const values = calculateProjectionMarketValues({
       players: [
@@ -139,7 +163,7 @@ describe('calculateProjectionMarketValues', () => {
           sleeperId: 'vet',
           name: 'Veteran WR',
           position: 'WR',
-          fallbackAuctionValue: 70,
+          fallbackAuctionValue: 76,
           baselineProjectedPoints: 100,
           projectedPoints: 120,
         }),
@@ -167,7 +191,7 @@ describe('calculateProjectionMarketValues', () => {
           sleeperId: 'vet',
           name: 'Veteran WR',
           position: 'WR',
-          fallbackAuctionValue: 70,
+          fallbackAuctionValue: 76,
           baselineProjectedPoints: 100,
           projectedPoints: 105,
         }),

@@ -87,6 +87,7 @@ function calculateRawLift(player: ProjectionMarketValueInput): number | null {
     player.baselineProjectedPoints === null ||
     player.projectedPoints === null ||
     player.baselineProjectedPoints <= 0 ||
+    player.projectedPoints <= 0 ||
     !Number.isFinite(player.baselineProjectedPoints) ||
     !Number.isFinite(player.projectedPoints)
   ) {
@@ -99,7 +100,6 @@ function calculatePeerAverages(
   players: Array<ProjectionMarketValueInput & { rawScoringLift: number | null }>,
 ): Map<string, number> {
   const buckets = new Map<string, number[]>();
-  const positionBuckets = new Map<MarketValuePosition, number[]>();
 
   for (const player of players) {
     if (player.rawScoringLift === null) continue;
@@ -107,22 +107,13 @@ function calculatePeerAverages(
     const existing = buckets.get(key) ?? [];
     existing.push(player.rawScoringLift);
     buckets.set(key, existing);
-
-    const positionExisting = positionBuckets.get(player.position) ?? [];
-    positionExisting.push(player.rawScoringLift);
-    positionBuckets.set(player.position, positionExisting);
   }
 
   return new Map(
-    Array.from(buckets.entries()).map(([key, values]) => {
-      const [position] = key.split(':');
-      const averageValues =
-        values.length > 1 && isMarketValuePosition(position)
-          ? values
-          : (positionBuckets.get(position as MarketValuePosition) ?? values);
-
-      return [key, averageValues.reduce((sum, value) => sum + value, 0) / averageValues.length];
-    }),
+    Array.from(buckets.entries()).map(([key, values]) => [
+      key,
+      values.reduce((sum, value) => sum + value, 0) / values.length,
+    ]),
   );
 }
 

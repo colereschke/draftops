@@ -154,58 +154,45 @@ describe('RosterTracker', () => {
       expect(cards[2]).toHaveAttribute('data-testid', 'dossier-card-2');
     });
 
-    it('breaks lean ties by how dominant the leaning position is', async () => {
+    it('sorts by number of buys, descending', async () => {
       const user = userEvent.setup();
       const teams = [
-        makeTeam({ id: 2, handle: 'lightRB', displayName: 'Light RB' }),
-        makeTeam({ id: 3, handle: 'heavyRB', displayName: 'Heavy RB' }),
+        makeTeam({ id: 2, handle: 'fewBuys', displayName: 'Few Buys' }),
+        makeTeam({ id: 3, handle: 'manyBuys', displayName: 'Many Buys' }),
       ];
       const tendencies = [
-        makeTendency({
-          teamId: 2,
-          handle: 'lightRB',
-          lean: 'RB',
-          positions: {
-            ...makeTendency().positions,
-            RB: { ...makeTendency().positions.RB, spendShare: 0.55 },
-          },
-        }),
-        makeTendency({
-          teamId: 3,
-          handle: 'heavyRB',
-          lean: 'RB',
-          positions: {
-            ...makeTendency().positions,
-            RB: { ...makeTendency().positions.RB, spendShare: 0.85 },
-          },
-        }),
+        makeTendency({ teamId: 2, handle: 'fewBuys', buys: 5 }),
+        makeTendency({ teamId: 3, handle: 'manyBuys', buys: 22 }),
       ];
       render(<RosterTracker teams={teams} tendencies={tendencies} ownerHandle={null} />);
 
-      await user.selectOptions(screen.getByTestId('dossier-sort'), 'lean');
+      await user.selectOptions(screen.getByTestId('dossier-sort'), 'buys');
 
       const cards = screen.getAllByTestId(/^dossier-card-/);
-      expect(cards[0]).toHaveAttribute('data-testid', 'dossier-card-3'); // heavier RB lean first
+      expect(cards[0]).toHaveAttribute('data-testid', 'dossier-card-3'); // 22 buys before 5
       expect(cards[1]).toHaveAttribute('data-testid', 'dossier-card-2');
     });
 
-    it('breaks balanced-lean ties by total spend', async () => {
+    it('sorts by average roster age, youngest first, with unknown age sinking to the bottom', async () => {
       const user = userEvent.setup();
       const teams = [
-        makeTeam({ id: 2, handle: 'lowSpend', displayName: 'Low Spend' }),
-        makeTeam({ id: 3, handle: 'highSpend', displayName: 'High Spend' }),
+        makeTeam({ id: 2, handle: 'older', displayName: 'Older', avgAge: 28.1 }),
+        makeTeam({ id: 3, handle: 'younger', displayName: 'Younger', avgAge: 23.8 }),
+        makeTeam({ id: 4, handle: 'unknown', displayName: 'Unknown', avgAge: null }),
       ];
       const tendencies = [
-        makeTendency({ teamId: 2, handle: 'lowSpend', lean: 'balanced', totalSpend: 200 }),
-        makeTendency({ teamId: 3, handle: 'highSpend', lean: 'balanced', totalSpend: 500 }),
+        makeTendency({ teamId: 2, handle: 'older' }),
+        makeTendency({ teamId: 3, handle: 'younger' }),
+        makeTendency({ teamId: 4, handle: 'unknown' }),
       ];
       render(<RosterTracker teams={teams} tendencies={tendencies} ownerHandle={null} />);
 
-      await user.selectOptions(screen.getByTestId('dossier-sort'), 'lean');
+      await user.selectOptions(screen.getByTestId('dossier-sort'), 'age');
 
       const cards = screen.getAllByTestId(/^dossier-card-/);
-      expect(cards[0]).toHaveAttribute('data-testid', 'dossier-card-3'); // higher spend first
-      expect(cards[1]).toHaveAttribute('data-testid', 'dossier-card-2');
+      expect(cards[0]).toHaveAttribute('data-testid', 'dossier-card-3'); // 23.8, youngest
+      expect(cards[1]).toHaveAttribute('data-testid', 'dossier-card-2'); // 28.1
+      expect(cards[2]).toHaveAttribute('data-testid', 'dossier-card-4'); // unknown, last
     });
   });
 

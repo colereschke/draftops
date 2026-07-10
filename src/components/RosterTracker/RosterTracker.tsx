@@ -13,7 +13,7 @@ interface RosterTrackerProps {
   ownerHandle: string | null;
 }
 
-type CardSort = 'activity' | 'aggression' | 'lean';
+type CardSort = 'activity' | 'aggression' | 'buys' | 'age';
 
 const AGGRESSION_RANK: Record<ManagerTendency['aggression'], number> = {
   aggressive: 2,
@@ -44,12 +44,6 @@ export default function RosterTracker({ teams, tendencies, ownerHandle }: Roster
 
     const isOwner = (t: TeamWithRoster) => ownerHandle !== null && t.handle === ownerHandle;
 
-    // Within a lean's own bucket ('RB', 'WR', ...), rank by how dominant that
-    // lean actually is — spend share in that position. 'balanced' teams have no
-    // single dominant share to compare, so they fall back to total spend.
-    const leanStrength = (t: ManagerTendency) =>
-      t.lean === 'balanced' ? null : t.positions[t.lean].spendShare;
-
     return [...withTendency].sort((a, b) => {
       // Owner always first.
       if (isOwner(a.team) !== isOwner(b.team)) return isOwner(a.team) ? -1 : 1;
@@ -60,15 +54,14 @@ export default function RosterTracker({ teams, tendencies, ownerHandle }: Roster
         // Tiebreak within the same tier by how extreme the over/under-value read is.
         return Math.abs(b.tendency.overallOverPct ?? 0) - Math.abs(a.tendency.overallOverPct ?? 0);
       }
-      if (sortBy === 'lean') {
-        const leanDiff = a.tendency.lean.localeCompare(b.tendency.lean);
-        if (leanDiff !== 0) return leanDiff;
-        const aStrength = leanStrength(a.tendency);
-        const bStrength = leanStrength(b.tendency);
-        if (aStrength !== null && bStrength !== null) return bStrength - aStrength;
-        return b.tendency.totalSpend - a.tendency.totalSpend;
+      if (sortBy === 'buys') {
+        return b.tendency.buys - a.tendency.buys;
       }
-      return b.tendency.totalSpend - a.tendency.totalSpend; // activity
+      if (sortBy === 'age') {
+        // Youngest first; unknown average age (no age-eligible buys yet) sinks to the bottom.
+        return (a.team.avgAge ?? Infinity) - (b.team.avgAge ?? Infinity);
+      }
+      return b.tendency.totalSpend - a.tendency.totalSpend; // activity (spend)
     });
   }, [teams, tendencyById, sortBy, ownerHandle]);
 
@@ -117,7 +110,8 @@ export default function RosterTracker({ teams, tendencies, ownerHandle }: Roster
               >
                 <option value="activity">Spend</option>
                 <option value="aggression">Aggression</option>
-                <option value="lean">Lean</option>
+                <option value="buys">Buys</option>
+                <option value="age">Age</option>
               </select>
             </label>
           </div>

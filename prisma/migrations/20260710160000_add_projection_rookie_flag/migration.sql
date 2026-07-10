@@ -1,0 +1,1 @@
+ALTER TABLE "PlayerProjection" ADD COLUMN IF NOT EXISTS "isRookie" BOOLEAN NOT NULL DEFAULT false;

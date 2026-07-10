@@ -143,6 +143,7 @@ model PlayerProjection {
   recTd              Float
   baseFantasyPoints  Float
   projectionRank     Int?
+  isRookie           Boolean @default(false)
   projectionSourceId Int
 
   source ProjectionSource @relation(fields: [projectionSourceId], references: [id])

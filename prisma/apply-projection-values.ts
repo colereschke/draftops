@@ -34,6 +34,7 @@ export interface ProjectionJoinRow {
   sleeperId: string;
   position: VorPosition;
   projectedPoints: number;
+  baselineProjectedPoints: number;
   isRookie: boolean;
 }
 
@@ -42,6 +43,7 @@ export interface JoinedProjectionRow {
   sleeperId: string;
   position: VorPosition;
   projectedPoints: number;
+  baselineProjectedPoints: number;
   fallbackAuctionValue: number;
   isRookie: boolean;
 }
@@ -71,6 +73,7 @@ export interface CsvProjectionRow {
   baseFantasyPoints: number;
   projectionRank: number | null;
   projectedPoints: number;
+  baselineProjectedPoints: number;
   isRookie: boolean;
   projectionSource: string;
   projectionDate: Date | null;
@@ -131,6 +134,7 @@ export function joinPlayersToProjectionRows(
         sleeperId: player.sleeperId,
         position: projection.position,
         projectedPoints: projection.projectedPoints,
+        baselineProjectedPoints: projection.baselineProjectedPoints,
         fallbackAuctionValue: player.budget,
         isRookie: projection.isRookie,
       },
@@ -145,7 +149,14 @@ export function readEtrMatchRows(path: string): EtrMatchRow[] {
 }
 
 export function readProjectionRows(path: string, scoring: ScoringSettings): CsvProjectionRow[] {
-  return parseCsv(readFileSync(path, 'utf-8')).flatMap((row) => {
+  return parseProjectionRows(readFileSync(path, 'utf-8'), scoring);
+}
+
+export function parseProjectionRows(
+  contents: string,
+  scoring: ScoringSettings,
+): CsvProjectionRow[] {
+  return parseCsv(contents).flatMap((row) => {
     const position = toVorPosition(row.position);
     if (!row.sleeper_id || !position) return [];
 
@@ -189,6 +200,7 @@ export function readProjectionRows(path: string, scoring: ScoringSettings): CsvP
         baseFantasyPoints: toNumber(row.base_fantasy_points),
         projectionRank: row.projection_rank ? toNumber(row.projection_rank) : null,
         projectedPoints: calculateProjectedPoints(stats, scoring),
+        baselineProjectedPoints: calculateProjectedPoints(stats, DEFAULT_SCORING_SETTINGS),
         isRookie: toNumber(row.years_exp) === 0,
         projectionSource: row.projection_source || 'unknown',
         projectionDate: row.projection_date
@@ -316,6 +328,7 @@ async function main(): Promise<void> {
           sleeperId: row.sleeperId,
           position: row.position,
           projectedPoints: row.projectedPoints,
+          baselineProjectedPoints: row.baselineProjectedPoints,
           isRookie: row.isRookie,
         })),
       );

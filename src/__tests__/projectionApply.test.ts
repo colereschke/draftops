@@ -4,6 +4,7 @@ import {
   type CsvProjectionRow,
   groupProjectionRowsBySource,
   joinPlayersToProjectionRows,
+  parseProjectionRows,
 } from '../../prisma/apply-projection-values';
 
 function projectionRow(overrides: Partial<CsvProjectionRow>): CsvProjectionRow {
@@ -27,6 +28,7 @@ function projectionRow(overrides: Partial<CsvProjectionRow>): CsvProjectionRow {
     baseFantasyPoints: 0,
     projectionRank: null,
     projectedPoints: 0,
+    baselineProjectedPoints: 0,
     isRookie: false,
     projectionSource: 'mike_clay',
     projectionDate: new Date('2026-06-01T00:00:00.000Z'),
@@ -38,7 +40,15 @@ function projectionRow(overrides: Partial<CsvProjectionRow>): CsvProjectionRow {
 it('joins players to projection rows by sleeperId', () => {
   const joined = joinPlayersToProjectionRows(
     [{ id: 1, name: 'A', pos: 'QB', sleeperId: '10', budget: 20 }],
-    [{ sleeperId: '10', position: 'QB', projectedPoints: 300, isRookie: false }],
+    [
+      {
+        sleeperId: '10',
+        position: 'QB',
+        projectedPoints: 300,
+        baselineProjectedPoints: 280,
+        isRookie: false,
+      },
+    ],
   );
 
   expect(joined).toEqual([
@@ -47,6 +57,7 @@ it('joins players to projection rows by sleeperId', () => {
       sleeperId: '10',
       position: 'QB',
       projectedPoints: 300,
+      baselineProjectedPoints: 280,
       fallbackAuctionValue: 20,
       isRookie: false,
     },
@@ -100,6 +111,7 @@ it('groups projection rows by source metadata', () => {
       sleeperId: '10',
       position: 'QB',
       projectedPoints: 300,
+      baselineProjectedPoints: 300,
       isRookie: false,
       projectionSource: 'mike_clay',
       projectionDate,
@@ -109,6 +121,7 @@ it('groups projection rows by source metadata', () => {
       sleeperId: '11',
       position: 'RB',
       projectedPoints: 200,
+      baselineProjectedPoints: 200,
       isRookie: true,
       projectionSource: 'mike_clay',
       projectionDate,
@@ -128,6 +141,7 @@ it('groups projection rows by source metadata', () => {
           sleeperId: '10',
           position: 'QB',
           projectedPoints: 300,
+          baselineProjectedPoints: 300,
           isRookie: false,
           projectionSource: 'mike_clay',
           projectionDate,
@@ -137,6 +151,7 @@ it('groups projection rows by source metadata', () => {
           sleeperId: '11',
           position: 'RB',
           projectedPoints: 200,
+          baselineProjectedPoints: 200,
           isRookie: true,
           projectionSource: 'mike_clay',
           projectionDate,
@@ -145,4 +160,30 @@ it('groups projection rows by source metadata', () => {
       ],
     },
   ]);
+});
+
+it('parses projection rows with both draft and baseline scoring points', () => {
+  const rows = parseProjectionRows(
+    [
+      'sleeper_id,position,games,pass_att,pass_cmp,pass_yds,pass_td,pass_int,pass_sacks,rush_att,rush_yds,rush_td,targets,receptions,rec_yds,rec_td,base_fantasy_points,projection_rank,years_exp,projection_source,projection_date,season',
+      '10,TE,17,0,0,0,0,0,0,0,0,0,120,90,1000,8,0,1,8,mike_clay,2026-06-01,2026',
+    ].join('\n'),
+    {
+      passYdsPerPoint: 25,
+      passTD: 4,
+      passInt: -2,
+      rushAtt: 0,
+      rushFD: 0,
+      pprRB: 1,
+      pprWR: 1,
+      pprTE: 2,
+      recFD: 0,
+      rbFDBonus: 0,
+      wrFDBonus: 0,
+      teFDBonus: 0,
+    },
+  );
+
+  expect(rows[0].projectedPoints).toBeGreaterThan(rows[0].baselineProjectedPoints);
+  expect(rows[0].baselineProjectedPoints).toBeGreaterThan(0);
 });

@@ -157,7 +157,7 @@ describe('RosterTracker', () => {
       expect(cards[1]).toHaveAttribute('data-testid', 'dossier-card-3');
     });
 
-    it('breaks aggression ties by how extreme the over/under-value read is', async () => {
+    it('sorts aggression by the continuous percent over/under value, descending', async () => {
       const user = userEvent.setup();
       const teams = [
         makeTeam({ id: 2, handle: 'mild', displayName: 'Mild' }),
@@ -187,6 +187,36 @@ describe('RosterTracker', () => {
       expect(cards[0]).toHaveAttribute('data-testid', 'dossier-card-1'); // owner still pinned first
       expect(cards[1]).toHaveAttribute('data-testid', 'dossier-card-3'); // extreme (0.4) before mild (0.1)
       expect(cards[2]).toHaveAttribute('data-testid', 'dossier-card-2');
+    });
+
+    it('sinks a team with no reliable aggression read (null overallOverPct) to the bottom', async () => {
+      const user = userEvent.setup();
+      const teams = [
+        makeTeam({ id: 2, handle: 'disciplined', displayName: 'Disciplined' }),
+        makeTeam({ id: 3, handle: 'thin', displayName: 'Thin Sample' }),
+      ];
+      const tendencies = [
+        makeTendency({
+          teamId: 2,
+          handle: 'disciplined',
+          aggression: 'disciplined',
+          overallOverPct: -0.2,
+        }),
+        makeTendency({ teamId: 3, handle: 'thin', aggression: 'neutral', overallOverPct: null }),
+      ];
+      render(<RosterTracker teams={teams} tendencies={tendencies} ownerHandle={null} />);
+
+      await user.click(screen.getByTestId('dossier-sort-aggression'));
+
+      const cards = screen.getAllByTestId(/^dossier-card-/);
+      expect(cards[0]).toHaveAttribute('data-testid', 'dossier-card-2'); // has a real read
+      expect(cards[1]).toHaveAttribute('data-testid', 'dossier-card-3'); // no reliable read, sinks
+
+      // Still sinks after reversing direction — it's a missing read, not "0%".
+      await user.click(screen.getByTestId('dossier-sort-aggression'));
+      const reversedCards = screen.getAllByTestId(/^dossier-card-/);
+      expect(reversedCards[0]).toHaveAttribute('data-testid', 'dossier-card-2');
+      expect(reversedCards[1]).toHaveAttribute('data-testid', 'dossier-card-3');
     });
 
     it('sorts by number of buys, descending', async () => {

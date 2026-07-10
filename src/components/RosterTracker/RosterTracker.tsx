@@ -30,12 +30,6 @@ const STAT_SORT_CHIPS: Array<{ key: SortKey; label: string; defaultDir: SortDir 
 const POSITION_SORT_CHIPS: Array<{ key: SortKey; label: string; defaultDir: SortDir }> =
   APPETITE_POSITIONS.map((pos) => ({ key: pos, label: pos, defaultDir: 'desc' }));
 
-const AGGRESSION_RANK: Record<ManagerTendency['aggression'], number> = {
-  aggressive: 2,
-  neutral: 1,
-  disciplined: 0,
-};
-
 // raw > 0 means `a` ranks higher than `b` in the metric's natural "bigger number" sense;
 // applyDir flips that when sorting ascending.
 function applyDir(raw: number, dir: SortDir): number {
@@ -53,14 +47,16 @@ function compareByKey(key: SortKey, a: OrderedEntry, b: OrderedEntry, dir: SortD
     return applyDir(a.team.avgAge - b.team.avgAge, dir);
   }
   if (key === 'aggression') {
-    const rankDiff =
-      AGGRESSION_RANK[a.tendency.aggression] - AGGRESSION_RANK[b.tendency.aggression];
-    if (rankDiff !== 0) return applyDir(rankDiff, dir);
-    // Tiebreak within the same tier by how extreme the over/under-value read is.
-    return applyDir(
-      Math.abs(a.tendency.overallOverPct ?? 0) - Math.abs(b.tendency.overallOverPct ?? 0),
-      dir,
-    );
+    // No reliable read yet (too few value-matched buys) always sinks to the bottom,
+    // regardless of direction — it's not "0%", it's a missing read. Sort the rest
+    // directly by the continuous % over/under value instead of the aggressive/
+    // neutral/disciplined bucket, since that bucket is just a threshold derived
+    // from this same number and only throws away precision.
+    if (a.tendency.overallOverPct === null || b.tendency.overallOverPct === null) {
+      if (a.tendency.overallOverPct === null && b.tendency.overallOverPct === null) return 0;
+      return a.tendency.overallOverPct === null ? 1 : -1;
+    }
+    return applyDir(a.tendency.overallOverPct - b.tendency.overallOverPct, dir);
   }
   if (key === 'spend') return applyDir(a.tendency.totalSpend - b.tendency.totalSpend, dir);
   if (key === 'buys') return applyDir(a.tendency.buys - b.tendency.buys, dir);

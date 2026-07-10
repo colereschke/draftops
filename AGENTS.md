@@ -183,11 +183,14 @@ Draft-specific fallback values:
 
 Projection-shaped active values:
 
-- Projection values are applied manually with
-  `pnpm tsx prisma/apply-projection-values.ts --draft-id <draft-id>`.
-- The script reads generated projection CSVs, resolves Sleeper IDs, scores projections under both
-  baseline and draft scoring settings, stores raw projection/VOR context, and writes
-  `DraftPlayerValue` rows.
+- Projection source data lives in `ProjectionSource` and `PlayerProjection`.
+- `createDraft` automatically calls `applyProjectionValuesToDraft(prisma, { draftId })` after
+  adjusted fallback players are seeded.
+- Draft creation fails loudly if no usable projection source exists.
+- The CLI `pnpm tsx prisma/apply-projection-values.ts --draft-id <draft-id>` remains available to
+  import generated CSV data into Postgres and reapply values to an existing draft.
+- Projection application resolves Sleeper IDs, scores projections under both baseline and draft
+  scoring settings, stores raw projection/VOR context, and writes `DraftPlayerValue` rows.
 - The active auction target uses `DraftPlayerValue.activeAuctionValue` only for players with a row
   in the active projection source.
 - `activeAuctionValue` is anchored to `Player.budget`; projections only shape the market value via

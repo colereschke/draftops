@@ -371,8 +371,10 @@ Implemented:
 - Adds projection-shaped active market values: the active auction target remains anchored to the
   draft's adjusted dynasty `Player.budget`, then projections adjust it by relative scoring lift
   within position/value buckets.
-- Adds `prisma/apply-projection-values.ts --draft-id <id>` to apply generated projection CSVs to a
-  draft.
+- Adds `prisma/apply-projection-values.ts --draft-id <id>` to import generated projection CSVs into
+  Postgres and reapply values to an existing draft.
+- Adds automatic projection application during `createDraft`; draft creation fails loudly if no
+  usable `ProjectionSource` exists.
 - Removes the old VOR-driven strategy lens from this PR; rebuild/balanced/contender handling is
   deferred to a dedicated follow-up.
 - Ignores stale projection rows from older projection sources. Players without a current projection
@@ -380,15 +382,17 @@ Implemented:
 
 Current process:
 
-1. Create a draft normally. `createDraft` automatically seeds adjusted fallback dynasty values.
-2. Generate or confirm `data/generated/etr_sleeper_matches.csv` and
+1. Generate or confirm `data/generated/etr_sleeper_matches.csv` and
    `data/generated/master_projections.csv` exist locally.
-3. Manually run the apply script against that draft:
+2. Import projection source data into Postgres by running the apply script against an existing
+   draft:
 
 ```bash
 pnpm tsx prisma/apply-projection-values.ts --draft-id <draft-id>
 ```
 
+3. Create drafts normally. `createDraft` automatically seeds adjusted fallback dynasty values and
+   applies the latest stored projection source before redirecting.
 4. Spot-check value outputs:
    - high-end QBs and elite TEs
    - target-heavy TEs vs. efficiency/TD-driven TEs
@@ -398,8 +402,8 @@ pnpm tsx prisma/apply-projection-values.ts --draft-id <draft-id>
 
 Next steps:
 
-1. Automate projection application after draft creation or provide an explicit UI action/status so
-   new drafts do not depend on remembering the script.
+1. Add a dedicated projection import/admin command or setup step so the first import no longer
+   depends on an existing draft.
 2. Feed projection-aware lineup strength into #8 dynamic pick valuation, keeping dynasty market
    strength and redraft projection strength as separate signals.
 3. Rebuild the strategy lens in a follow-up PR using a shape-preserving signal, not raw VOR-dollar

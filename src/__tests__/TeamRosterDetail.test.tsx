@@ -283,4 +283,42 @@ describe('TeamRosterDetail', () => {
     expect(playerTwoRow).not.toHaveTextContent('+$');
     expect(playerTwoRow).not.toHaveTextContent('-$');
   });
+
+  it('shows a neutral placeholder instead of omitting the delta column when delta is 0 or null', () => {
+    // Omitting the trailing delta span entirely (rather than rendering a
+    // same-width placeholder) makes that row shorter than its siblings,
+    // breaking the price/delta column alignment across the group.
+    const results: RosterEntry[] = [
+      {
+        id: 1,
+        player: 'Player One',
+        position: 'QB',
+        nflTeam: 'KC',
+        price: 100,
+        sfRank: 1,
+        teamId: 1,
+        teamHandle: 'a',
+        delta: 0,
+      },
+      {
+        id: 2,
+        player: 'Player Two',
+        position: 'QB',
+        nflTeam: 'BUF',
+        price: 80,
+        sfRank: 2,
+        teamId: 1,
+        teamHandle: 'a',
+        delta: null,
+      },
+    ];
+
+    render(<TeamRosterDetail results={results} />);
+
+    const playerOneRow = screen.getByText('Player One').closest('div');
+    const playerTwoRow = screen.getByText('Player Two').closest('div');
+
+    expect(playerOneRow).toHaveTextContent('—');
+    expect(playerTwoRow).toHaveTextContent('—');
+  });
 });

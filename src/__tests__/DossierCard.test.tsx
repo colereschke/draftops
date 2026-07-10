@@ -259,4 +259,31 @@ describe('DossierCard', () => {
     );
     expect(screen.getByTestId('dossier-avg-age-1')).toHaveTextContent('Avg age: —');
   });
+
+  it('applies a highlight background when isSelected is true', () => {
+    render(
+      <DossierCard
+        team={team()}
+        tendency={tendency()}
+        isOwner={false}
+        isExpanded={false}
+        isSelected={true}
+        onToggle={noop}
+      />,
+    );
+    expect(screen.getByTestId('dossier-card-1')).toHaveClass('bg-accent');
+  });
+
+  it('does not apply the selected highlight by default', () => {
+    render(
+      <DossierCard
+        team={team()}
+        tendency={tendency()}
+        isOwner={false}
+        isExpanded={false}
+        onToggle={noop}
+      />,
+    );
+    expect(screen.getByTestId('dossier-card-1')).not.toHaveClass('bg-accent');
+  });
 });

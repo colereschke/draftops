@@ -76,8 +76,15 @@ export default function ThreatBoard({
     return { ranked: rows, maxThreat: Math.max(...rows.map((r) => r.threat), 1) };
   }, [teams, tendencies, selectedPos]);
 
+  const rows = ranked.map((row, i) => ({
+    ...row,
+    rank: i + 1,
+    isOwner: ownerHandle !== null && row.team.handle === ownerHandle,
+    widthPct: maxThreat > 0 ? Math.max(0, (row.threat / maxThreat) * 100) : 0,
+  }));
+
   return (
-    <div className="overflow-x-auto px-5 pb-10">
+    <div className="px-5 pb-10">
       <div className="mb-3 flex flex-wrap items-center gap-2">
         <div className="flex gap-1" role="group" aria-label="Threat position">
           {APPETITE_POSITIONS.map((pos) => {
@@ -125,42 +132,104 @@ export default function ThreatBoard({
         )}
       </div>
 
-      <Table>
-        <TableHeader>
-          <TableRow className="border-border hover:bg-transparent">
-            {['#', 'Team', 'Max Bid', 'Appetite', 'Threat'].map((col) => (
-              <TableHead
-                key={col}
-                className="font-label border-none py-2 text-[10px] font-semibold tracking-wide whitespace-nowrap text-muted-foreground uppercase"
-                style={{ textAlign: col === 'Team' || col === 'Threat' ? 'left' : 'center' }}
+      {/* Mobile: stacked cards, no horizontal scroll needed. */}
+      <div className="flex flex-col gap-2 md:hidden">
+        {rows.map((row) => (
+          <div
+            key={row.team.id}
+            data-testid={`threat-mobile-row-${row.team.handle}`}
+            className={cn(
+              'rounded-lg border border-border-subtle bg-card px-3 py-2.5',
+              row.isOwner && 'bg-accent',
+            )}
+            style={{ borderLeft: `3px solid ${row.isOwner ? 'var(--primary)' : 'var(--border)'}` }}
+          >
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <span className="font-mono text-[11px] text-muted-foreground tabular-nums">
+                  {row.rank}
+                </span>
+                <span
+                  className={cn(
+                    'text-[13px]',
+                    row.isOwner ? 'font-bold text-foreground' : 'font-medium text-secondary-fg',
+                  )}
+                >
+                  {row.team.displayName ?? row.team.handle}
+                </span>
+              </div>
+              <span
+                data-testid={`threat-mobile-bid-${row.team.handle}`}
+                className="font-mono text-[13px] font-bold tabular-nums"
+                style={{ color: maxBidColor(row.bid) }}
               >
-                {col}
-              </TableHead>
-            ))}
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {ranked.map((row, i) => {
-            const isOwner = ownerHandle !== null && row.team.handle === ownerHandle;
-            const width = maxThreat > 0 ? Math.max(0, (row.threat / maxThreat) * 100) : 0;
-            return (
+                ${row.bid}
+              </span>
+            </div>
+            <div className="mt-1.5 flex items-center gap-2.5">
+              <span
+                className="font-label text-[11px] tracking-wide uppercase"
+                style={{ color: appetiteColor(row.appetite) }}
+              >
+                {APPETITE_LABEL[row.appetite]}
+              </span>
+              <div className="flex flex-1 items-center gap-2">
+                <span className="min-w-[32px] font-mono text-[12px] font-bold tabular-nums">
+                  {Math.round(row.threat)}
+                </span>
+                <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-muted">
+                  <div
+                    className="h-full rounded-full"
+                    style={{
+                      width: `${row.widthPct}%`,
+                      background: 'var(--primary)',
+                      opacity: 0.75,
+                    }}
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Desktop: table, unchanged. */}
+      <div className="hidden overflow-x-auto md:block">
+        <Table>
+          <TableHeader>
+            <TableRow className="border-border hover:bg-transparent">
+              {['#', 'Team', 'Max Bid', 'Appetite', 'Threat'].map((col) => (
+                <TableHead
+                  key={col}
+                  className="font-label border-none py-2 text-[10px] font-semibold tracking-wide whitespace-nowrap text-muted-foreground uppercase"
+                  style={{ textAlign: col === 'Team' || col === 'Threat' ? 'left' : 'center' }}
+                >
+                  {col}
+                </TableHead>
+              ))}
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {rows.map((row) => (
               <TableRow
                 key={row.team.id}
                 data-testid={`threat-row-${row.team.handle}`}
                 className={cn(
                   'border-b-border-subtle hover:bg-transparent',
-                  isOwner ? 'bg-accent' : i % 2 !== 0 ? 'bg-muted/20' : undefined,
+                  row.isOwner ? 'bg-accent' : row.rank % 2 === 0 ? 'bg-muted/20' : undefined,
                 )}
-                style={{ borderLeft: `3px solid ${isOwner ? 'var(--primary)' : 'var(--border)'}` }}
+                style={{
+                  borderLeft: `3px solid ${row.isOwner ? 'var(--primary)' : 'var(--border)'}`,
+                }}
               >
                 <TableCell className="text-center font-mono text-[11px] text-muted-foreground tabular-nums">
-                  {i + 1}
+                  {row.rank}
                 </TableCell>
                 <TableCell className="text-left">
                   <span
                     className={cn(
                       'text-[13px]',
-                      isOwner ? 'font-bold text-foreground' : 'font-medium text-secondary-fg',
+                      row.isOwner ? 'font-bold text-foreground' : 'font-medium text-secondary-fg',
                     )}
                   >
                     {row.team.displayName ?? row.team.handle}
@@ -187,16 +256,20 @@ export default function ThreatBoard({
                     <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-muted">
                       <div
                         className="h-full rounded-full"
-                        style={{ width: `${width}%`, background: 'var(--primary)', opacity: 0.75 }}
+                        style={{
+                          width: `${row.widthPct}%`,
+                          background: 'var(--primary)',
+                          opacity: 0.75,
+                        }}
                       />
                     </div>
                   </div>
                 </TableCell>
               </TableRow>
-            );
-          })}
-        </TableBody>
-      </Table>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
     </div>
   );
 }

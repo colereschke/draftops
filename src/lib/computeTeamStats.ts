@@ -29,10 +29,12 @@ export function computeTeamStats(
     const buyingPower = remaining - rosterRemaining;
     const pkgCount = team.results.filter((r) => r.position === 'PKG').length;
 
-    const results: RosterEntry[] = team.results.map((r) => {
+    const results: RosterEntry[] = [];
+    const knownAges: number[] = [];
+    for (const r of team.results) {
       const target = players.find((p) => p.player === r.player);
       const delta = target != null ? r.price - target.budget : null;
-      return {
+      results.push({
         id: r.id,
         player: r.player,
         position: r.position,
@@ -42,8 +44,11 @@ export function computeTeamStats(
         teamId: r.teamId,
         teamHandle: team.handle,
         delta,
-      };
-    });
+      });
+      if (target?.age != null) knownAges.push(target.age);
+    }
+    const avgAge =
+      knownAges.length > 0 ? knownAges.reduce((sum, age) => sum + age, 0) / knownAges.length : null;
 
     return {
       id: team.id,
@@ -56,6 +61,7 @@ export function computeTeamStats(
       rosterRemaining,
       buyingPower,
       pkgCount,
+      avgAge,
       results,
     };
   });

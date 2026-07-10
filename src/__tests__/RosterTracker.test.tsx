@@ -15,6 +15,7 @@ const makeTeam = (over: Partial<TeamWithRoster> = {}): TeamWithRoster => ({
   rosterRemaining: 28,
   buyingPower: 660,
   pkgCount: 1,
+  avgAge: null,
   results: [
     {
       id: 1,

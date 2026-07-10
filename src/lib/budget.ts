@@ -27,6 +27,7 @@ export function computeTeamStats(teams: TeamWithResults[], rosterSize: number): 
         rosterRemaining,
         buyingPower,
         pkgCount: 0,
+        avgAge: null,
       };
     })
     .sort((a, b) => b.buyingPower - a.buyingPower);

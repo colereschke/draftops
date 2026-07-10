@@ -75,6 +75,7 @@ const team = (over: Partial<TeamWithRoster> = {}): TeamWithRoster => ({
   rosterRemaining: 24,
   buyingPower: 366,
   pkgCount: 0,
+  avgAge: null,
   results: [],
   ...over,
 });
@@ -229,5 +230,33 @@ describe('DossierCard', () => {
       />,
     );
     expect(screen.queryByTestId('dossier-pkg-1')).not.toBeInTheDocument();
+  });
+
+  it('shows the average roster age colored by the age scale', () => {
+    render(
+      <DossierCard
+        team={team({ avgAge: 23.8 })}
+        tendency={tendency()}
+        isOwner={false}
+        isExpanded={false}
+        onToggle={noop}
+      />,
+    );
+    const avgAge = screen.getByTestId('dossier-avg-age-1');
+    expect(avgAge).toHaveTextContent('Avg age: 23.8');
+    expect(avgAge).toHaveStyle({ color: 'var(--age-young)' });
+  });
+
+  it('shows an em dash when average age is unavailable', () => {
+    render(
+      <DossierCard
+        team={team({ avgAge: null })}
+        tendency={tendency()}
+        isOwner={false}
+        isExpanded={false}
+        onToggle={noop}
+      />,
+    );
+    expect(screen.getByTestId('dossier-avg-age-1')).toHaveTextContent('Avg age: —');
   });
 });

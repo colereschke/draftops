@@ -39,6 +39,7 @@ export async function GET(
       rosterRemaining,
       buyingPower,
       pkgCount,
+      avgAge: null,
     };
   });
 

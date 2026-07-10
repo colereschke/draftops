@@ -4,6 +4,7 @@ import { ChevronRight } from 'lucide-react';
 import type { TeamWithRoster } from '@/types';
 import type { Appetite, AppetitePos, ManagerTendency } from '@/lib/tendencies';
 import { appetiteColor } from '@/lib/tendencies';
+import { ageColor } from '@/lib/ageColor';
 import { APPETITE_POSITIONS } from '@/lib/tendencies.constants';
 import { POS_COLORS } from '@/lib/posColors';
 import { cn } from '@/lib/utils';
@@ -149,6 +150,14 @@ export default function DossierCard({
 
         <div className="mt-1.5 font-mono text-[11px] text-muted-foreground tabular-nums">
           {tendency.buys} buys · ${tendency.totalSpend} · top ${tendency.topBuy}
+        </div>
+
+        <div
+          data-testid={`dossier-avg-age-${team.id}`}
+          className="mt-1 font-mono text-[11px] tabular-nums"
+          style={{ color: team.avgAge !== null ? ageColor(team.avgAge) : 'var(--text-muted)' }}
+        >
+          Avg age: {team.avgAge !== null ? team.avgAge.toFixed(1) : '—'}
         </div>
 
         <div className="mt-2 flex gap-1.5">

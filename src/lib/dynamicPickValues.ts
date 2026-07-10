@@ -58,7 +58,8 @@ export function applyDynamicPickValues({
       -MAX_TOTAL_ADJUSTMENT,
       MAX_TOTAL_ADJUSTMENT,
     );
-    const adjusted = Math.max(1, Math.round(baseline * (1 + adjustment)));
+    const rawAdjusted = Math.max(1, Math.round(baseline * (1 + adjustment)));
+    const adjusted = applyAdjustmentCap(baseline, rawAdjusted);
 
     return withDynamicValue(player, baseline, adjusted);
   });
@@ -134,7 +135,7 @@ function getOrCreateRoster(
 }
 
 function withDynamicValue(player: Player, baseline: number, adjusted: number): Player {
-  const adjustment = baseline > 0 ? adjusted / baseline - 1 : 0;
+  const adjustment = adjusted - baseline;
 
   return {
     ...player,
@@ -152,6 +153,13 @@ function withDynamicValue(player: Player, baseline: number, adjusted: number): P
 
 function isFuturePickAsset(player: Player): boolean {
   return player.pos === 'PICK' || player.pos === 'PKG';
+}
+
+function applyAdjustmentCap(baseline: number, adjusted: number): number {
+  const min = Math.ceil(baseline * (1 - MAX_TOTAL_ADJUSTMENT));
+  const max = Math.floor(baseline * (1 + MAX_TOTAL_ADJUSTMENT));
+
+  return clamp(adjusted, Math.max(1, min), Math.max(1, max));
 }
 
 function normalizeStrength(value: number, min: number, max: number): number {

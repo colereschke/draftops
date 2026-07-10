@@ -60,9 +60,9 @@ describe('applyDynamicPickValues', () => {
       startingLineup: lineup,
     });
 
-    expect(
-      adjusted.find((player) => player.player === 'weak 2027 Pick Package')!.budget,
-    ).toBeGreaterThan(109);
+    const weakPackage = adjusted.find((player) => player.player === 'weak 2027 Pick Package')!;
+    expect(weakPackage.budget).toBeGreaterThan(109);
+    expect(weakPackage.dynamicPickValue?.adjustment).toBe(weakPackage.budget - 109);
     expect(
       adjusted.find((player) => player.player === 'strong 2027 Pick Package')!.budget,
     ).toBeLessThan(109);
@@ -87,5 +87,54 @@ describe('applyDynamicPickValues', () => {
 
     expect(pkg.budget).toBe(109);
     expect(pkg.dynamicPickValue?.direction).toBe('flat');
+  });
+
+  it('keeps rounded adjustments inside the final cap', () => {
+    const players = [
+      p({ player: 'Overpay WR', budget: 1, projectedPoints: 0, vor: 0, age: 31 }),
+      p({
+        player: 'overpay 2028 Pick Package',
+        pos: 'PKG',
+        team: 'overpay',
+        budget: 72,
+        ceiling: 86,
+        floor: 50,
+        futurePickOriginHandle: 'overpay',
+        futurePickAssetKind: 'package',
+        futurePickYear: 2028,
+      }),
+      p({
+        player: 'Discount QB',
+        pos: 'QB',
+        budget: 1000,
+        projectedPoints: 800,
+        vor: 200,
+        age: 24,
+      }),
+      p({
+        player: 'discount 2028 Pick Package',
+        pos: 'PKG',
+        team: 'discount',
+        budget: 72,
+        ceiling: 86,
+        floor: 50,
+        futurePickOriginHandle: 'discount',
+        futurePickAssetKind: 'package',
+        futurePickYear: 2028,
+      }),
+    ];
+
+    const adjusted = applyDynamicPickValues({
+      players,
+      bids: [bid('Overpay WR', 'overpay', 1000), bid('Discount QB', 'discount', 1)],
+      startingLineup: lineup,
+    });
+
+    expect(adjusted.find((player) => player.player === 'overpay 2028 Pick Package')!.budget).toBe(
+      Math.floor(72 * 1.15),
+    );
+    expect(adjusted.find((player) => player.player === 'discount 2028 Pick Package')!.budget).toBe(
+      Math.ceil(72 * 0.85),
+    );
   });
 });

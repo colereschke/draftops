@@ -1,8 +1,11 @@
 'use client';
 
 import { useState, useMemo, useCallback } from 'react';
+import { ArrowUp, ArrowDown, ArrowUpDown } from 'lucide-react';
 import type { TeamWithRoster } from '@/types';
-import type { ManagerTendency } from '@/lib/tendencies';
+import type { AppetitePos, ManagerTendency } from '@/lib/tendencies';
+import { APPETITE_POSITIONS } from '@/lib/tendencies.constants';
+import { POS_COLORS } from '@/lib/posColors';
 import { useMediaQuery } from '@/lib/useMediaQuery';
 import DossierCard from './DossierCard';
 import TeamDetailPane from './TeamDetailPane';
@@ -13,7 +16,19 @@ interface RosterTrackerProps {
   ownerHandle: string | null;
 }
 
-type CardSort = 'activity' | 'aggression' | 'buys' | 'age';
+type SortKey = 'spend' | 'aggression' | 'buys' | 'age' | AppetitePos;
+type SortDir = 'asc' | 'desc';
+type OrderedEntry = { team: TeamWithRoster; tendency: ManagerTendency };
+
+const STAT_SORT_CHIPS: Array<{ key: SortKey; label: string; defaultDir: SortDir }> = [
+  { key: 'spend', label: 'Spend', defaultDir: 'desc' },
+  { key: 'aggression', label: 'Aggression', defaultDir: 'desc' },
+  { key: 'buys', label: 'Buys', defaultDir: 'desc' },
+  { key: 'age', label: 'Age', defaultDir: 'asc' },
+];
+
+const POSITION_SORT_CHIPS: Array<{ key: SortKey; label: string; defaultDir: SortDir }> =
+  APPETITE_POSITIONS.map((pos) => ({ key: pos, label: pos, defaultDir: 'desc' }));
 
 const AGGRESSION_RANK: Record<ManagerTendency['aggression'], number> = {
   aggressive: 2,
@@ -21,9 +36,80 @@ const AGGRESSION_RANK: Record<ManagerTendency['aggression'], number> = {
   disciplined: 0,
 };
 
+// raw > 0 means `a` ranks higher than `b` in the metric's natural "bigger number" sense;
+// applyDir flips that when sorting ascending.
+function applyDir(raw: number, dir: SortDir): number {
+  return dir === 'desc' ? -raw : raw;
+}
+
+function compareByKey(key: SortKey, a: OrderedEntry, b: OrderedEntry, dir: SortDir): number {
+  if (key === 'age') {
+    // Unknown average age (no age-eligible buys yet) always sinks to the bottom,
+    // regardless of direction — it's not a "0", it's a missing read.
+    if (a.team.avgAge === null || b.team.avgAge === null) {
+      if (a.team.avgAge === null && b.team.avgAge === null) return 0;
+      return a.team.avgAge === null ? 1 : -1;
+    }
+    return applyDir(a.team.avgAge - b.team.avgAge, dir);
+  }
+  if (key === 'aggression') {
+    const rankDiff =
+      AGGRESSION_RANK[a.tendency.aggression] - AGGRESSION_RANK[b.tendency.aggression];
+    if (rankDiff !== 0) return applyDir(rankDiff, dir);
+    // Tiebreak within the same tier by how extreme the over/under-value read is.
+    return applyDir(
+      Math.abs(a.tendency.overallOverPct ?? 0) - Math.abs(b.tendency.overallOverPct ?? 0),
+      dir,
+    );
+  }
+  if (key === 'spend') return applyDir(a.tendency.totalSpend - b.tendency.totalSpend, dir);
+  if (key === 'buys') return applyDir(a.tendency.buys - b.tendency.buys, dir);
+  // QB/RB/WR/TE: rank by spend share in that position.
+  return applyDir(a.tendency.positions[key].spendShare - b.tendency.positions[key].spendShare, dir);
+}
+
+function SortIcon({ active, dir }: { active: boolean; dir: SortDir }) {
+  if (!active) return <ArrowUpDown className="size-3 text-muted-foreground" />;
+  return dir === 'asc' ? (
+    <ArrowUp className="size-3" style={{ color: 'var(--primary)' }} />
+  ) : (
+    <ArrowDown className="size-3" style={{ color: 'var(--primary)' }} />
+  );
+}
+
+function SortChip({
+  chip,
+  active,
+  dir,
+  onClick,
+  color,
+}: {
+  chip: { key: SortKey; label: string };
+  active: boolean;
+  dir: SortDir;
+  onClick: () => void;
+  color?: string;
+}) {
+  return (
+    <button
+      type="button"
+      data-testid={`dossier-sort-${chip.key}`}
+      onClick={onClick}
+      aria-pressed={active}
+      aria-label={`Sort by ${chip.label}`}
+      className="font-label flex cursor-pointer items-center gap-1 border-0 bg-transparent p-0 text-[11px] font-semibold tracking-wide whitespace-nowrap uppercase select-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+      style={{ color: active ? (color ?? 'var(--primary)') : (color ?? 'var(--text-muted)') }}
+    >
+      {chip.label}
+      <SortIcon active={active} dir={dir} />
+    </button>
+  );
+}
+
 export default function RosterTracker({ teams, tendencies, ownerHandle }: RosterTrackerProps) {
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
-  const [sortBy, setSortBy] = useState<CardSort>('activity');
+  const [sortBy, setSortBy] = useState<SortKey>('spend');
+  const [sortDir, setSortDir] = useState<SortDir>('desc');
   const isDesktop = useMediaQuery('(min-width: 1024px)');
 
   const tendencyById = useMemo(() => new Map(tendencies.map((t) => [t.teamId, t])), [tendencies]);
@@ -37,33 +123,28 @@ export default function RosterTracker({ teams, tendencies, ownerHandle }: Roster
     });
   }, []);
 
+  const handleSort = (chip: { key: SortKey; defaultDir: SortDir }) => {
+    if (chip.key === sortBy) {
+      setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortBy(chip.key);
+      setSortDir(chip.defaultDir);
+    }
+  };
+
   const ordered = useMemo(() => {
     const withTendency = teams
       .map((team) => ({ team, tendency: tendencyById.get(team.id) }))
-      .filter((x): x is { team: TeamWithRoster; tendency: ManagerTendency } => x.tendency != null);
+      .filter((x): x is OrderedEntry => x.tendency != null);
 
     const isOwner = (t: TeamWithRoster) => ownerHandle !== null && t.handle === ownerHandle;
 
     return [...withTendency].sort((a, b) => {
       // Owner always first.
       if (isOwner(a.team) !== isOwner(b.team)) return isOwner(a.team) ? -1 : 1;
-      if (sortBy === 'aggression') {
-        const rankDiff =
-          AGGRESSION_RANK[b.tendency.aggression] - AGGRESSION_RANK[a.tendency.aggression];
-        if (rankDiff !== 0) return rankDiff;
-        // Tiebreak within the same tier by how extreme the over/under-value read is.
-        return Math.abs(b.tendency.overallOverPct ?? 0) - Math.abs(a.tendency.overallOverPct ?? 0);
-      }
-      if (sortBy === 'buys') {
-        return b.tendency.buys - a.tendency.buys;
-      }
-      if (sortBy === 'age') {
-        // Youngest first; unknown average age (no age-eligible buys yet) sinks to the bottom.
-        return (a.team.avgAge ?? Infinity) - (b.team.avgAge ?? Infinity);
-      }
-      return b.tendency.totalSpend - a.tendency.totalSpend; // activity (spend)
+      return compareByKey(sortBy, a, b, sortDir);
     });
-  }, [teams, tendencyById, sortBy, ownerHandle]);
+  }, [teams, tendencyById, sortBy, sortDir, ownerHandle]);
 
   const [selectedTeamId, setSelectedTeamId] = useState<number | null>(
     () => ordered[0]?.team.id ?? null,
@@ -100,20 +181,32 @@ export default function RosterTracker({ teams, tendencies, ownerHandle }: Roster
                 .
               </div>
             </div>
-            <label className="flex items-center gap-2 text-[11px] text-muted-foreground">
+            <div className="flex flex-wrap items-center gap-3 text-[11px] text-muted-foreground">
               <span className="font-label tracking-wide uppercase">Sort</span>
-              <select
-                data-testid="dossier-sort"
-                value={sortBy}
-                onChange={(e) => setSortBy(e.target.value as CardSort)}
-                className="rounded border border-border-subtle bg-background px-2 py-1 text-[12px] text-foreground"
-              >
-                <option value="activity">Spend</option>
-                <option value="aggression">Aggression</option>
-                <option value="buys">Buys</option>
-                <option value="age">Age</option>
-              </select>
-            </label>
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+                {STAT_SORT_CHIPS.map((chip) => (
+                  <SortChip
+                    key={chip.key}
+                    chip={chip}
+                    active={sortBy === chip.key}
+                    dir={sortDir}
+                    onClick={() => handleSort(chip)}
+                  />
+                ))}
+              </div>
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 border-l border-border-subtle pl-3">
+                {POSITION_SORT_CHIPS.map((chip) => (
+                  <SortChip
+                    key={chip.key}
+                    chip={chip}
+                    active={sortBy === chip.key}
+                    dir={sortDir}
+                    onClick={() => handleSort(chip)}
+                    color={POS_COLORS[chip.key as AppetitePos].accent}
+                  />
+                ))}
+              </div>
+            </div>
           </div>
         </section>
       </div>

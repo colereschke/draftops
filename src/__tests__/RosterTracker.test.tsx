@@ -121,7 +121,42 @@ describe('RosterTracker', () => {
     expect(screen.getByTestId('roster-group-QB')).toBeInTheDocument();
   });
 
-  describe('RosterTracker — sort tiebreakers', () => {
+  describe('RosterTracker — sort chips', () => {
+    it('defaults to Spend, descending', () => {
+      const teams = [
+        makeTeam({ id: 2, handle: 'lowSpend', displayName: 'Low' }),
+        makeTeam({ id: 3, handle: 'highSpend', displayName: 'High' }),
+      ];
+      const tendencies = [
+        makeTendency({ teamId: 2, handle: 'lowSpend', totalSpend: 100 }),
+        makeTendency({ teamId: 3, handle: 'highSpend', totalSpend: 900 }),
+      ];
+      render(<RosterTracker teams={teams} tendencies={tendencies} ownerHandle={null} />);
+      const cards = screen.getAllByTestId(/^dossier-card-/);
+      expect(cards[0]).toHaveAttribute('data-testid', 'dossier-card-3'); // highest spend first
+      expect(cards[1]).toHaveAttribute('data-testid', 'dossier-card-2');
+    });
+
+    it('clicking the active chip again reverses direction', async () => {
+      const user = userEvent.setup();
+      const teams = [
+        makeTeam({ id: 2, handle: 'lowSpend', displayName: 'Low' }),
+        makeTeam({ id: 3, handle: 'highSpend', displayName: 'High' }),
+      ];
+      const tendencies = [
+        makeTendency({ teamId: 2, handle: 'lowSpend', totalSpend: 100 }),
+        makeTendency({ teamId: 3, handle: 'highSpend', totalSpend: 900 }),
+      ];
+      render(<RosterTracker teams={teams} tendencies={tendencies} ownerHandle={null} />);
+
+      // Spend is already the active default sort — clicking it again reverses to ascending.
+      await user.click(screen.getByTestId('dossier-sort-spend'));
+
+      const cards = screen.getAllByTestId(/^dossier-card-/);
+      expect(cards[0]).toHaveAttribute('data-testid', 'dossier-card-2'); // lowest spend first now
+      expect(cards[1]).toHaveAttribute('data-testid', 'dossier-card-3');
+    });
+
     it('breaks aggression ties by how extreme the over/under-value read is', async () => {
       const user = userEvent.setup();
       const teams = [
@@ -146,7 +181,7 @@ describe('RosterTracker', () => {
       ];
       render(<RosterTracker teams={teams} tendencies={tendencies} ownerHandle="coreschke" />);
 
-      await user.selectOptions(screen.getByTestId('dossier-sort'), 'aggression');
+      await user.click(screen.getByTestId('dossier-sort-aggression'));
 
       const cards = screen.getAllByTestId(/^dossier-card-/);
       expect(cards[0]).toHaveAttribute('data-testid', 'dossier-card-1'); // owner still pinned first
@@ -166,7 +201,7 @@ describe('RosterTracker', () => {
       ];
       render(<RosterTracker teams={teams} tendencies={tendencies} ownerHandle={null} />);
 
-      await user.selectOptions(screen.getByTestId('dossier-sort'), 'buys');
+      await user.click(screen.getByTestId('dossier-sort-buys'));
 
       const cards = screen.getAllByTestId(/^dossier-card-/);
       expect(cards[0]).toHaveAttribute('data-testid', 'dossier-card-3'); // 22 buys before 5
@@ -187,12 +222,70 @@ describe('RosterTracker', () => {
       ];
       render(<RosterTracker teams={teams} tendencies={tendencies} ownerHandle={null} />);
 
-      await user.selectOptions(screen.getByTestId('dossier-sort'), 'age');
+      await user.click(screen.getByTestId('dossier-sort-age'));
 
       const cards = screen.getAllByTestId(/^dossier-card-/);
       expect(cards[0]).toHaveAttribute('data-testid', 'dossier-card-3'); // 23.8, youngest
       expect(cards[1]).toHaveAttribute('data-testid', 'dossier-card-2'); // 28.1
       expect(cards[2]).toHaveAttribute('data-testid', 'dossier-card-4'); // unknown, last
+    });
+
+    it('unknown age still sinks to the bottom when reversed to oldest-first', async () => {
+      const user = userEvent.setup();
+      const teams = [
+        makeTeam({ id: 2, handle: 'older', displayName: 'Older', avgAge: 28.1 }),
+        makeTeam({ id: 3, handle: 'younger', displayName: 'Younger', avgAge: 23.8 }),
+        makeTeam({ id: 4, handle: 'unknown', displayName: 'Unknown', avgAge: null }),
+      ];
+      const tendencies = [
+        makeTendency({ teamId: 2, handle: 'older' }),
+        makeTendency({ teamId: 3, handle: 'younger' }),
+        makeTendency({ teamId: 4, handle: 'unknown' }),
+      ];
+      render(<RosterTracker teams={teams} tendencies={tendencies} ownerHandle={null} />);
+
+      // Age's default is ascending — one click on it (already active by clicking once) reverses
+      // to descending (oldest first). Click Age first to activate, then again to reverse.
+      await user.click(screen.getByTestId('dossier-sort-age'));
+      await user.click(screen.getByTestId('dossier-sort-age'));
+
+      const cards = screen.getAllByTestId(/^dossier-card-/);
+      expect(cards[0]).toHaveAttribute('data-testid', 'dossier-card-2'); // 28.1, oldest
+      expect(cards[1]).toHaveAttribute('data-testid', 'dossier-card-3'); // 23.8
+      expect(cards[2]).toHaveAttribute('data-testid', 'dossier-card-4'); // unknown, still last
+    });
+
+    it('sorts by position lean, spend share descending by default', async () => {
+      const user = userEvent.setup();
+      const teams = [
+        makeTeam({ id: 2, handle: 'lightRB', displayName: 'Light RB' }),
+        makeTeam({ id: 3, handle: 'heavyRB', displayName: 'Heavy RB' }),
+      ];
+      const tendencies = [
+        makeTendency({
+          teamId: 2,
+          handle: 'lightRB',
+          positions: {
+            ...makeTendency().positions,
+            RB: { ...makeTendency().positions.RB, spendShare: 0.2 },
+          },
+        }),
+        makeTendency({
+          teamId: 3,
+          handle: 'heavyRB',
+          positions: {
+            ...makeTendency().positions,
+            RB: { ...makeTendency().positions.RB, spendShare: 0.7 },
+          },
+        }),
+      ];
+      render(<RosterTracker teams={teams} tendencies={tendencies} ownerHandle={null} />);
+
+      await user.click(screen.getByTestId('dossier-sort-RB'));
+
+      const cards = screen.getAllByTestId(/^dossier-card-/);
+      expect(cards[0]).toHaveAttribute('data-testid', 'dossier-card-3'); // heavier RB share first
+      expect(cards[1]).toHaveAttribute('data-testid', 'dossier-card-2');
     });
   });
 

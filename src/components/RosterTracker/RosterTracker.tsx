@@ -94,7 +94,7 @@ export default function RosterTracker({ teams, tendencies, ownerHandle }: Roster
         </section>
       </div>
 
-      <div className="mx-auto flex max-w-2xl flex-col gap-3 px-5 pt-3 pb-10">
+      <div className="grid grid-cols-1 gap-3 px-5 pt-3 pb-10 sm:grid-cols-2 xl:grid-cols-3">
         {ordered.map(({ team, tendency }) => (
           <DossierCard
             key={team.id}

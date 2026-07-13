@@ -39,8 +39,6 @@ export interface Player {
     direction: 'up' | 'down' | 'flat';
   };
   valueSource?: string;
-  strategyLens?: 'rebuild' | 'balanced' | 'contend';
-  strategyAdjustment?: number;
 }
 
 export interface TeamStats {

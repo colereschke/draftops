@@ -28,7 +28,7 @@ describe('mapPlayersWithDraftValues', () => {
           projectionAuctionValue: 170,
           fallbackAuctionValue: 120,
           activeAuctionValue: 170,
-          valueSource: 'projection',
+          valueSource: 'projection_adjusted_market',
           updatedAt: new Date('2026-07-08T12:00:00.000Z'),
         },
       ],
@@ -39,7 +39,7 @@ describe('mapPlayersWithDraftValues', () => {
     expect(player.ceiling).toBe(196);
     expect(player.baseBudget).toBe(120);
     expect(player.projectionAuctionValue).toBe(170);
-    expect(player.valueSource).toBe('projection');
+    expect(player.valueSource).toBe('projection_adjusted_market');
     expect(player.projectedPoints).toBe(410.5);
     expect(player.vor).toBe(150.4);
   });
@@ -78,5 +78,41 @@ describe('mapPlayersWithDraftValues', () => {
     expect(player.projectionAuctionValue).toBe(113);
     expect(player.projectedPoints).toBe(410.5);
     expect(player.vor).toBe(150.4);
+  });
+
+  it('ignores stale projection rows from older projection sources', () => {
+    const [player] = mapPlayersWithDraftValues(
+      [PLAYER],
+      [
+        {
+          playerId: 10,
+          projectionSourceId: 2,
+          projectedPoints: 410.5,
+          replacementPoints: 260.1,
+          vor: 150.4,
+          projectionAuctionValue: 113,
+          fallbackAuctionValue: 120,
+          activeAuctionValue: 150,
+          valueSource: 'projection_adjusted_market',
+          updatedAt: new Date('2026-07-08T12:00:00.000Z'),
+        },
+        {
+          playerId: 11,
+          projectionSourceId: 3,
+          projectedPoints: 250,
+          replacementPoints: 180,
+          vor: 70,
+          projectionAuctionValue: 80,
+          fallbackAuctionValue: 90,
+          activeAuctionValue: 95,
+          valueSource: 'projection_adjusted_market',
+          updatedAt: new Date('2026-07-09T12:00:00.000Z'),
+        },
+      ],
+    );
+
+    expect(player.budget).toBe(120);
+    expect(player.valueSource).toBe('fallback');
+    expect(player.projectionAuctionValue).toBeUndefined();
   });
 });

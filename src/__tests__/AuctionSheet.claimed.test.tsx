@@ -233,8 +233,7 @@ describe('AuctionSheet with claimed bids', () => {
     await waitFor(() => expect(screen.getByText('Justin Jefferson')).toBeInTheDocument());
   });
 
-  it('adjusts visible targets when the strategy lens changes', async () => {
-    const user = userEvent.setup();
+  it('does not render strategy lens controls while lens valuation is deferred', () => {
     renderSheet({
       players: [
         {
@@ -248,13 +247,10 @@ describe('AuctionSheet with claimed bids', () => {
     });
 
     expect(screen.getByText('$120')).toBeInTheDocument();
-
-    await user.click(screen.getByRole('button', { name: /contend/i }));
-
-    expect(screen.getByText('$153')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /contend/i })).not.toBeInTheDocument();
   });
 
-  it('passes strategy-adjusted active value into the bid modal', async () => {
+  it('passes the active draft-board value into the bid modal', async () => {
     const user = userEvent.setup();
     renderSheet({
       players: [
@@ -268,11 +264,10 @@ describe('AuctionSheet with claimed bids', () => {
       ],
     });
 
-    await user.click(screen.getByRole('button', { name: /contend/i }));
     await user.click(screen.getByText('Josh Allen'));
 
     expect(screen.getByTestId('bid-price-context-dynasty')).toHaveTextContent('$120');
     expect(screen.getByTestId('bid-price-context-projection')).toHaveTextContent('$180');
-    expect(screen.getByTestId('bid-price-context-active')).toHaveTextContent('$153');
+    expect(screen.getByTestId('bid-price-context-active')).toHaveTextContent('$120');
   });
 });

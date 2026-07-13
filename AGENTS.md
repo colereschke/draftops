@@ -159,17 +159,48 @@ Signature design element: 3px left border on each player row in their position a
 
 ## Player Data & Valuation
 
-Values come from `src/data/players.ts`. All processing is done at build time — the exported `players` array is ready to use.
+Values start in `src/data/players.ts`, but the surfaced auction target is now a layered,
+draft-specific value.
 
-Key logic:
+Base seed logic:
 
 - Source: `2QBAuction` column from the FantasyCalc CSV (Superflex format, $200 budget)
 - Scale: `× 5` to convert to $1,000 budget
-- TE premium: `× 1.18` on all TE values (extra PPR + first down scoring)
+- Legacy TE premium seed: `× 1.18` on all TE values (extra PPR + first down scoring)
 - 2027 kicker pick packages: one entry per team (kicker name maps to manager handle); all hardcoded to `budget=109, ceiling=131, floor=75`
 - 2028 pick package: hardcoded to `budget=72, ceiling=86, floor=50`
 - `ceiling = round(budget × 1.15)`, `floor = max(5, round(budget × 0.87))`
 - PKG values live in a `PKG_VALUES` record keyed by player name (kicker name for 2027, `'2028 Pick Package'` for 2028)
+
+Draft-specific fallback values:
+
+- `createDraft` runs `adjustPlayerValues(BASE_PLAYERS, settings)` before inserting `Player` rows.
+- `valueAdjustment.ts` computes position-level scoring multipliers, lineup/scarcity multipliers,
+  and a concentration factor based on total starters (`teamCount × startingLineup.length`).
+- Stored `Player.budget`/`ceiling`/`floor` are the adjusted fallback values for that draft.
+- Stored `Player.baseBudget`/`baseCeiling`/`baseFloor` preserve the base seed values.
+- PICK/PKG rows pass through the adjustment unchanged.
+
+Projection-shaped active values:
+
+- Projection source data lives in `ProjectionSource` and `PlayerProjection`.
+- `createDraft` resolves ETR players to Sleeper IDs from
+  `data/generated/etr_sleeper_matches.csv`, seeds adjusted fallback players, and applies
+  projection values inside the same transaction.
+- Draft creation fails loudly, with no partial draft persisted, if no usable projection source
+  exists or no draft players can be joined to current projections.
+- The CLI `pnpm tsx prisma/apply-projection-values.ts --draft-id <draft-id>` remains available to
+  import generated CSV data into Postgres and reapply values to an existing draft.
+- Projection application resolves Sleeper IDs, scores projections under both baseline and draft
+  scoring settings, stores raw projection/VOR context, and writes `DraftPlayerValue` rows.
+- The active auction target uses `DraftPlayerValue.activeAuctionValue` only for players with a row
+  in the active projection source.
+- `activeAuctionValue` is anchored to `Player.budget`; projections only shape the market value via
+  relative scoring lift within position/value buckets. It is not raw VOR dollars.
+- Players without a current projection row, including free agents or missing projection matches,
+  fall back to `Player.budget`.
+- Projection VOR/projection auction values are stored for context and future roster-strength work,
+  but the strategy lens is intentionally deferred to a follow-up PR.
 
 ## League-Specific Rules
 

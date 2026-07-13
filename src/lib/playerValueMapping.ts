@@ -35,9 +35,12 @@ export function mapPlayersWithDraftValues(
   players: DbPlayerValueRow[],
   draftValues: DraftPlayerValueRow[],
 ): Player[] {
+  const activeProjectionSourceId = getActiveProjectionSourceId(draftValues);
   const valuesByPlayerId = new Map<number, DraftPlayerValueRow>();
 
-  for (const value of draftValues) {
+  for (const value of draftValues.filter((draftValue) =>
+    isSelectableDraftValue(draftValue, activeProjectionSourceId),
+  )) {
     const current = valuesByPlayerId.get(value.playerId);
     if (!current || compareDraftValueRows(value, current) < 0) {
       valuesByPlayerId.set(value.playerId, value);
@@ -100,6 +103,23 @@ function mapFallbackPlayer(player: DbPlayerValueRow): Player {
     futurePickAssetKind: normalizeFuturePickAssetKind(player.futurePickAssetKind ?? null),
     valueSource: 'fallback',
   };
+}
+
+function getActiveProjectionSourceId(draftValues: DraftPlayerValueRow[]): number | null {
+  const projectionValues = draftValues.filter((value) => value.projectionSourceId !== null);
+  if (projectionValues.length === 0) return null;
+
+  return projectionValues.reduce((latest, value) =>
+    value.updatedAt > latest.updatedAt ? value : latest,
+  ).projectionSourceId;
+}
+
+function isSelectableDraftValue(
+  draftValue: DraftPlayerValueRow,
+  activeProjectionSourceId: number | null,
+): boolean {
+  if (draftValue.projectionSourceId === null) return true;
+  return draftValue.projectionSourceId === activeProjectionSourceId;
 }
 
 function normalizeFuturePickAssetKind(value: string | null): FuturePickAssetKind | null {

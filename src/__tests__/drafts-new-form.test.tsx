@@ -305,4 +305,12 @@ describe('player pool source', () => {
       expect(createDraft).toHaveBeenCalledWith(expect.objectContaining({ playerSource: 'custom' }));
     });
   });
+
+  it('shows a visible fallback when getRankingSummary rejects, without blocking the form', async () => {
+    mockGetRankingSummary.mockRejectedValue(new Error('Unauthorized'));
+    render(<NewDraftPage />);
+
+    expect(await screen.findByTestId('ranking-summary-error')).toBeInTheDocument();
+    expect(screen.queryByTestId('player-source-custom')).not.toBeInTheDocument();
+  });
 });

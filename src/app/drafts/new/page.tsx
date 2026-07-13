@@ -53,12 +53,16 @@ export default function NewDraftPage() {
     ...DEFAULT_SCORING_SETTINGS,
   });
   const [rankingSummary, setRankingSummary] = useState<RankingSummary | null>(null);
+  const [rankingSummaryError, setRankingSummaryError] = useState(false);
   const [playerSource, setPlayerSource] = useState<'etr' | 'custom'>('etr');
 
   useEffect(() => {
     getRankingSummary()
       .then(setRankingSummary)
-      .catch((err) => console.error('Failed to load ranking summary:', err));
+      .catch((err) => {
+        console.error('Failed to load ranking summary:', err);
+        setRankingSummaryError(true);
+      });
   }, []);
 
   function updateScoring<K extends keyof ScoringSettings>(key: K, value: ScoringSettings[K]) {
@@ -349,6 +353,22 @@ export default function NewDraftPage() {
             </label>
           </div>
         </div>
+
+        {rankingSummaryError && (
+          <p
+            data-testid="ranking-summary-error"
+            style={{
+              color: 'var(--age-aging)',
+              fontFamily: 'var(--font-barlow)',
+              fontSize: '0.8rem',
+              marginTop: '-0.5rem',
+              marginBottom: '1rem',
+            }}
+          >
+            Couldn&apos;t check for a custom ranking set — you can still create a draft with the ETR
+            default pool.
+          </p>
+        )}
 
         {rankingSummary && (
           <div

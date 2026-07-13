@@ -21,6 +21,14 @@ describe('RankingsUploadForm', () => {
     expect(screen.getByTestId('rankings-upload-button')).toHaveTextContent('Upload CSV');
   });
 
+  it('documents required and optional columns in the empty state', () => {
+    render(<RankingsUploadForm summary={null} />);
+    const legend = screen.getByTestId('rankings-column-legend');
+    expect(legend).toHaveTextContent('Player, Team');
+    expect(legend).toHaveTextContent('2QBAuction');
+    expect(screen.getByText(/SF\/TE Prem/)).toBeInTheDocument();
+  });
+
   it('shows the summary card when a ranking set exists', () => {
     render(
       <RankingsUploadForm

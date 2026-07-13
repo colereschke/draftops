@@ -15,6 +15,7 @@ const stats = (id: number, handle: string, buyingPower: number): TeamStats => ({
   rosterRemaining: 20,
   buyingPower,
   pkgCount: 0,
+  avgAge: null,
 });
 
 const pos = (position: AppetitePos, appetite: Appetite) => ({
@@ -171,5 +172,36 @@ describe('ThreatBoard', () => {
     await userEvent.click(pill);
     expect(screen.getByTestId('threat-pos-WR')).toHaveAttribute('aria-pressed', 'true');
     expect(screen.queryByTestId('threat-live-resync')).not.toBeInTheDocument();
+  });
+
+  it('renders a mobile card per team with rank, bid, appetite, and threat', () => {
+    render(
+      <ThreatBoard
+        teams={teams}
+        tendencies={tendencies}
+        livePosition="WR"
+        liveName="Puka Nacua"
+        ownerHandle="you"
+      />,
+    );
+    const cards = screen.getAllByTestId(/^threat-mobile-row-/);
+    expect(cards).toHaveLength(3);
+    expect(screen.getByTestId('threat-mobile-bid-rival_b')).toHaveStyle({
+      color: 'var(--age-young)',
+    });
+  });
+
+  it('keeps mobile cards in the same threat-ranked order as the table rows', () => {
+    render(
+      <ThreatBoard
+        teams={teams}
+        tendencies={tendencies}
+        livePosition="WR"
+        liveName="Puka Nacua"
+        ownerHandle="you"
+      />,
+    );
+    const cards = screen.getAllByTestId(/^threat-mobile-row-/);
+    expect(cards[0]).toHaveAttribute('data-testid', 'threat-mobile-row-rival_a');
   });
 });

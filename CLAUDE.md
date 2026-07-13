@@ -37,6 +37,7 @@ src/
 │   │   └── watchlist/route.ts           # POST/DELETE — add/remove from PlayerWatchlist
 │   ├── budget/page.tsx               # /budget — buying power view (server component)
 │   ├── nominate/page.tsx             # /nominate — nomination helper (server component)
+│   ├── rankings/page.tsx             # /rankings — upload + resolve a custom ranking set (server component, profile-level, not draft-scoped)
 │   ├── sign-in/page.tsx              # /sign-in — Discord OAuth sign-in page
 │   ├── teams/page.tsx                # /teams — team roster tracker (server component)
 │   ├── error.tsx                     # App-level error boundary
@@ -50,17 +51,24 @@ src/
 │   ├── BudgetPressure/               # Live threat board (ThreatBoard) — position selector + threat ranking (maxBid × revealed appetite) + 20s auto-refresh
 │   ├── NavBar/                       # Fixed header with nav links
 │   ├── NominationHelper/             # Nomination scorer + watchlist + in-auction sidebar
+│   ├── RankingsUpload/                # RankingsUploadForm (upload/re-upload + summary), ResolveUnmatchedList (cmdk search-and-pick for unmatched rows)
 │   └── RosterTracker/                # Manager dossier grid (DossierCard) — per-team scouting cards (lean/appetite/aggression), expandable grouped roster drawer
 ├── data/
-│   └── players.ts                    # ~267 ETR dynasty players — server-only seed source (NOT imported by client components)
+│   └── players.ts                    # ~267 ETR dynasty players — server-only seed source (NOT imported by client components); exports `players` (BASE_PLAYERS) + `PKG_PLAYERS` (pick-package subset)
 ├── lib/
-│   ├── actions.ts                    # Server actions: createDraft (seeds Player table w/ adjusted+base values), logBid, updateBid, deleteBid
+│   ├── actions.ts                    # Server actions: createDraft (seeds Player table w/ adjusted+base values; playerSource: 'etr'|'custom'), logBid, updateBid, deleteBid
 │   ├── budget.ts                     # computeTeamStats(teams, rosterSize) for /budget page
 │   ├── computeTeamStats.ts           # computeTeamStats(teams, players, rosterSize) for /teams page
+│   ├── csv.ts                        # parseCsv/parseCsvLine — shared quoted-field CSV parser (rankings upload + prisma/apply-projection-values.ts)
 │   ├── db.ts                         # Prisma singleton using PrismaPg adapter (pg Pool)
 │   ├── draft.ts                      # getDraft(userId, draftId) — auth-gated draft lookup
 │   ├── nominationScoring.ts          # computeNominationScores(..., targetRoster) — core nomination logic
 │   ├── posColors.ts                  # POS_COLORS map (bg, accent, badge, badgeText per position)
+│   ├── rankingsImport.ts             # parseRankingsCsv — validates + scales an uploaded ETR rankings CSV into ParsedRankingRow[]
+│   ├── rankings-actions.ts           # Server actions: uploadRankingsCsv, resolveRankingMatch, getRankingSummary (profile-level custom rankings)
+│   ├── scaleRankingValue.ts          # budget/ceiling/floor scaling formula (×5, TE premium) — shared by players.ts and rankingsImport.ts
+│   ├── sleeperMatch.ts               # matchToSleeper — name/team/position matching against SleeperPlayer, with manual-alias fallback
+│   ├── sleeperNormalize.ts           # normalizeName/normalizeTeam/normalizePosition — TS port of the Python projection-pipeline normalizer
 │   ├── tendencies.ts                 # computeTendencies — per-manager behavioral engine (lean/appetite/aggression); feeds /teams + /budget
 │   ├── tendencies.constants.ts       # tunable thresholds + appetite multipliers for the tendency engine (backend-only)
 │   ├── threat.ts                     # maxBid, appetiteMultiplier, threatScore — Budget Pressure threat ranking
@@ -74,11 +82,12 @@ src/
                                       # TeamStats, AuctionResultEntry, RosterEntry, TeamWithRoster, ClaimedBid, LeagueTeam
 middleware.ts                         # Auth.js middleware — redirects unauthenticated users to /sign-in
 prisma/
-├── schema.prisma                     # Draft + Team + AuctionResult + PlayerWatchlist + NominatedPlayer + Player
+├── schema.prisma                     # Draft + Team + AuctionResult + PlayerWatchlist + NominatedPlayer + Player + SleeperPlayer + UserRankingSet + UserRankingPlayer
 ├── apply-projection-values.ts        # Joins generated projections to draft Players and stores VOR outputs
 ├── seed.ts                           # Upserts default draft + 12 teams (idempotent)
 ├── seed-players.ts                   # Full-seed script: seeds Player rows for drafts with zero players (skips drafts that already have any)
 ├── sync-players.ts                   # Backfill script: inserts src/data/players.ts entries missing (by name) from each draft's Player table; idempotent, safe to re-run after adding new players
+├── sync-sleeper-players.ts           # Upserts SleeperPlayer identity rows from data/generated/normalized_sleeper_players.csv (gitignored, produced by the Python projection pipeline — regenerate via that pipeline, then re-run this script; idempotent)
 └── migrations/                       # Postgres migration history
 prisma.config.ts                      # Prisma v7 config — DATABASE_URL from env
 existing_project_docs/                # Original reference files — do not delete
@@ -93,12 +102,13 @@ existing_project_docs/                # Original reference files — do not dele
 | `/teams`    | Manager dossier board — per-team scouting cards reading revealed buying behavior (lean, per-position overpay/bargain appetite, aggression); expand for grouped roster with per-position subtotals |
 | `/budget`   | Live threat board — position-anchored (auto-selects the live nomination, manual override); ranks teams by max bid × revealed appetite; keeps Room Liquidity + Low Power metrics; 20s auto-refresh |
 | `/nominate` | Nomination helper — ranks available players by rival demand score; personal watchlist sidebar                                                                                                     |
+| `/rankings` | Upload/re-upload a custom rankings CSV; resolve unmatched Sleeper rows via search. Profile-level (one active set per user), not draft-scoped — linked from the NavBar profile menu                |
 
 All pages are server components that fetch from Prisma directly and pass data down to `'use client'` components. Every route except `/sign-in` and the Auth.js API route is protected by `middleware.ts`.
 
 ## Database Schema
 
-Five models — all data scoped to a `Draft`:
+Five draft-scoped models, plus three profile-level/global models supporting custom rankings:
 
 - `Draft` — top-level container. `ownerId` = Auth.js userId (Discord snowflake); `ownerTeamId` = which `Team` belongs to the owner (used by nomination scoring instead of the old hardcoded `'coreschke'` handle)
 - `Team` — managers within a draft; unique on `(handle, draftId)`
@@ -107,6 +117,8 @@ Five models — all data scoped to a `Draft`:
 - `NominatedPlayer` — players currently up for bidding; shown with a teal "LIVE" badge; auto-removed when a bid is logged via `logBid`; unique on `(playerName, draftId)`
 - `Player` — per-draft value row. Stores fallback ETR-derived values and optional Sleeper identity. Projection data and projection-derived values live in separate tables.
 - `ProjectionSource` / `PlayerProjection` / `DraftPlayerValue` — source metadata, normalized source projection stats, and draft-specific projection valuation outputs.
+- `SleeperPlayer` — global identity reference (name, normalizedName, team, pos, age; no valuation fields), synced from Sleeper via `prisma/sync-sleeper-players.ts`. Used to match uploaded rankings rows to a stable Sleeper ID.
+- `UserRankingSet` / `UserRankingPlayer` — a signed-in user's single active custom rankings upload (unique on `userId`) and its player rows (budget/ceiling/floor pre-scaled, `matchStatus`: `matched`/`manual`/`unmatched`/`n_a`). Seeds `Player` rows at draft creation when `createDraft` is called with `playerSource: 'custom'`; independent of any `Draft`.
 
 Derived values (computed at query time, not stored):
 
@@ -262,23 +274,24 @@ OWNER_DISCORD_ID=      # Your Discord user ID — seeds ownerId on the default d
 - `/teams` — Manager dossier grid: per-team scouting cards (lean/appetite/aggression + activity), no money on the face; expand for a position-grouped roster drawer with per-position spend + delta subtotals (players from DB)
 - `/budget` — Live threat board: position selector auto-selects the live nomination (manual override persists across the 20s refresh; a "Live: {pos} — jump" pill re-syncs when your override diverges from the current nomination — flagged pivot point); teams ranked by `maxBid × revealed appetite` for that position; Room Liquidity + Low Power secondary metrics
 - `/nominate` — Nomination helper that ranks available players by rival demand; personal watchlist persisted to DB; "Nom" button tracks players currently in auction; full server-component with auth gate (PR #20)
+- **Custom rankings upload (#7)** — profile-level, not per-draft: `/rankings` lets a signed-in user upload an ETR dynasty CSV export once (`src/lib/rankingsImport.ts` validates required columns, filters to QB/RB/WR/TE/Pick, scales values via `src/lib/scaleRankingValue.ts`, derives or reads `sfRank`), matched against a synced `SleeperPlayer` identity table (`src/lib/sleeperMatch.ts`/`sleeperNormalize.ts`, TS ports of the Python projection pipeline's matcher — run `pnpm tsx prisma/sync-sleeper-players.ts` to (re)populate `SleeperPlayer` from `data/generated/normalized_sleeper_players.csv`). Unmatched rows get a `cmdk`-based resolve-by-search UI (`ResolveUnmatchedList`). One active `UserRankingSet` per user (full replace on re-upload). At draft creation, `/drafts/new` shows a "Player Pool" selector (ETR default vs. custom) only when a set exists; `createDraft({ playerSource: 'custom' })` seeds `Player` from the set's rows + the existing hardcoded `PKG_PLAYERS` instead of the bundled ETR pool. No replace-on-an-existing-draft flow — a ranking set only seeds new drafts. Spec: `docs/superpowers/specs/2026-07-10-custom-rankings-upload-design.md`.
 
 ## Player Data
 
-Source: ETR dynasty rankings CSV (~267 players). Values scaled ×5 for $1,000 budget; TE premium applied post-import. Lives in `src/data/players.ts` as server-only seed data — **never import this in client components**. Will be replaced by custom rankings upload (#7) when that lands.
+Source: ETR dynasty rankings CSV (~267 players). Values scaled ×5 for $1,000 budget; TE premium applied post-import. Lives in `src/data/players.ts` as server-only seed data — **never import this in client components**. Users can now upload their own rankings via `/rankings` (#7, above) as an alternative to this default pool at draft creation.
 
 `ScoringSettings` is a `type` alias (not `interface`) — Prisma's `InputJsonValue` requires implicit string index signature that only type aliases provide.
 
 ## What's Next
 
-**Deploy Milestone** (Vercel + Neon) — #5a League Settings + Player Table is done (PR #20). `prisma migrate deploy` is already wired into the Vercel build command — Neon migration applies on deploy. Run `pnpm tsx prisma/seed-players.ts` against prod DB after PR #20 merges (before deploying) to backfill existing drafts.
+**Deploy Milestone** (Vercel + Neon) — #5a League Settings + Player Table is done (PR #20). `prisma migrate deploy` is already wired into the Vercel build command — Neon migration applies on deploy. Run `pnpm tsx prisma/seed-players.ts` against prod DB after PR #20 merges (before deploying) to backfill existing drafts. After #7 merges, also run `pnpm tsx prisma/sync-sleeper-players.ts` against prod DB (needs `data/generated/normalized_sleeper_players.csv` regenerated locally first, via the Python projection pipeline — that file is gitignored, not deployed) so `SleeperPlayer` is populated before any user uploads custom rankings.
 
 **Longer term** (see `ROADMAP.md`):
 
 - #5b Value adjustment algorithm — **Phase 1 (position-level) done**: settings→value plumbing + scoring/scarcity/concentration multipliers + `rosterSize`/`targetRoster` rewiring. Spec: `docs/superpowers/specs/2026-07-06-value-adjustment-algorithm-design.md`. **Phase 2** (fast-follow) layers per-player Mike Clay projection dual-scoring on top, adds first-down historical rates, and swaps the concentration median pivot for value-over-replacement.
 - #5c Sleeper league import — auto-populate draft settings from a Sleeper league ID
 - #6 UI redesign (Linear/Vercel aesthetic, shadcn/ui shortlisted) — after deploy milestone
-- #7 Custom rankings upload CSV — adds upload UI on top of the Player model from #5a
+- #7 Custom rankings upload CSV — **done**, see What's Built above. Deferred: kicker/PKG naming + team-assignment UI (tracked under #8), re-upload/replace flow on an already-created draft, multiple named ranking sets per user, flexible CSV column mapping (headers are locked to the ETR export format).
 
 ## Global Rules
 

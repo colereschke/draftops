@@ -186,3 +186,42 @@ model DraftPlayerValue {
   @@index([draftId])
   @@index([playerId])
 }
+
+model SleeperPlayer {
+  id             String   @id
+  name           String
+  normalizedName String
+  team           String
+  pos            String
+  age            Float?
+  updatedAt      DateTime @updatedAt
+
+  @@index([normalizedName])
+}
+
+model UserRankingSet {
+  id         Int      @id @default(autoincrement())
+  userId     String   @unique
+  fileName   String?
+  uploadedAt DateTime @default(now())
+  players    UserRankingPlayer[]
+}
+
+model UserRankingPlayer {
+  id           Int            @id @default(autoincrement())
+  rankingSetId Int
+  rankingSet   UserRankingSet @relation(fields: [rankingSetId], references: [id], onDelete: Cascade)
+  name         String
+  team         String
+  pos          String
+  age          Float?
+  sfRank       Int
+  budget       Int
+  ceiling      Int
+  floor        Int
+  notes        String         @default("")
+  sleeperId    String?
+  matchStatus  String         @default("unmatched")
+
+  @@index([rankingSetId])
+}

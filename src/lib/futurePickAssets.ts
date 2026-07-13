@@ -9,15 +9,27 @@ const ROUND_BASELINES: Record<1 | 2 | 3, { budget: number; ceiling: number; floo
   3: { budget: 5, ceiling: 6, floor: 5 },
 };
 
+interface PickBaseline {
+  budget: number;
+  ceiling: number;
+  floor: number;
+}
+
 interface FuturePickTeamInput {
   handle: string;
   displayName: string | null;
+}
+
+export interface FuturePickBaselines {
+  package?: PickBaseline;
+  rounds?: Partial<Record<1 | 2 | 3, PickBaseline>>;
 }
 
 interface GenerateFuturePickAssetsInput {
   teams: FuturePickTeamInput[];
   year: number;
   startingRank: number;
+  baselines?: FuturePickBaselines;
 }
 
 export function isFuturePickAuctionMode(value: unknown): value is FuturePickAuctionMode {
@@ -47,7 +59,18 @@ export function generateFuturePickAssets({
   teams,
   year,
   startingRank,
+  baselines,
 }: GenerateFuturePickAssetsInput): Player[] {
+  const roundBaselines = {
+    1: baselines?.rounds?.[1] ?? ROUND_BASELINES[1],
+    2: baselines?.rounds?.[2] ?? ROUND_BASELINES[2],
+    3: baselines?.rounds?.[3] ?? ROUND_BASELINES[3],
+  } satisfies Record<1 | 2 | 3, PickBaseline>;
+  const hasRoundOverrides = Object.keys(baselines?.rounds ?? {}).length > 0;
+  const packageBaseline =
+    baselines?.package ??
+    (hasRoundOverrides ? sumPackageBaseline(roundBaselines) : PACKAGE_BASELINE);
+
   return teams.flatMap((team, teamIndex) => {
     const rankBase = startingRank + teamIndex * 4;
     const packageAsset: Player = {
@@ -56,13 +79,13 @@ export function generateFuturePickAssets({
       pos: 'PKG',
       age: null,
       sfRank: rankBase,
-      budget: PACKAGE_BASELINE.budget,
-      ceiling: PACKAGE_BASELINE.ceiling,
-      floor: PACKAGE_BASELINE.floor,
+      budget: packageBaseline.budget,
+      ceiling: packageBaseline.ceiling,
+      floor: packageBaseline.floor,
       notes: `${team.handle}'s ${year} 1st+2nd+3rd`,
-      baseBudget: PACKAGE_BASELINE.budget,
-      baseCeiling: PACKAGE_BASELINE.ceiling,
-      baseFloor: PACKAGE_BASELINE.floor,
+      baseBudget: packageBaseline.budget,
+      baseCeiling: packageBaseline.ceiling,
+      baseFloor: packageBaseline.floor,
       futurePickYear: year,
       futurePickRound: null,
       futurePickOriginHandle: team.handle,
@@ -70,7 +93,7 @@ export function generateFuturePickAssets({
     };
 
     const picks: Player[] = ([1, 2, 3] as const).map((round) => {
-      const baseline = ROUND_BASELINES[round];
+      const baseline = roundBaselines[round];
       return {
         player: `${team.handle} ${year} ${ordinal(round)}`,
         team: team.handle,
@@ -95,6 +118,29 @@ export function generateFuturePickAssets({
   });
 }
 
+export function inferFuturePickBaselines(players: Player[]): FuturePickBaselines | undefined {
+  const packageBaseline = players.find((player) => player.pos === 'PKG');
+  const rounds = ([1, 2, 3] as const).reduce<Partial<Record<1 | 2 | 3, PickBaseline>>>(
+    (acc, round) => {
+      const roundPick = players.find(
+        (player) =>
+          player.pos === 'PICK' &&
+          (player.futurePickRound === round || hasRoundInName(player.player, round)),
+      );
+      if (roundPick) acc[round] = toPickBaseline(roundPick);
+      return acc;
+    },
+    {},
+  );
+
+  if (!packageBaseline && Object.keys(rounds).length === 0) return undefined;
+
+  return {
+    package: packageBaseline ? toPickBaseline(packageBaseline) : undefined,
+    rounds,
+  };
+}
+
 export function filterFuturePickAssetsForMode(
   players: Player[],
   mode: FuturePickAuctionMode,
@@ -114,6 +160,27 @@ export function excludeStaticFuturePickRows(players: Player[]): Player[] {
 
 function isStaticFuturePickRow(player: Player): boolean {
   return !player.futurePickAssetKind && (player.pos === 'PKG' || player.pos === 'PICK');
+}
+
+function sumPackageBaseline(rounds: Record<1 | 2 | 3, PickBaseline>): PickBaseline {
+  const budget = rounds[1].budget + rounds[2].budget + rounds[3].budget;
+  return {
+    budget,
+    ceiling: Math.round(budget * 1.15),
+    floor: Math.max(5, Math.round(budget * 0.87)),
+  };
+}
+
+function toPickBaseline(player: Player): PickBaseline {
+  return {
+    budget: player.budget,
+    ceiling: player.ceiling,
+    floor: player.floor,
+  };
+}
+
+function hasRoundInName(name: string, round: 1 | 2 | 3): boolean {
+  return name.toLowerCase().includes(ordinal(round));
 }
 
 function ordinal(round: 1 | 2 | 3): string {

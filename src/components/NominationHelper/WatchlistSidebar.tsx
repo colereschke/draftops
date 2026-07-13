@@ -5,6 +5,7 @@ import { X } from 'lucide-react';
 import type { Player } from '@/types';
 import { POS_COLORS } from '@/lib/posColors';
 import { Command, CommandInput, CommandList, CommandItem } from '@/components/ui/command';
+import { normalizeName } from '@/lib/sleeperNormalize';
 
 interface WatchlistSidebarProps {
   players: Player[];
@@ -43,13 +44,14 @@ export default function WatchlistSidebar({
 
   const searchResults = useMemo(() => {
     if (!search.trim()) return [];
-    const q = search.toLowerCase();
+    const q = normalizeName(search);
+    if (!q) return [];
     return players
       .filter(
         (p) =>
           !wonNames.has(p.player) && !watchlistSet.has(p.player) && !nominatedSet.has(p.player),
       )
-      .filter((p) => p.player.toLowerCase().includes(q) || p.team.toLowerCase().includes(q))
+      .filter((p) => normalizeName(p.player).includes(q) || p.team.toLowerCase().includes(q))
       .slice(0, 8);
   }, [search, players, wonNames, watchlistSet, nominatedSet]);
 

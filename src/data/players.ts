@@ -1,4 +1,5 @@
 import type { Player, Position } from '@/types';
+import { scaleRankingValue } from '@/lib/scaleRankingValue';
 
 // RAW tuple format: [player, team, pos, age, sfRank, val2QB, notes]
 type RawEntry = [string, string, string, number | null, number, number, string];
@@ -401,13 +402,7 @@ const RAW: RawEntry[] = [
   ['Ben Sinnott', 'WFT', 'TE', 24.0, 330, 0, ''],
 ];
 
-const SCALE = 5;
-const TE_PREMIUM = 1.18;
-
 export const players: Player[] = RAW.map(([player, team, pos, age, sfRank, val2QB, notes]) => {
-  let base = Math.max(5, Math.round(val2QB * SCALE));
-  if (pos === 'TE') base = Math.round(base * TE_PREMIUM);
-  const ceiling = Math.round(base * 1.15);
-  const floor = Math.max(5, Math.round(base * 0.87));
-  return { player, team, pos: pos as Position, age, sfRank, budget: base, ceiling, floor, notes };
+  const scaled = scaleRankingValue(pos as Position, val2QB);
+  return { player, team, pos: pos as Position, age, sfRank, ...scaled, notes };
 });

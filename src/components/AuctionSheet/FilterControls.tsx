@@ -49,7 +49,7 @@ export default function FilterControls({
 
   return (
     <>
-      <div className="flex flex-wrap items-center gap-2.5 border-b border-border-subtle bg-card px-5 py-3">
+      <div className="flex flex-col gap-2.5 border-b border-border-subtle bg-card px-5 py-3 md:flex-row md:flex-wrap md:items-center">
         <ToggleGroup
           value={[posFilter]}
           onValueChange={(vals) =>
@@ -85,63 +85,65 @@ export default function FilterControls({
           value={search}
           onChange={(e) => onSearchChange(e.target.value)}
           placeholder="Search player or team..."
-          className="w-[210px] rounded-md bg-background text-[12px] focus-visible:border-border focus-visible:ring-1 focus-visible:ring-border"
+          className="w-full rounded-md bg-background text-[12px] focus-visible:border-border focus-visible:ring-1 focus-visible:ring-border md:w-[210px]"
         />
 
-        <div className="flex items-center gap-1.5">
-          <span className="font-label text-[10px] tracking-[1.5px] text-muted-foreground uppercase">
-            Strategy
-          </span>
-          <ToggleGroup
-            value={[strategyLens]}
-            onValueChange={(vals) =>
-              onStrategyLensChange((vals[0] as StrategyLens | undefined) ?? 'rebuild')
-            }
-            className="gap-[3px]"
+        <div className="flex flex-wrap items-center gap-2.5 md:contents">
+          <div className="flex items-center gap-1.5">
+            <span className="font-label text-[10px] tracking-[1.5px] text-muted-foreground uppercase">
+              Strategy
+            </span>
+            <ToggleGroup
+              value={[strategyLens]}
+              onValueChange={(vals) =>
+                onStrategyLensChange((vals[0] as StrategyLens | undefined) ?? 'rebuild')
+              }
+              className="gap-[3px]"
+            >
+              {STRATEGY_LENSES.map((lens) => {
+                const active = lens.value === strategyLens;
+                return (
+                  <ToggleGroupItem
+                    key={lens.value}
+                    value={lens.value}
+                    className="font-label h-8 rounded-md border border-border bg-background px-2.5 text-[11px] font-semibold tracking-wide text-muted-foreground hover:bg-accent hover:text-foreground"
+                    style={
+                      active
+                        ? {
+                            borderColor: 'var(--text-secondary)',
+                            background: 'var(--accent)',
+                            color: 'var(--text-primary)',
+                          }
+                        : undefined
+                    }
+                  >
+                    {lens.label}
+                  </ToggleGroupItem>
+                );
+              })}
+            </ToggleGroup>
+          </div>
+
+          <Toggle
+            pressed={showNotes}
+            onPressedChange={onShowNotesChange}
+            variant="outline"
+            className="font-label h-8 rounded-md bg-background text-[11px] font-bold tracking-wide uppercase"
           >
-            {STRATEGY_LENSES.map((lens) => {
-              const active = lens.value === strategyLens;
-              return (
-                <ToggleGroupItem
-                  key={lens.value}
-                  value={lens.value}
-                  className="font-label h-8 rounded-md border border-border bg-background px-2.5 text-[11px] font-semibold tracking-wide text-muted-foreground hover:bg-accent hover:text-foreground"
-                  style={
-                    active
-                      ? {
-                          borderColor: 'var(--text-secondary)',
-                          background: 'var(--accent)',
-                          color: 'var(--text-primary)',
-                        }
-                      : undefined
-                  }
-                >
-                  {lens.label}
-                </ToggleGroupItem>
-              );
-            })}
-          </ToggleGroup>
+            {showNotes ? 'Hide notes' : 'Show notes'}
+          </Toggle>
+
+          <Toggle
+            pressed={availableOnly}
+            onPressedChange={onAvailableOnlyChange}
+            variant="outline"
+            className="font-label h-8 rounded-md bg-background text-[11px] font-bold tracking-wide uppercase"
+          >
+            Available only
+          </Toggle>
         </div>
 
-        <Toggle
-          pressed={showNotes}
-          onPressedChange={onShowNotesChange}
-          variant="outline"
-          className="font-label h-8 rounded-md bg-background text-[11px] font-bold tracking-wide uppercase"
-        >
-          {showNotes ? 'Hide notes' : 'Show notes'}
-        </Toggle>
-
-        <Toggle
-          pressed={availableOnly}
-          onPressedChange={onAvailableOnlyChange}
-          variant="outline"
-          className="font-label h-8 rounded-md bg-background text-[11px] font-bold tracking-wide uppercase"
-        >
-          Available only
-        </Toggle>
-
-        <div className="ml-auto font-mono text-[11px] text-muted-foreground tabular-nums">
+        <div className="font-mono text-[11px] text-muted-foreground tabular-nums md:ml-auto">
           {resultCount} players shown
         </div>
       </div>

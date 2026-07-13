@@ -64,6 +64,36 @@ describe('future pick asset generation', () => {
     );
   });
 
+  it('uses explicit ranking pick values as baselines when provided', () => {
+    const assets = generateFuturePickAssets({
+      teams,
+      year: 2027,
+      startingRank: 900,
+      baselines: {
+        rounds: {
+          1: { budget: 90, ceiling: 104, floor: 78 },
+          2: { budget: 22, ceiling: 25, floor: 19 },
+          3: { budget: 8, ceiling: 9, floor: 7 },
+        },
+      },
+    });
+
+    expect(assets.find((asset) => asset.player === "coreschke's 2027 package")).toMatchObject({
+      budget: 120,
+      ceiling: 138,
+      floor: 104,
+      baseBudget: 120,
+      baseCeiling: 138,
+      baseFloor: 104,
+    });
+    expect(assets.find((asset) => asset.player === 'coreschke 2027 1st')).toMatchObject({
+      budget: 90,
+      ceiling: 104,
+      floor: 78,
+      baseBudget: 90,
+    });
+  });
+
   it.each([
     ['packages', ["coreschke's 2027 package", "chappy72's 2027 package"]],
     [

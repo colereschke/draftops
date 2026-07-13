@@ -151,3 +151,111 @@ SELECT
     "draftId"
 FROM generated_assets
 ON CONFLICT (name, "draftId") DO NOTHING;
+
+-- Move completed/live legacy kicker-package references onto the generated owner-labeled
+-- package rows so existing wins remain claimed after legacy static rows are hidden.
+WITH legacy_kicker_packages(kicker_name, origin_handle) AS (
+    VALUES
+        ('Cameron Dicker', 'chappy72'),
+        ('Tyler Loop', 'DrFunk'),
+        ('Brandon Aubrey', 'Henrizzler87'),
+        ('Jake Bates', 'CharlesChillFFB'),
+        ('Tyler Bass', 'moneymarkel2626'),
+        ('Cam Little', 'sam4bama'),
+        ('Nick Folk', 'mattveksler'),
+        ('Matt Gay', 'coreschke'),
+        ('Will Lutz', 'gaf2323'),
+        ('Harrison Butker', 'dark44'),
+        ('Jason Sanders', 'SlamminSam58'),
+        ('Chris Boswell', 'JHenny74')
+),
+legacy_package_targets AS (
+    SELECT
+        d.id AS "draftId",
+        l.kicker_name,
+        l.origin_handle,
+        CONCAT(l.origin_handle, '''s ', EXTRACT(YEAR FROM d."createdAt")::int + 1, ' package') AS package_name
+    FROM "Draft" d
+    JOIN legacy_kicker_packages l ON TRUE
+    JOIN "Team" t ON t."draftId" = d.id AND t.handle = l.origin_handle
+)
+UPDATE "AuctionResult" ar
+SET
+    player = target.package_name,
+    "nflTeam" = target.origin_handle
+FROM legacy_package_targets target
+WHERE ar."draftId" = target."draftId"
+  AND ar.player = target.kicker_name
+  AND ar.position = 'PKG';
+
+WITH legacy_kicker_packages(kicker_name, origin_handle) AS (
+    VALUES
+        ('Cameron Dicker', 'chappy72'),
+        ('Tyler Loop', 'DrFunk'),
+        ('Brandon Aubrey', 'Henrizzler87'),
+        ('Jake Bates', 'CharlesChillFFB'),
+        ('Tyler Bass', 'moneymarkel2626'),
+        ('Cam Little', 'sam4bama'),
+        ('Nick Folk', 'mattveksler'),
+        ('Matt Gay', 'coreschke'),
+        ('Will Lutz', 'gaf2323'),
+        ('Harrison Butker', 'dark44'),
+        ('Jason Sanders', 'SlamminSam58'),
+        ('Chris Boswell', 'JHenny74')
+),
+legacy_package_targets AS (
+    SELECT
+        d.id AS "draftId",
+        l.kicker_name,
+        CONCAT(l.origin_handle, '''s ', EXTRACT(YEAR FROM d."createdAt")::int + 1, ' package') AS package_name
+    FROM "Draft" d
+    JOIN legacy_kicker_packages l ON TRUE
+    JOIN "Team" t ON t."draftId" = d.id AND t.handle = l.origin_handle
+)
+UPDATE "NominatedPlayer" np
+SET "playerName" = target.package_name
+FROM legacy_package_targets target
+WHERE np."draftId" = target."draftId"
+  AND np."playerName" = target.kicker_name
+  AND NOT EXISTS (
+      SELECT 1
+      FROM "NominatedPlayer" existing
+      WHERE existing."draftId" = np."draftId"
+        AND existing."playerName" = target.package_name
+  );
+
+WITH legacy_kicker_packages(kicker_name, origin_handle) AS (
+    VALUES
+        ('Cameron Dicker', 'chappy72'),
+        ('Tyler Loop', 'DrFunk'),
+        ('Brandon Aubrey', 'Henrizzler87'),
+        ('Jake Bates', 'CharlesChillFFB'),
+        ('Tyler Bass', 'moneymarkel2626'),
+        ('Cam Little', 'sam4bama'),
+        ('Nick Folk', 'mattveksler'),
+        ('Matt Gay', 'coreschke'),
+        ('Will Lutz', 'gaf2323'),
+        ('Harrison Butker', 'dark44'),
+        ('Jason Sanders', 'SlamminSam58'),
+        ('Chris Boswell', 'JHenny74')
+),
+legacy_package_targets AS (
+    SELECT
+        d.id AS "draftId",
+        l.kicker_name,
+        CONCAT(l.origin_handle, '''s ', EXTRACT(YEAR FROM d."createdAt")::int + 1, ' package') AS package_name
+    FROM "Draft" d
+    JOIN legacy_kicker_packages l ON TRUE
+    JOIN "Team" t ON t."draftId" = d.id AND t.handle = l.origin_handle
+)
+UPDATE "PlayerWatchlist" pw
+SET "playerName" = target.package_name
+FROM legacy_package_targets target
+WHERE pw."draftId" = target."draftId"
+  AND pw."playerName" = target.kicker_name
+  AND NOT EXISTS (
+      SELECT 1
+      FROM "PlayerWatchlist" existing
+      WHERE existing."draftId" = pw."draftId"
+        AND existing."playerName" = target.package_name
+  );

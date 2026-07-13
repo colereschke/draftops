@@ -1,5 +1,6 @@
 import { config as dotenvConfig } from 'dotenv';
 import { readFileSync } from 'node:fs';
+import { parseCsv } from '@/lib/csv';
 import { calculateProjectedPoints, type ProjectionStats } from '@/lib/projectionScoring';
 import { calculateProjectionValues, type ProjectionValueInput } from '@/lib/projectionVor';
 import {
@@ -140,12 +141,12 @@ export function joinPlayersToProjectionRows(
 
 export function readEtrMatchRows(path: string): EtrMatchRow[] {
   return parseCsv(readFileSync(path, 'utf-8'))
-    .filter((row) => row.sleeper_id !== '')
+    .rows.filter((row) => row.sleeper_id !== '')
     .map((row) => ({ name: row.etr_name, sleeperId: row.sleeper_id }));
 }
 
 export function readProjectionRows(path: string, scoring: ScoringSettings): CsvProjectionRow[] {
-  return parseCsv(readFileSync(path, 'utf-8')).flatMap((row) => {
+  return parseCsv(readFileSync(path, 'utf-8')).rows.flatMap((row) => {
     const position = toVorPosition(row.position);
     if (!row.sleeper_id || !position) return [];
 
@@ -410,38 +411,6 @@ function parseArgs(argv: string[]): CliArgs {
     }
   }
   return args;
-}
-
-function parseCsv(contents: string): Record<string, string>[] {
-  const [headerLine, ...lines] = contents.trim().split(/\r?\n/);
-  const headers = parseCsvLine(headerLine);
-  return lines.map((line) => {
-    const values = parseCsvLine(line);
-    return Object.fromEntries(headers.map((header, index) => [header, values[index] ?? '']));
-  });
-}
-
-function parseCsvLine(line: string): string[] {
-  const values: string[] = [];
-  let value = '';
-  let quoted = false;
-  for (let i = 0; i < line.length; i += 1) {
-    const char = line[i];
-    const next = line[i + 1];
-    if (char === '"' && quoted && next === '"') {
-      value += '"';
-      i += 1;
-    } else if (char === '"') {
-      quoted = !quoted;
-    } else if (char === ',' && !quoted) {
-      values.push(value);
-      value = '';
-    } else {
-      value += char;
-    }
-  }
-  values.push(value);
-  return values;
 }
 
 function sourceKey(source: ProjectionSourceInput): string {

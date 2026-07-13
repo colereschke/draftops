@@ -62,6 +62,16 @@ describe('parseRankingsCsv', () => {
     expect(result.rows[0]).toMatchObject({ pos: 'PICK', age: null });
   });
 
+  it('matches Position case-insensitively', () => {
+    const csv = [HEADER, 'Josh Allen,BUF,qb,30.1,$51', "Ja'Marr Chase,CIN,Wr,26.3,$49"].join('\n');
+    const result = parseRankingsCsv(csv);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.rows).toHaveLength(2);
+    expect(result.rows.find((r) => r.name === 'Josh Allen')!.pos).toBe('QB');
+    expect(result.rows.find((r) => r.name === "Ja'Marr Chase")!.pos).toBe('WR');
+  });
+
   it('silently drops rows with an unsupported position', () => {
     const csv = [HEADER, 'Some Kicker,LAC,K,28,$0'].join('\n');
     const result = parseRankingsCsv(csv);

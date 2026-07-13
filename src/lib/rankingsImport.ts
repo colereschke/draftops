@@ -24,7 +24,7 @@ const POSITION_MAP: Record<string, Position> = {
   RB: 'RB',
   WR: 'WR',
   TE: 'TE',
-  Pick: 'PICK',
+  PICK: 'PICK',
 };
 
 interface KeptRow {
@@ -50,7 +50,7 @@ export function parseRankingsCsv(csvText: string): RankingsParseResult {
 
   rawRows.forEach((row, i) => {
     const rowNum = i + 2;
-    const pos = POSITION_MAP[row.Position?.trim()];
+    const pos = POSITION_MAP[row.Position?.trim().toUpperCase() ?? ''];
     if (!pos) return;
 
     const name = row.Player?.trim();

@@ -9,8 +9,9 @@ jest.mock('@/lib/rankings-actions', () => ({
 
 const UNMATCHED = [{ id: 1, name: 'J. Allen', team: 'BUF', pos: 'QB' }];
 const SLEEPER_OPTIONS = [
-  { id: 's1', name: 'Josh Allen', team: 'BUF', pos: 'QB' },
-  { id: 's2', name: 'Josh Jacobs', team: 'GB', pos: 'RB' },
+  { id: 's1', name: 'Josh Allen', normalizedName: 'josh allen', team: 'BUF', pos: 'QB' },
+  { id: 's2', name: 'Josh Jacobs', normalizedName: 'josh jacobs', team: 'GB', pos: 'RB' },
+  { id: 's3', name: "Ja'Marr Chase", normalizedName: 'jamarr chase', team: 'CIN', pos: 'WR' },
 ];
 
 beforeEach(() => {
@@ -34,6 +35,19 @@ describe('ResolveUnmatchedList', () => {
 
     await waitFor(() => {
       expect(mockResolve).toHaveBeenCalledWith(1, 's1');
+    });
+  });
+
+  it('matches punctuated Sleeper names against an unpunctuated normalized query', async () => {
+    const user = userEvent.setup();
+    render(<ResolveUnmatchedList unmatchedPlayers={UNMATCHED} sleeperPlayers={SLEEPER_OPTIONS} />);
+
+    await user.type(screen.getByTestId('unmatched-search-1'), 'jamarr');
+    const match = await screen.findByTestId('unmatched-result-s3');
+    await user.click(match);
+
+    await waitFor(() => {
+      expect(mockResolve).toHaveBeenCalledWith(1, 's3');
     });
   });
 

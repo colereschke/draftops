@@ -3,6 +3,7 @@
 import { useMemo, useState, useTransition } from 'react';
 import { Command, CommandInput, CommandList, CommandItem } from '@/components/ui/command';
 import { resolveRankingMatch } from '@/lib/rankings-actions';
+import { normalizeName } from '@/lib/sleeperNormalize';
 
 export interface UnmatchedRankingPlayer {
   id: number;
@@ -14,6 +15,7 @@ export interface UnmatchedRankingPlayer {
 export interface SleeperPlayerOption {
   id: string;
   name: string;
+  normalizedName: string;
   team: string;
   pos: string;
 }
@@ -71,8 +73,9 @@ function UnmatchedRow({
 
   const results = useMemo(() => {
     if (!search.trim()) return [];
-    const q = search.toLowerCase();
-    return sleeperPlayers.filter((p) => p.name.toLowerCase().includes(q)).slice(0, 8);
+    const q = normalizeName(search);
+    if (!q) return [];
+    return sleeperPlayers.filter((p) => p.normalizedName.includes(q)).slice(0, 8);
   }, [search, sleeperPlayers]);
 
   function pick(sleeperId: string) {

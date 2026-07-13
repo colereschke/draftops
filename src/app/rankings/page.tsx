@@ -17,7 +17,7 @@ export default async function RankingsPage() {
   const sleeperPlayers =
     unmatched.length > 0
       ? await prisma.sleeperPlayer.findMany({
-          select: { id: true, name: true, team: true, pos: true },
+          select: { id: true, name: true, normalizedName: true, team: true, pos: true },
           orderBy: { name: 'asc' },
         })
       : [];

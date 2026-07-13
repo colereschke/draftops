@@ -4,6 +4,7 @@ import { auth } from '@/auth';
 import { prisma } from '@/lib/db';
 import RankingsUploadForm from '@/components/RankingsUpload/RankingsUploadForm';
 import ResolveUnmatchedList from '@/components/RankingsUpload/ResolveUnmatchedList';
+import { computeMissingFromEtr, ETR_SKILL_PLAYERS } from '@/lib/rankingsCoverage';
 
 export default async function RankingsPage() {
   const session = await auth();
@@ -22,6 +23,10 @@ export default async function RankingsPage() {
           orderBy: { name: 'asc' },
         })
       : [];
+
+  const missingFromEtr = rankingSet
+    ? computeMissingFromEtr(rankingSet.players.map((p) => p.name))
+    : [];
 
   return (
     <main style={{ padding: '2rem', maxWidth: '720px', margin: '0 auto' }}>
@@ -61,6 +66,10 @@ export default async function RankingsPage() {
                   (p) => p.matchStatus === 'matched' || p.matchStatus === 'manual',
                 ).length,
                 unmatchedCount: unmatched.length,
+                etrCoverage: {
+                  covered: ETR_SKILL_PLAYERS.length - missingFromEtr.length,
+                  total: ETR_SKILL_PLAYERS.length,
+                },
               }
             : null
         }

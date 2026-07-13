@@ -10,6 +10,7 @@ export interface RankingSummaryView {
   totalCount: number;
   matchedCount: number;
   unmatchedCount: number;
+  etrCoverage: { covered: number; total: number };
 }
 
 interface RankingsUploadFormProps {
@@ -65,6 +66,17 @@ export default function RankingsUploadForm({ summary }: RankingsUploadFormProps)
             }}
           >
             {summary.matchedCount} matched to Sleeper · {summary.unmatchedCount} unmatched
+          </p>
+          <p
+            data-testid="rankings-etr-coverage"
+            style={{
+              margin: '0.25rem 0 0',
+              fontFamily: 'var(--font-mono)',
+              color: 'var(--text-secondary)',
+              fontSize: '0.8rem',
+            }}
+          >
+            Covers {summary.etrCoverage.covered} of {summary.etrCoverage.total} ETR-ranked players
           </p>
         </div>
       ) : (

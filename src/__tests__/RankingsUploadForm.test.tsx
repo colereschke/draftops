@@ -44,11 +44,15 @@ describe('RankingsUploadForm', () => {
           totalCount: 267,
           matchedCount: 260,
           unmatchedCount: 7,
+          etrCoverage: { covered: 300, total: 327 },
         }}
       />,
     );
     expect(screen.getByTestId('rankings-summary')).toHaveTextContent('267');
     expect(screen.getByTestId('rankings-upload-button')).toHaveTextContent('Re-upload CSV');
+    expect(screen.getByTestId('rankings-etr-coverage')).toHaveTextContent(
+      'Covers 300 of 327 ETR-ranked players',
+    );
   });
 
   it('uploads the selected file and shows no errors on success', async () => {

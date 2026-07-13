@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { auth } from '@/auth';
 import { prisma } from '@/lib/db';
@@ -24,6 +25,21 @@ export default async function RankingsPage() {
 
   return (
     <main style={{ padding: '2rem', maxWidth: '720px', margin: '0 auto' }}>
+      <Link
+        href="/drafts"
+        style={{
+          display: 'inline-block',
+          marginBottom: '1rem',
+          color: 'var(--text-secondary)',
+          fontFamily: 'var(--font-barlow)',
+          fontSize: '0.8rem',
+          fontWeight: 700,
+          textTransform: 'uppercase',
+          letterSpacing: '0.05em',
+        }}
+      >
+        ← All Drafts
+      </Link>
       <h1
         style={{
           fontFamily: 'var(--font-barlow)',

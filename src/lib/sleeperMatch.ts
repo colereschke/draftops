@@ -16,6 +16,9 @@ export interface MatchInput {
 
 export type MatchOutcome = { status: 'matched'; sleeperId: string } | { status: 'unmatched' };
 
+// Keep in sync with scripts/projections/draftops_projections/aliases.py's MANUAL_ALIASES —
+// same purpose (ETR/rankings name spellings that don't normalize-match Sleeper's), duplicated
+// here rather than shared across the Python/TS boundary since it's a short, static list.
 const MANUAL_ALIASES: Record<string, string> = {
   'bam knight': 'zonovan knight',
   'cameron ward': 'cam ward',
@@ -29,16 +32,28 @@ const MANUAL_ALIASES: Record<string, string> = {
   'nick singleton': 'nicholas singleton',
 };
 
-export function matchToSleeper(
-  input: MatchInput,
-  sleeperPlayers: SleeperPlayerRecord[],
-): MatchOutcome {
+export interface SleeperPlayerIndex {
+  byNamePos: Map<string, SleeperPlayerRecord[]>;
+}
+
+// Groups the pool by `${normalizedName}|${pos}` once so a batch of matches (e.g. every row in an
+// uploaded CSV) doesn't rescan the full pool per lookup. Build once per batch, not per row.
+export function buildSleeperPlayerIndex(sleeperPlayers: SleeperPlayerRecord[]): SleeperPlayerIndex {
+  const byNamePos = new Map<string, SleeperPlayerRecord[]>();
+  for (const p of sleeperPlayers) {
+    const key = `${p.normalizedName}|${p.pos}`;
+    const existing = byNamePos.get(key);
+    if (existing) existing.push(p);
+    else byNamePos.set(key, [p]);
+  }
+  return { byNamePos };
+}
+
+export function matchToSleeperIndexed(input: MatchInput, index: SleeperPlayerIndex): MatchOutcome {
   const normalizedName = normalizeName(input.name);
   const normalizedTeam = normalizeTeam(input.team);
 
-  const byNameAndPos = sleeperPlayers.filter(
-    (p) => p.normalizedName === normalizedName && p.pos === input.pos,
-  );
+  const byNameAndPos = index.byNamePos.get(`${normalizedName}|${input.pos}`) ?? [];
 
   if (normalizedTeam) {
     const withTeam = byNameAndPos.filter((p) => p.team === normalizedTeam);
@@ -50,11 +65,8 @@ export function matchToSleeper(
 
   const alias = MANUAL_ALIASES[normalizedName];
   if (alias) {
-    const aliasCandidates = sleeperPlayers.filter(
-      (p) =>
-        p.normalizedName === alias &&
-        p.pos === input.pos &&
-        (!normalizedTeam || p.team === normalizedTeam),
+    const aliasCandidates = (index.byNamePos.get(`${alias}|${input.pos}`) ?? []).filter(
+      (p) => !normalizedTeam || p.team === normalizedTeam,
     );
     if (aliasCandidates.length === 1) {
       return { status: 'matched', sleeperId: aliasCandidates[0].id };
@@ -62,4 +74,11 @@ export function matchToSleeper(
   }
 
   return { status: 'unmatched' };
+}
+
+export function matchToSleeper(
+  input: MatchInput,
+  sleeperPlayers: SleeperPlayerRecord[],
+): MatchOutcome {
+  return matchToSleeperIndexed(input, buildSleeperPlayerIndex(sleeperPlayers));
 }

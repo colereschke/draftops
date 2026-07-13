@@ -4,7 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { auth } from '@/auth';
 import { prisma } from '@/lib/db';
 import { parseRankingsCsv } from '@/lib/rankingsImport';
-import { matchToSleeper } from '@/lib/sleeperMatch';
+import { buildSleeperPlayerIndex, matchToSleeperIndexed } from '@/lib/sleeperMatch';
 
 export interface RankingSummary {
   fileName: string | null;
@@ -47,14 +47,15 @@ export async function uploadRankingsCsv(fileName: string, csvText: string): Prom
   const sleeperPlayers = await prisma.sleeperPlayer.findMany({
     select: { id: true, name: true, normalizedName: true, team: true, pos: true },
   });
+  const sleeperIndex = buildSleeperPlayerIndex(sleeperPlayers);
 
   const matchedRows = parsed.rows.map((row) => {
     if (row.pos === 'PICK') {
       return { ...row, sleeperId: null as string | null, matchStatus: 'n_a' };
     }
-    const outcome = matchToSleeper(
+    const outcome = matchToSleeperIndexed(
       { name: row.name, team: row.team, pos: row.pos },
-      sleeperPlayers,
+      sleeperIndex,
     );
     return outcome.status === 'matched'
       ? { ...row, sleeperId: outcome.sleeperId as string | null, matchStatus: 'matched' }

@@ -1,4 +1,9 @@
-import { matchToSleeper, type SleeperPlayerRecord } from '@/lib/sleeperMatch';
+import {
+  matchToSleeper,
+  buildSleeperPlayerIndex,
+  matchToSleeperIndexed,
+  type SleeperPlayerRecord,
+} from '@/lib/sleeperMatch';
 
 const POOL: SleeperPlayerRecord[] = [
   { id: '1', name: 'Josh Allen', normalizedName: 'josh allen', team: 'BUF', pos: 'QB' },
@@ -36,5 +41,37 @@ describe('matchToSleeper', () => {
     ];
     const result = matchToSleeper({ name: 'Sam Test', team: '', pos: 'WR' }, ambiguous);
     expect(result).toEqual({ status: 'unmatched' });
+  });
+});
+
+describe('buildSleeperPlayerIndex + matchToSleeperIndexed', () => {
+  it('produces the same results as matchToSleeper when the index is built once and reused', () => {
+    const index = buildSleeperPlayerIndex(POOL);
+
+    expect(matchToSleeperIndexed({ name: 'Josh Allen', team: 'BUF', pos: 'QB' }, index)).toEqual({
+      status: 'matched',
+      sleeperId: '1',
+    });
+    expect(matchToSleeperIndexed({ name: 'Free Agent Guy', team: '', pos: 'RB' }, index)).toEqual({
+      status: 'matched',
+      sleeperId: '5',
+    });
+    expect(matchToSleeperIndexed({ name: 'Josh Palmer', team: 'LAC', pos: 'WR' }, index)).toEqual({
+      status: 'matched',
+      sleeperId: '4',
+    });
+    expect(matchToSleeperIndexed({ name: 'Nobody Real', team: 'BUF', pos: 'QB' }, index)).toEqual({
+      status: 'unmatched',
+    });
+  });
+
+  it('groups same-name-different-position players into separate index buckets', () => {
+    const index = buildSleeperPlayerIndex(POOL);
+    // POOL has two "Josh Allen" entries — one QB (id 1), one LB (id 2) — the index must keep
+    // them in separate buckets so a QB lookup never returns the LB.
+    expect(matchToSleeperIndexed({ name: 'Josh Allen', team: 'MIN', pos: 'LB' }, index)).toEqual({
+      status: 'matched',
+      sleeperId: '2',
+    });
   });
 });

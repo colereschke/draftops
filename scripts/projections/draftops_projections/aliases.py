@@ -1,4 +1,9 @@
-"""Manual player aliases for projection-to-Sleeper matching."""
+"""Manual player aliases for projection-to-Sleeper matching.
+
+Keep in sync with src/lib/sleeperMatch.ts's MANUAL_ALIASES (TS rankings-upload matcher) — same
+purpose, duplicated across the Python/TS boundary rather than shared since it's a short, static
+list.
+"""
 
 MANUAL_ALIASES: dict[str, str] = {
     "bam knight": "zonovan knight",

@@ -3,6 +3,7 @@
 import { ArrowUp, ArrowDown, ArrowUpDown } from 'lucide-react';
 import type { Player, ClaimedBid } from '@/types';
 import { POS_COLORS } from '@/lib/posColors';
+import { ageColor } from '@/lib/ageColor';
 import { cn } from '@/lib/utils';
 import {
   Table,
@@ -37,14 +38,6 @@ const SORT_COLUMNS: Array<{ key: SortKey; label: string }> = [
   { key: 'budget', label: 'Target' },
   { key: 'ceiling', label: 'Ceiling' },
 ];
-
-function ageColor(age: number | null): string {
-  if (age === null) return 'var(--text-muted)';
-  if (age <= 24) return 'var(--age-young)';
-  if (age <= 27) return 'var(--age-prime)';
-  if (age <= 30) return 'var(--age-aging)';
-  return 'var(--age-old)';
-}
 
 interface SortIconProps {
   col: SortKey;
@@ -240,6 +233,23 @@ export default function PlayerTable({
                   style={{ color: claim ? 'var(--text-secondary)' : 'var(--primary)' }}
                 >
                   ${p.budget}
+                  {p.dynamicPickValue && p.dynamicPickValue.direction !== 'flat' && (
+                    <span
+                      data-testid={`dynamic-pick-value-${p.sfRank}`}
+                      title={`Baseline $${p.dynamicPickValue.baseline} · Adjusted $${p.dynamicPickValue.adjusted}`}
+                      className="ml-1 font-mono text-[10px] tabular-nums"
+                      style={{
+                        color:
+                          p.dynamicPickValue.direction === 'up'
+                            ? 'var(--age-young)'
+                            : 'var(--age-old)',
+                      }}
+                    >
+                      {p.dynamicPickValue.adjustment > 0
+                        ? `+$${p.dynamicPickValue.adjustment}`
+                        : `-$${Math.abs(p.dynamicPickValue.adjustment)}`}
+                    </span>
+                  )}
                 </TableCell>
                 <TableCell
                   className={cn(

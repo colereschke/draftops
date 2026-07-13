@@ -204,4 +204,34 @@ describe('PlayerTable', () => {
     expect(screen.queryByText('Proj $113')).not.toBeInTheDocument();
     expect(screen.queryByText('PROJ')).not.toBeInTheDocument();
   });
+
+  it('shows dynamic pick value adjustments with baseline context', () => {
+    renderTable({
+      players: [
+        {
+          player: "coreschke's 2027 package",
+          team: 'coreschke',
+          pos: 'PKG',
+          age: null,
+          sfRank: 900,
+          budget: 120,
+          ceiling: 138,
+          floor: 104,
+          notes: '',
+          dynamicPickValue: {
+            baseline: 109,
+            adjusted: 120,
+            adjustment: 11,
+            direction: 'up',
+          },
+        },
+      ],
+    });
+
+    expect(screen.getByTestId('dynamic-pick-value-900')).toHaveTextContent('+$11');
+    expect(screen.getByTestId('dynamic-pick-value-900')).toHaveAttribute(
+      'title',
+      'Baseline $109 · Adjusted $120',
+    );
+  });
 });

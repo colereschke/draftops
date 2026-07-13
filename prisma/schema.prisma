@@ -11,6 +11,12 @@ enum DraftStatus {
   COMPLETE
 }
 
+enum FuturePickAuctionMode {
+  PACKAGES
+  INDIVIDUAL
+  NONE
+}
+
 // A draft is the top-level container for a single auction. One owner, all data scoped here.
 model Draft {
   id          Int         @id @default(autoincrement())
@@ -20,14 +26,15 @@ model Draft {
   status      DraftStatus @default(ACTIVE)
   createdAt   DateTime    @default(now())
 
-  teamCount       Int                @default(12)
-  rosterSize      Int                @default(30)
-  budget          Int                @default(1000)
-  startingLineup  Json?
-  scoringSettings Json?
-  targetRoster    Json?
-  players         Player[]
-  playerValues    DraftPlayerValue[]
+  teamCount             Int                   @default(12)
+  rosterSize            Int                   @default(30)
+  budget                Int                   @default(1000)
+  startingLineup        Json?
+  scoringSettings       Json?
+  targetRoster          Json?
+  futurePickAuctionMode FuturePickAuctionMode @default(PACKAGES)
+  players               Player[]
+  playerValues          DraftPlayerValue[]
 
   teams            Team[]            @relation("DraftTeams")
   ownerTeam        Team?             @relation("DraftOwnerTeam", fields: [ownerTeamId], references: [id])
@@ -87,26 +94,31 @@ model NominatedPlayer {
 }
 
 model Player {
-  id          Int                @id @default(autoincrement())
-  name        String
-  nflTeam     String
-  pos         String
-  age         Float?
-  sfRank      Int
-  budget      Int
-  ceiling     Int
-  floor       Int
-  baseBudget  Int
-  baseCeiling Int
-  baseFloor   Int
-  sleeperId   String?
-  notes       String             @default("")
-  draftId     Int
-  draft       Draft              @relation(fields: [draftId], references: [id])
-  draftValues DraftPlayerValue[]
+  id                     Int                @id @default(autoincrement())
+  name                   String
+  nflTeam                String
+  pos                    String
+  age                    Float?
+  sfRank                 Int
+  budget                 Int
+  ceiling                Int
+  floor                  Int
+  baseBudget             Int
+  baseCeiling            Int
+  baseFloor              Int
+  sleeperId              String?
+  notes                  String             @default("")
+  futurePickYear         Int?
+  futurePickRound        Int?
+  futurePickOriginHandle String?
+  futurePickAssetKind    String?
+  draftId                Int
+  draft                  Draft              @relation(fields: [draftId], references: [id])
+  draftValues            DraftPlayerValue[]
 
   @@unique([name, draftId])
   @@index([sleeperId])
+  @@index([draftId, futurePickOriginHandle])
 }
 
 model ProjectionSource {
@@ -174,4 +186,43 @@ model DraftPlayerValue {
   @@unique([draftId, playerId, projectionSourceId])
   @@index([draftId])
   @@index([playerId])
+}
+
+model SleeperPlayer {
+  id             String   @id
+  name           String
+  normalizedName String
+  team           String
+  pos            String
+  age            Float?
+  updatedAt      DateTime @updatedAt
+
+  @@index([normalizedName])
+}
+
+model UserRankingSet {
+  id         Int      @id @default(autoincrement())
+  userId     String   @unique
+  fileName   String?
+  uploadedAt DateTime @default(now())
+  players    UserRankingPlayer[]
+}
+
+model UserRankingPlayer {
+  id           Int            @id @default(autoincrement())
+  rankingSetId Int
+  rankingSet   UserRankingSet @relation(fields: [rankingSetId], references: [id], onDelete: Cascade)
+  name         String
+  team         String
+  pos          String
+  age          Float?
+  sfRank       Int
+  budget       Int
+  ceiling      Int
+  floor        Int
+  notes        String         @default("")
+  sleeperId    String?
+  matchStatus  String         @default("unmatched")
+
+  @@index([rankingSetId])
 }

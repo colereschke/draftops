@@ -1,11 +1,12 @@
 'use client';
 
 import Link from 'next/link';
-import { useState, useTransition } from 'react';
+import { useEffect, useState, useTransition } from 'react';
 import { createDraft } from '@/lib/actions';
 import { importFromSleeper } from '@/lib/sleeper-actions';
+import { getRankingSummary, type RankingSummary } from '@/lib/rankings-actions';
 import type { SleeperImportResult } from '@/lib/sleeper';
-import type { StartingSlot, ScoringSettings } from '@/types';
+import type { FuturePickAuctionMode, StartingSlot, ScoringSettings } from '@/types';
 import { DEFAULT_STARTING_LINEUP, DEFAULT_TARGET_ROSTER, DEFAULT_SCORING_SETTINGS } from '@/types';
 
 interface TeamRow {
@@ -39,6 +40,8 @@ export default function NewDraftPage() {
   const [ownerUsername, setOwnerUsername] = useState('');
   const [importState, setImportState] = useState<ImportState>({ status: 'idle' });
   const [rosterSize, setRosterSize] = useState(30);
+  const [futurePickAuctionMode, setFuturePickAuctionMode] =
+    useState<FuturePickAuctionMode>('packages');
   const [targetRoster, setTargetRoster] = useState<Record<'QB' | 'RB' | 'WR' | 'TE', number>>({
     QB: DEFAULT_TARGET_ROSTER.QB ?? 4,
     RB: DEFAULT_TARGET_ROSTER.RB ?? 9,
@@ -51,6 +54,18 @@ export default function NewDraftPage() {
   const [scoringSettings, setScoringSettings] = useState<ScoringSettings>({
     ...DEFAULT_SCORING_SETTINGS,
   });
+  const [rankingSummary, setRankingSummary] = useState<RankingSummary | null>(null);
+  const [rankingSummaryError, setRankingSummaryError] = useState(false);
+  const [playerSource, setPlayerSource] = useState<'etr' | 'custom'>('etr');
+
+  useEffect(() => {
+    getRankingSummary()
+      .then(setRankingSummary)
+      .catch((err) => {
+        console.error('Failed to load ranking summary:', err);
+        setRankingSummaryError(true);
+      });
+  }, []);
 
   function updateScoring<K extends keyof ScoringSettings>(key: K, value: ScoringSettings[K]) {
     setScoringSettings((prev) => ({ ...prev, [key]: value }));
@@ -158,10 +173,12 @@ export default function NewDraftPage() {
           name: name.trim(),
           budgetPerTeam: budget,
           rosterSize,
+          futurePickAuctionMode,
           targetRoster,
           startingLineup,
           scoringSettings,
           teams,
+          playerSource,
         });
       } catch (err) {
         setError((err as Error).message ?? 'Something went wrong.');
@@ -339,6 +356,65 @@ export default function NewDraftPage() {
             </label>
           </div>
         </div>
+
+        {rankingSummaryError && (
+          <p
+            data-testid="ranking-summary-error"
+            style={{
+              color: 'var(--age-aging)',
+              fontFamily: 'var(--font-barlow)',
+              fontSize: '0.8rem',
+              marginTop: '-0.5rem',
+              marginBottom: '1rem',
+            }}
+          >
+            Couldn&apos;t check for a custom ranking set — you can still create a draft with the ETR
+            default pool.
+          </p>
+        )}
+
+        {rankingSummary && (
+          <div
+            style={{
+              background: 'var(--bg-surface)',
+              borderRadius: '6px',
+              padding: '1.25rem',
+              marginBottom: '1rem',
+            }}
+          >
+            <div style={sectionHeaderStyle}>Player Pool</div>
+            <label
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.5rem',
+                marginBottom: '0.5rem',
+              }}
+            >
+              <input
+                data-testid="player-source-etr"
+                type="radio"
+                name="playerSource"
+                checked={playerSource === 'etr'}
+                onChange={() => setPlayerSource('etr')}
+              />
+              <span style={labelStyle}>ETR Default</span>
+            </label>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <input
+                data-testid="player-source-custom"
+                type="radio"
+                name="playerSource"
+                checked={playerSource === 'custom'}
+                onChange={() => setPlayerSource('custom')}
+              />
+              <span style={labelStyle}>
+                My Custom Rankings ({rankingSummary.totalCount} players, uploaded{' '}
+                {rankingSummary.uploadedAt.toLocaleDateString()})
+              </span>
+            </label>
+          </div>
+        )}
 
         {/* --- Roster Settings --- */}
         <div
@@ -628,6 +704,31 @@ export default function NewDraftPage() {
               ))}
             </div>
           </div>
+        </div>
+
+        {/* --- Future Picks --- */}
+        <div
+          style={{
+            background: 'var(--bg-surface)',
+            borderRadius: '6px',
+            padding: '1.25rem',
+            marginBottom: '1rem',
+          }}
+        >
+          <div style={sectionHeaderStyle}>Future Picks</div>
+          <label style={labelStyle}>
+            Next-year pick auction mode
+            <select
+              data-testid="future-pick-auction-mode"
+              value={futurePickAuctionMode}
+              onChange={(e) => setFuturePickAuctionMode(e.target.value as FuturePickAuctionMode)}
+              style={inputStyle}
+            >
+              <option value="packages">Team packages</option>
+              <option value="individual">Individual team picks</option>
+              <option value="none">Not auctioned</option>
+            </select>
+          </label>
         </div>
 
         {/* --- Team Roster Table --- */}

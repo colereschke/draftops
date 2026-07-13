@@ -20,4 +20,10 @@ describe('players data', () => {
       expect(validPositions).toContain(p.pos);
     });
   });
+
+  it('does not include generated future pick assets in the static base list', () => {
+    expect(players.some((p) => p.pos === 'PICK' || p.pos === 'PKG')).toBe(false);
+    expect(players.some((p) => p.player === 'Matt Gay')).toBe(false);
+    expect(players.some((p) => p.player === '2027 1st Round Pick')).toBe(false);
+  });
 });

@@ -75,6 +75,22 @@ describe('computeTeamStats', () => {
     expect(stats.rosterRemaining).toBe(27);
   });
 
+  it('does not count future pick assets as roster spots', () => {
+    const team = makeTeam({
+      results: [
+        makeResult({ position: 'PKG', price: 109 }),
+        makeResult({ id: 2, position: 'PICK', price: 75 }),
+        makeResult({ id: 3, position: 'QB', price: 200 }),
+      ],
+    });
+    const [stats] = computeTeamStats([team], [], 30);
+
+    expect(stats.spent).toBe(384);
+    expect(stats.rosterCount).toBe(1);
+    expect(stats.rosterRemaining).toBe(29);
+    expect(stats.buyingPower).toBe(587);
+  });
+
   it('computes buyingPower as remaining minus rosterRemaining', () => {
     const team = makeTeam({ results: [makeResult({ price: 100 })] });
     const [stats] = computeTeamStats([team], [], 30);
@@ -142,5 +158,75 @@ describe('computeTeamStats', () => {
     const team = makeTeam({ results: [makeResult({ player: 'Unknown Player' })] });
     const [stats] = computeTeamStats([team], [], 30);
     expect(stats.results[0].delta).toBeNull();
+  });
+
+  it('computes avgAge as the mean age of roster entries with known ages', () => {
+    const mockPlayers: Player[] = [
+      {
+        player: 'Patrick Mahomes',
+        team: 'KC',
+        pos: 'QB',
+        age: 30,
+        sfRank: 1,
+        budget: 150,
+        ceiling: 172,
+        floor: 130,
+        notes: '',
+      },
+      {
+        player: 'Puka Nacua',
+        team: 'LAR',
+        pos: 'WR',
+        age: 24,
+        sfRank: 2,
+        budget: 100,
+        ceiling: 120,
+        floor: 80,
+        notes: '',
+      },
+    ];
+    const team = makeTeam({
+      results: [
+        makeResult({ player: 'Patrick Mahomes' }),
+        makeResult({ id: 2, player: 'Puka Nacua', position: 'WR' }),
+      ],
+    });
+    const [stats] = computeTeamStats([team], mockPlayers, 30);
+    expect(stats.avgAge).toBe(27); // (30 + 24) / 2
+  });
+
+  it('excludes results with no matching player (e.g. picks/packages) from avgAge', () => {
+    const mockPlayers: Player[] = [
+      {
+        player: 'Patrick Mahomes',
+        team: 'KC',
+        pos: 'QB',
+        age: 30,
+        sfRank: 1,
+        budget: 150,
+        ceiling: 172,
+        floor: 130,
+        notes: '',
+      },
+    ];
+    const team = makeTeam({
+      results: [
+        makeResult({ player: 'Patrick Mahomes' }),
+        makeResult({ id: 2, player: '2027 1st (via Team B)', position: 'PKG', price: 80 }),
+      ],
+    });
+    const [stats] = computeTeamStats([team], mockPlayers, 30);
+    expect(stats.avgAge).toBe(30);
+  });
+
+  it('sets avgAge to null when no roster entries resolve to a known age', () => {
+    const team = makeTeam({ results: [makeResult({ player: 'Unknown Player' })] });
+    const [stats] = computeTeamStats([team], [], 30);
+    expect(stats.avgAge).toBeNull();
+  });
+
+  it('sets avgAge to null for a team with no results', () => {
+    const [stats] = computeTeamStats([makeTeam()], [], 30);
+    expect(stats.avgAge).toBeNull();
   });
 });

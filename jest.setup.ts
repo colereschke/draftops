@@ -43,4 +43,33 @@ if (typeof Element !== 'undefined') {
       disconnect() {}
     };
   }
+  if (typeof window.matchMedia === 'undefined') {
+    window.matchMedia = jest.fn().mockImplementation((query: string) => ({
+      matches: false,
+      media: query,
+      onchange: null,
+      addListener: jest.fn(),
+      removeListener: jest.fn(),
+      addEventListener: jest.fn(),
+      removeEventListener: jest.fn(),
+      dispatchEvent: jest.fn(),
+    }));
+  }
+
+  // jsdom's Blob/File implementation doesn't implement the stream-based read methods
+  // (`.text()`, `.arrayBuffer()`) — the global `File` under jsdom resolves to jsdom's own
+  // File-API implementation rather than Node's built-in File, and that implementation simply
+  // omits these prototype methods. Components that read an uploaded File via `file.text()`
+  // (e.g. RankingsUploadForm) need this to work under `@testing-library/user-event`'s
+  // `user.upload()`.
+  if (typeof File !== 'undefined' && !File.prototype.text) {
+    File.prototype.text = function (this: File) {
+      return new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = () => reject(reader.error);
+        reader.readAsText(this);
+      });
+    };
+  }
 }

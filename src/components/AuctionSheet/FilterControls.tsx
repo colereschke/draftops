@@ -20,6 +20,7 @@ interface FilterControlsProps {
   availableOnly: boolean;
   onAvailableOnlyChange: (value: boolean) => void;
   resultCount: number;
+  futurePickYear?: number | null;
 }
 
 export default function FilterControls({
@@ -32,10 +33,13 @@ export default function FilterControls({
   availableOnly,
   onAvailableOnlyChange,
   resultCount,
+  futurePickYear,
 }: FilterControlsProps) {
+  const packageLabel = futurePickYear ? `${futurePickYear} pick package` : 'pick package';
+
   return (
     <>
-      <div className="flex flex-wrap items-center gap-2.5 border-b border-border-subtle bg-card px-5 py-3">
+      <div className="flex flex-col gap-2.5 border-b border-border-subtle bg-card px-5 py-3 md:flex-row md:flex-wrap md:items-center">
         <ToggleGroup
           value={[posFilter]}
           onValueChange={(vals) =>
@@ -71,28 +75,30 @@ export default function FilterControls({
           value={search}
           onChange={(e) => onSearchChange(e.target.value)}
           placeholder="Search player or team..."
-          className="w-[210px] rounded-md bg-background text-[12px] focus-visible:border-border focus-visible:ring-1 focus-visible:ring-border"
+          className="w-full rounded-md bg-background text-[12px] focus-visible:border-border focus-visible:ring-1 focus-visible:ring-border md:w-[210px]"
         />
 
-        <Toggle
-          pressed={showNotes}
-          onPressedChange={onShowNotesChange}
-          variant="outline"
-          className="font-label h-8 rounded-md bg-background text-[11px] font-bold tracking-wide uppercase"
-        >
-          {showNotes ? 'Hide notes' : 'Show notes'}
-        </Toggle>
+        <div className="flex flex-wrap items-center gap-2.5 md:contents">
+          <Toggle
+            pressed={showNotes}
+            onPressedChange={onShowNotesChange}
+            variant="outline"
+            className="font-label h-8 rounded-md bg-background text-[11px] font-bold tracking-wide uppercase"
+          >
+            {showNotes ? 'Hide notes' : 'Show notes'}
+          </Toggle>
 
-        <Toggle
-          pressed={availableOnly}
-          onPressedChange={onAvailableOnlyChange}
-          variant="outline"
-          className="font-label h-8 rounded-md bg-background text-[11px] font-bold tracking-wide uppercase"
-        >
-          Available only
-        </Toggle>
+          <Toggle
+            pressed={availableOnly}
+            onPressedChange={onAvailableOnlyChange}
+            variant="outline"
+            className="font-label h-8 rounded-md bg-background text-[11px] font-bold tracking-wide uppercase"
+          >
+            Available only
+          </Toggle>
+        </div>
 
-        <div className="ml-auto font-mono text-[11px] text-muted-foreground tabular-nums">
+        <div className="font-mono text-[11px] text-muted-foreground tabular-nums md:ml-auto">
           {resultCount} players shown
         </div>
       </div>
@@ -114,10 +120,9 @@ export default function FilterControls({
           <span style={{ color: 'var(--age-aging)' }}>28-30</span>{' '}
           <span style={{ color: 'var(--age-old)' }}>31+</span>
         </span>
-        <span>
+        <span data-testid="pkg-legend">
           <b style={{ color: 'var(--pos-wr)', fontSize: 9 }}>R</b> = Rookie ·{' '}
-          <b style={{ color: 'var(--pos-pkg)', fontSize: 9 }}>PKG</b> = 2027 1st+2nd+3rd via kicker
-          bid
+          <b style={{ color: 'var(--pos-pkg)', fontSize: 9 }}>PKG</b> = {packageLabel}
         </span>
       </div>
     </>

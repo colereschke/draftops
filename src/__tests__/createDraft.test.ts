@@ -13,6 +13,7 @@ const mockTxDraftCreate = jest.fn();
 const mockTxDraftUpdate = jest.fn();
 const mockTxTeamCreate = jest.fn();
 const mockTxPlayerCreateMany = jest.fn().mockResolvedValue({ count: 270 });
+const mockTxUserRankingSetFindUnique = jest.fn();
 
 jest.mock('@/auth', () => ({ auth: () => mockAuth() }));
 jest.mock('next/navigation', () => ({ redirect: (...args: unknown[]) => mockRedirect(...args) }));
@@ -29,11 +30,13 @@ jest.mock('@/lib/projectionApplication', () => ({
 }));
 
 const MOCK_SESSION = { user: { id: '123456789', name: 'Cole' } };
+const MOCK_DRAFT_CREATED_AT = new Date('2026-07-10T12:00:00.000Z');
 
 const VALID_INPUT = {
   name: "Cole's Draft 2025",
   budgetPerTeam: 1000,
   rosterSize: 30,
+  futurePickAuctionMode: 'packages' as const,
   targetRoster: { QB: 4, RB: 9, WR: 11, TE: 3 },
   startingLineup: [
     'QB',
@@ -70,7 +73,7 @@ const VALID_INPUT = {
 beforeEach(() => {
   jest.clearAllMocks();
   mockAuth.mockResolvedValue(MOCK_SESSION);
-  mockTxDraftCreate.mockResolvedValue({ id: 5 });
+  mockTxDraftCreate.mockResolvedValue({ id: 5, createdAt: MOCK_DRAFT_CREATED_AT });
   mockTxTeamCreate
     .mockResolvedValueOnce({ id: 10, handle: 'coreschke' })
     .mockResolvedValueOnce({ id: 11, handle: 'team2' });
@@ -81,6 +84,7 @@ beforeEach(() => {
       draft: { create: mockTxDraftCreate, update: mockTxDraftUpdate },
       team: { create: mockTxTeamCreate },
       player: { createMany: mockTxPlayerCreateMany },
+      userRankingSet: { findUnique: mockTxUserRankingSetFindUnique },
     }),
   );
 });
@@ -122,6 +126,7 @@ describe('createDraft', () => {
         teamCount: 2,
         rosterSize: 30,
         budget: 1000,
+        futurePickAuctionMode: 'PACKAGES',
         startingLineup: VALID_INPUT.startingLineup,
         scoringSettings: VALID_INPUT.scoringSettings,
         targetRoster: VALID_INPUT.targetRoster,
@@ -195,6 +200,49 @@ describe('createDraft', () => {
     });
   });
 
+  it('seeds origin-team future pick assets for all teams', async () => {
+    await createDraft(VALID_INPUT);
+
+    const payload = mockTxPlayerCreateMany.mock.calls[0][0].data as Array<{
+      name: string;
+      pos: string;
+      futurePickOriginHandle?: string | null;
+      futurePickAssetKind?: string | null;
+      futurePickRound?: number | null;
+    }>;
+
+    expect(payload).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: "coreschke's 2027 package",
+          pos: 'PKG',
+          futurePickOriginHandle: 'coreschke',
+          futurePickAssetKind: 'package',
+          futurePickRound: null,
+        }),
+        expect.objectContaining({
+          name: 'team2 2027 1st',
+          pos: 'PICK',
+          futurePickOriginHandle: 'team2',
+          futurePickAssetKind: 'pick',
+          futurePickRound: 1,
+        }),
+      ]),
+    );
+  });
+
+  it('does not seed legacy static future pick rows from base data', async () => {
+    await createDraft(VALID_INPUT);
+
+    const payload = mockTxPlayerCreateMany.mock.calls[0][0].data as Array<{
+      name: string;
+    }>;
+
+    expect(payload.map((p) => p.name)).not.toEqual(
+      expect.arrayContaining(['Matt Gay', '2027 1st Round Pick']),
+    );
+  });
+
   it('records base values verbatim and lifts TE budgets under a TE premium', async () => {
     await createDraft({
       ...VALID_INPUT,
@@ -230,5 +278,131 @@ describe('createDraft', () => {
 
     expect(payload[0].sleeperId ?? null).toBeNull();
     expect('projectionAuctionValue' in payload[0]).toBe(false);
+  });
+});
+
+describe('createDraft with playerSource: custom', () => {
+  it('throws when the user has no custom ranking set', async () => {
+    mockTxUserRankingSetFindUnique.mockResolvedValue(null);
+    await expect(createDraft({ ...VALID_INPUT, playerSource: 'custom' })).rejects.toThrow(
+      'No custom ranking set found',
+    );
+  });
+
+  it('seeds from the custom ranking set plus generated future pick assets', async () => {
+    mockTxUserRankingSetFindUnique.mockResolvedValue({
+      id: 7,
+      players: [
+        {
+          name: 'Custom Guy',
+          team: 'BUF',
+          pos: 'QB',
+          age: 25,
+          sfRank: 1,
+          budget: 200,
+          ceiling: 230,
+          floor: 174,
+          notes: '',
+          sleeperId: 's1',
+        },
+      ],
+    });
+    await createDraft({ ...VALID_INPUT, playerSource: 'custom' });
+    const created = mockTxPlayerCreateMany.mock.calls[0][0].data as Array<{
+      name: string;
+      futurePickOriginHandle?: string | null;
+      futurePickAssetKind?: string | null;
+    }>;
+    expect(created.some((p) => p.name === 'Custom Guy')).toBe(true);
+    expect(created).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: "coreschke's 2027 package",
+          futurePickOriginHandle: 'coreschke',
+          futurePickAssetKind: 'package',
+        }),
+      ]),
+    );
+  });
+
+  it('uses explicit custom pick values as generated future pick baselines', async () => {
+    mockTxUserRankingSetFindUnique.mockResolvedValue({
+      id: 7,
+      players: [
+        {
+          name: 'Custom Guy',
+          team: 'BUF',
+          pos: 'QB',
+          age: 25,
+          sfRank: 1,
+          budget: 200,
+          ceiling: 230,
+          floor: 174,
+          notes: '',
+          sleeperId: 's1',
+        },
+        {
+          name: '2027 1st Round Pick',
+          team: '',
+          pos: 'PICK',
+          age: null,
+          sfRank: 2,
+          budget: 90,
+          ceiling: 104,
+          floor: 78,
+          notes: '',
+          sleeperId: null,
+        },
+        {
+          name: '2027 2nd Round Pick',
+          team: '',
+          pos: 'PICK',
+          age: null,
+          sfRank: 3,
+          budget: 22,
+          ceiling: 25,
+          floor: 19,
+          notes: '',
+          sleeperId: null,
+        },
+        {
+          name: '2027 3rd Round Pick',
+          team: '',
+          pos: 'PICK',
+          age: null,
+          sfRank: 4,
+          budget: 8,
+          ceiling: 9,
+          floor: 7,
+          notes: '',
+          sleeperId: null,
+        },
+      ],
+    });
+
+    await createDraft({ ...VALID_INPUT, playerSource: 'custom' });
+
+    const created = mockTxPlayerCreateMany.mock.calls[0][0].data as Array<{
+      name: string;
+      budget: number;
+      ceiling: number;
+      floor: number;
+      baseBudget: number;
+      futurePickAssetKind?: string | null;
+    }>;
+
+    expect(created.find((p) => p.name === "coreschke's 2027 package")).toMatchObject({
+      budget: 120,
+      ceiling: 138,
+      floor: 104,
+      baseBudget: 120,
+      futurePickAssetKind: 'package',
+    });
+    expect(created.find((p) => p.name === 'coreschke 2027 1st')).toMatchObject({
+      budget: 90,
+      ceiling: 104,
+      floor: 78,
+      baseBudget: 90,
+    });
   });
 });

@@ -15,6 +15,7 @@ import type { FuturePickAuctionMode, Position, StartingSlot, ScoringSettings } f
 import { players as BASE_PLAYERS } from '@/data/players';
 import { adjustPlayerValues } from '@/lib/valueAdjustment';
 import { applyProjectionValuesToDraft } from '@/lib/projectionApplication';
+import { getEtrSleeperMatches } from '@/lib/projectionIdentity';
 
 export async function logBid(data: {
   player: string;
@@ -123,6 +124,8 @@ export async function createDraft(data: {
     displayName: t.displayName.trim() || t.handle.trim(),
     isMine: t.isMine,
   }));
+  const etrMatches =
+    data.playerSource === 'custom' ? new Map<string, string>() : getEtrSleeperMatches();
 
   const draftId = await prisma.$transaction(async (tx) => {
     const draft = await tx.draft.create({
@@ -205,7 +208,7 @@ export async function createDraft(data: {
         baseBudget: p.baseBudget ?? p.budget,
         baseCeiling: p.baseCeiling ?? p.ceiling,
         baseFloor: p.baseFloor ?? p.floor,
-        sleeperId: p.sleeperId ?? null,
+        sleeperId: p.sleeperId ?? etrMatches.get(p.player) ?? null,
         notes: p.notes,
         futurePickYear: p.futurePickYear ?? null,
         futurePickRound: p.futurePickRound ?? null,
@@ -215,10 +218,10 @@ export async function createDraft(data: {
       })),
     });
 
+    await applyProjectionValuesToDraft(tx, { draftId: draft.id, etrMatches });
+
     return draft.id;
   });
-
-  await applyProjectionValuesToDraft(prisma, { draftId });
 
   redirect(`/draft/${draftId}`);
 }

@@ -373,7 +373,8 @@ Implemented:
   within position/value buckets.
 - Adds `prisma/apply-projection-values.ts --draft-id <id>` to import generated projection CSVs into
   Postgres and reapply values to an existing draft.
-- Adds automatic projection application during `createDraft`; draft creation fails loudly if no
+- Adds automatic projection application during `createDraft`; ETR player rows get Sleeper IDs from
+  the generated match CSV, and draft creation fails loudly without persisting a partial draft if no
   usable `ProjectionSource` exists.
 - Removes the old VOR-driven strategy lens from this PR; rebuild/balanced/contender handling is
   deferred to a dedicated follow-up.
@@ -391,8 +392,9 @@ Current process:
 pnpm tsx prisma/apply-projection-values.ts --draft-id <draft-id>
 ```
 
-3. Create drafts normally. `createDraft` automatically seeds adjusted fallback dynasty values and
-   applies the latest stored projection source before redirecting.
+3. Create drafts normally. `createDraft` automatically resolves ETR Sleeper IDs, seeds adjusted
+   fallback dynasty values, and applies the latest stored projection source in the same transaction
+   before redirecting.
 4. Spot-check value outputs:
    - high-end QBs and elite TEs
    - target-heavy TEs vs. efficiency/TD-driven TEs

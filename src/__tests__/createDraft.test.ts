@@ -7,6 +7,7 @@ const mockTransaction = jest.fn();
 const mockRevalidatePath = jest.fn();
 const mockRedirect = jest.fn();
 const mockApplyProjectionValuesToDraft = jest.fn();
+const mockGetEtrSleeperMatches = jest.fn();
 
 // Mock tx client
 const mockTxDraftCreate = jest.fn();
@@ -14,6 +15,12 @@ const mockTxDraftUpdate = jest.fn();
 const mockTxTeamCreate = jest.fn();
 const mockTxPlayerCreateMany = jest.fn().mockResolvedValue({ count: 270 });
 const mockTxUserRankingSetFindUnique = jest.fn();
+const mockTx = {
+  draft: { create: mockTxDraftCreate, update: mockTxDraftUpdate },
+  team: { create: mockTxTeamCreate },
+  player: { createMany: mockTxPlayerCreateMany },
+  userRankingSet: { findUnique: mockTxUserRankingSetFindUnique },
+};
 
 jest.mock('@/auth', () => ({ auth: () => mockAuth() }));
 jest.mock('next/navigation', () => ({ redirect: (...args: unknown[]) => mockRedirect(...args) }));
@@ -27,6 +34,9 @@ jest.mock('@/lib/db', () => ({
 }));
 jest.mock('@/lib/projectionApplication', () => ({
   applyProjectionValuesToDraft: (...args: unknown[]) => mockApplyProjectionValuesToDraft(...args),
+}));
+jest.mock('@/lib/projectionIdentity', () => ({
+  getEtrSleeperMatches: (...args: unknown[]) => mockGetEtrSleeperMatches(...args),
 }));
 
 const MOCK_SESSION = { user: { id: '123456789', name: 'Cole' } };
@@ -79,14 +89,8 @@ beforeEach(() => {
     .mockResolvedValueOnce({ id: 11, handle: 'team2' });
   mockTxDraftUpdate.mockResolvedValue({});
   mockApplyProjectionValuesToDraft.mockResolvedValue({ projectionSourceId: 7, appliedCount: 250 });
-  mockTransaction.mockImplementation((callback) =>
-    callback({
-      draft: { create: mockTxDraftCreate, update: mockTxDraftUpdate },
-      team: { create: mockTxTeamCreate },
-      player: { createMany: mockTxPlayerCreateMany },
-      userRankingSet: { findUnique: mockTxUserRankingSetFindUnique },
-    }),
-  );
+  mockGetEtrSleeperMatches.mockReturnValue(new Map([[BASE_PLAYERS[0].player, 'sleeper-1']]));
+  mockTransaction.mockImplementation((callback) => callback(mockTx));
 });
 
 describe('createDraft', () => {
@@ -171,17 +175,27 @@ describe('createDraft', () => {
   it('applies stored projections to the new draft before redirecting', async () => {
     await createDraft(VALID_INPUT);
 
-    expect(mockApplyProjectionValuesToDraft).toHaveBeenCalledWith(
-      expect.objectContaining({ $transaction: expect.any(Function) }),
-      { draftId: 5 },
-    );
+    expect(mockApplyProjectionValuesToDraft).toHaveBeenCalledWith(mockTx, {
+      draftId: 5,
+      etrMatches: expect.any(Map),
+    });
     expect(mockRedirect).toHaveBeenCalledWith('/draft/5');
   });
 
   it('fails loudly when automatic projection application fails', async () => {
+    let transactionRejected = false;
+    mockTransaction.mockImplementation(async (callback) => {
+      try {
+        return await callback(mockTx);
+      } catch (error) {
+        transactionRejected = true;
+        throw error;
+      }
+    });
     mockApplyProjectionValuesToDraft.mockRejectedValue(new Error('No projection source found'));
 
     await expect(createDraft(VALID_INPUT)).rejects.toThrow('No projection source found');
+    expect(transactionRejected).toBe(true);
     expect(mockRedirect).not.toHaveBeenCalled();
   });
 
@@ -268,7 +282,7 @@ describe('createDraft', () => {
     expect(te.budget).toBeGreaterThan(te.baseBudget);
   });
 
-  it('initializes sleeper identity as unmapped for seeded players', async () => {
+  it('seeds ETR sleeper identity from the match map before applying projections', async () => {
     await createDraft(VALID_INPUT);
 
     const payload = mockTxPlayerCreateMany.mock.calls[0][0].data as Array<{
@@ -276,7 +290,7 @@ describe('createDraft', () => {
       projectionAuctionValue?: number | null;
     }>;
 
-    expect(payload[0].sleeperId ?? null).toBeNull();
+    expect(payload[0].sleeperId).toBe('sleeper-1');
     expect('projectionAuctionValue' in payload[0]).toBe(false);
   });
 });

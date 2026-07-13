@@ -146,7 +146,7 @@ export interface ProjectionApplyPrisma {
       update: DraftPlayerValueData;
     }): unknown;
   };
-  $transaction(operations: unknown[], options?: { timeout: number }): Promise<unknown[]>;
+  $transaction?(operations: unknown[], options?: { timeout: number }): Promise<unknown[]>;
 }
 
 export interface ApplyProjectionValuesOptions {
@@ -193,14 +193,14 @@ export async function applyProjectionValuesToDraft(
   const playersWithSleeperIds = resolvePlayerSleeperIds(players, options.etrMatches ?? new Map());
 
   for (const batch of chunk(getSleeperIdUpdates(playersWithSleeperIds), WRITE_BATCH_SIZE)) {
-    await prisma.$transaction(
+    await runWriteBatch(
+      prisma,
       batch.map((player) =>
         prisma.player.update({
           where: { id: player.id },
           data: { sleeperId: player.sleeperId },
         }),
       ),
-      { timeout: WRITE_TRANSACTION_TIMEOUT_MS },
     );
   }
 
@@ -281,10 +281,19 @@ export async function applyProjectionValuesToDraft(
   });
 
   for (const batch of chunk(writes, WRITE_BATCH_SIZE)) {
-    await prisma.$transaction(batch, { timeout: WRITE_TRANSACTION_TIMEOUT_MS });
+    await runWriteBatch(prisma, batch);
   }
 
   return { projectionSourceId, appliedCount: joined.length };
+}
+
+async function runWriteBatch(prisma: ProjectionApplyPrisma, operations: unknown[]): Promise<void> {
+  if (operations.length === 0) return;
+  if (prisma.$transaction) {
+    await prisma.$transaction(operations, { timeout: WRITE_TRANSACTION_TIMEOUT_MS });
+    return;
+  }
+  await Promise.all(operations);
 }
 
 async function getLatestProjectionSourceId(prisma: ProjectionApplyPrisma): Promise<number | null> {

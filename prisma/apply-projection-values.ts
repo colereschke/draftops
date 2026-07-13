@@ -1,6 +1,7 @@
 import { config as dotenvConfig } from 'dotenv';
 import { readFileSync } from 'node:fs';
 import { parseCsv } from '@/lib/csv';
+import { readEtrMatchRows } from '@/lib/projectionIdentity';
 import {
   applyProjectionValuesToDraft,
   buildDraftPlayerValueData,
@@ -20,11 +21,6 @@ export {
   joinPlayersToProjectionRows,
   resolvePlayerSleeperIds,
 };
-
-interface EtrMatchRow {
-  name: string;
-  sleeperId: string;
-}
 
 export interface CsvProjectionRow {
   sleeperId: string;
@@ -67,11 +63,7 @@ export interface ProjectionSourceGroup {
 const WRITE_BATCH_SIZE = 50;
 const WRITE_TRANSACTION_TIMEOUT_MS = 60_000;
 
-export function readEtrMatchRows(path: string): EtrMatchRow[] {
-  return parseCsv(readFileSync(path, 'utf-8'))
-    .rows.filter((row) => row.sleeper_id !== '')
-    .map((row) => ({ name: row.etr_name, sleeperId: row.sleeper_id }));
-}
+export { readEtrMatchRows };
 
 export function readProjectionRows(path: string, scoring: ScoringSettings): CsvProjectionRow[] {
   return parseProjectionRows(readFileSync(path, 'utf-8'), scoring);

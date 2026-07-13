@@ -184,9 +184,11 @@ Draft-specific fallback values:
 Projection-shaped active values:
 
 - Projection source data lives in `ProjectionSource` and `PlayerProjection`.
-- `createDraft` automatically calls `applyProjectionValuesToDraft(prisma, { draftId })` after
-  adjusted fallback players are seeded.
-- Draft creation fails loudly if no usable projection source exists.
+- `createDraft` resolves ETR players to Sleeper IDs from
+  `data/generated/etr_sleeper_matches.csv`, seeds adjusted fallback players, and applies
+  projection values inside the same transaction.
+- Draft creation fails loudly, with no partial draft persisted, if no usable projection source
+  exists or no draft players can be joined to current projections.
 - The CLI `pnpm tsx prisma/apply-projection-values.ts --draft-id <draft-id>` remains available to
   import generated CSV data into Postgres and reapply values to an existing draft.
 - Projection application resolves Sleeper IDs, scores projections under both baseline and draft

@@ -111,6 +111,22 @@ it('applies the latest stored projection source to a draft', async () => {
   );
 });
 
+it('applies values when called with a transaction client', async () => {
+  const transactionPrisma = {
+    draft: prisma.draft,
+    projectionSource: prisma.projectionSource,
+    player: prisma.player,
+    playerProjection: prisma.playerProjection,
+    draftPlayerValue: prisma.draftPlayerValue,
+  };
+
+  const result = await applyProjectionValuesToDraft(transactionPrisma, { draftId: 5 });
+
+  expect(result).toEqual({ projectionSourceId: 7, appliedCount: 1 });
+  expect(mockDraftPlayerValueUpsert).toHaveBeenCalledTimes(1);
+  expect(mockTransaction).not.toHaveBeenCalled();
+});
+
 it('throws when no projection source exists', async () => {
   mockProjectionSourceFindFirst.mockResolvedValue(null);
 

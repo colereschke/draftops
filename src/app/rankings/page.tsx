@@ -4,6 +4,7 @@ import { auth } from '@/auth';
 import { prisma } from '@/lib/db';
 import RankingsUploadForm from '@/components/RankingsUpload/RankingsUploadForm';
 import ResolveUnmatchedList from '@/components/RankingsUpload/ResolveUnmatchedList';
+import MissingFromEtrList from '@/components/RankingsUpload/MissingFromEtrList';
 import { computeMissingFromEtr, ETR_SKILL_PLAYERS } from '@/lib/rankingsCoverage';
 
 export default async function RankingsPage() {
@@ -85,6 +86,7 @@ export default async function RankingsPage() {
           sleeperPlayers={sleeperPlayers}
         />
       )}
+      {rankingSet && <MissingFromEtrList names={missingFromEtr.map((p) => p.player)} />}
     </main>
   );
 }

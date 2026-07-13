@@ -1,5 +1,15 @@
 export type Position = 'QB' | 'RB' | 'WR' | 'TE' | 'PICK' | 'PKG';
 
+export type FuturePickAuctionMode = 'packages' | 'individual' | 'none';
+export type FuturePickAssetKind = 'package' | 'pick';
+
+export interface FuturePickMetadata {
+  futurePickYear: number;
+  futurePickRound: number | null;
+  futurePickOriginHandle: string;
+  futurePickAssetKind: FuturePickAssetKind;
+}
+
 export interface Player {
   player: string;
   team: string;
@@ -18,6 +28,16 @@ export interface Player {
   projectedPoints?: number | null;
   replacementPoints?: number | null;
   vor?: number | null;
+  futurePickYear?: number | null;
+  futurePickRound?: number | null;
+  futurePickOriginHandle?: string | null;
+  futurePickAssetKind?: FuturePickAssetKind | null;
+  dynamicPickValue?: {
+    baseline: number;
+    adjusted: number;
+    adjustment: number;
+    direction: 'up' | 'down' | 'flat';
+  };
   valueSource?: string;
   strategyLens?: 'rebuild' | 'balanced' | 'contend';
   strategyAdjustment?: number;

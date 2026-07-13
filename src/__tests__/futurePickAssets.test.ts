@@ -1,0 +1,219 @@
+import {
+  FUTURE_PICK_AUCTION_MODES,
+  excludeStaticFuturePickRows,
+  filterFuturePickAssetsForMode,
+  fromPrismaFuturePickMode,
+  generateFuturePickAssets,
+  getNextFuturePickYear,
+  isFuturePickAuctionMode,
+} from '@/lib/futurePickAssets';
+import type { FuturePickAuctionMode, Player } from '@/types';
+
+const teams = [
+  { handle: 'coreschke', displayName: 'Cole' },
+  { handle: 'chappy72', displayName: 'Chappy' },
+];
+
+describe('future pick auction mode helpers', () => {
+  it('accepts only supported future pick auction modes', () => {
+    expect(FUTURE_PICK_AUCTION_MODES).toEqual(['packages', 'individual', 'none']);
+    expect(isFuturePickAuctionMode('packages')).toBe(true);
+    expect(isFuturePickAuctionMode('individual')).toBe(true);
+    expect(isFuturePickAuctionMode('none')).toBe(true);
+    expect(isFuturePickAuctionMode('package')).toBe(false);
+    expect(isFuturePickAuctionMode(null)).toBe(false);
+  });
+
+  it('derives next future pick year from draft creation year', () => {
+    expect(getNextFuturePickYear(new Date('2026-07-10T12:00:00.000Z'))).toBe(2027);
+    expect(getNextFuturePickYear(new Date('2027-01-01T00:00:00.000Z'))).toBe(2028);
+  });
+
+  it('maps Prisma future pick auction mode values to app modes', () => {
+    expect(fromPrismaFuturePickMode('PACKAGES')).toBe('packages');
+    expect(fromPrismaFuturePickMode('INDIVIDUAL')).toBe('individual');
+    expect(fromPrismaFuturePickMode('NONE')).toBe('none');
+    expect(fromPrismaFuturePickMode(null)).toBe('packages');
+  });
+});
+
+describe('future pick asset generation', () => {
+  it('creates one package and three component picks per origin team', () => {
+    const assets = generateFuturePickAssets({ teams, year: 2027, startingRank: 900 });
+
+    expect(assets).toHaveLength(8);
+    expect(assets).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          player: "coreschke's 2027 package",
+          pos: 'PKG',
+          team: 'coreschke',
+          futurePickOriginHandle: 'coreschke',
+          futurePickAssetKind: 'package',
+          futurePickRound: null,
+        }),
+        expect.objectContaining({
+          player: 'chappy72 2027 1st',
+          pos: 'PICK',
+          team: 'chappy72',
+          futurePickOriginHandle: 'chappy72',
+          futurePickAssetKind: 'pick',
+          futurePickRound: 1,
+        }),
+      ]),
+    );
+  });
+
+  it('uses explicit ranking pick values as baselines when provided', () => {
+    const assets = generateFuturePickAssets({
+      teams,
+      year: 2027,
+      startingRank: 900,
+      baselines: {
+        rounds: {
+          1: { budget: 90, ceiling: 104, floor: 78 },
+          2: { budget: 22, ceiling: 25, floor: 19 },
+          3: { budget: 8, ceiling: 9, floor: 7 },
+        },
+      },
+    });
+
+    expect(assets.find((asset) => asset.player === "coreschke's 2027 package")).toMatchObject({
+      budget: 120,
+      ceiling: 138,
+      floor: 104,
+      baseBudget: 120,
+      baseCeiling: 138,
+      baseFloor: 104,
+    });
+    expect(assets.find((asset) => asset.player === 'coreschke 2027 1st')).toMatchObject({
+      budget: 90,
+      ceiling: 104,
+      floor: 78,
+      baseBudget: 90,
+    });
+  });
+
+  it.each([
+    ['packages', ["coreschke's 2027 package", "chappy72's 2027 package"]],
+    [
+      'individual',
+      [
+        'coreschke 2027 1st',
+        'coreschke 2027 2nd',
+        'coreschke 2027 3rd',
+        'chappy72 2027 1st',
+        'chappy72 2027 2nd',
+        'chappy72 2027 3rd',
+      ],
+    ],
+    ['none', []],
+  ] satisfies Array<[FuturePickAuctionMode, string[]]>)(
+    'filters visible future pick assets in %s mode',
+    (mode, expectedNames) => {
+      const basePlayer: Player = {
+        player: 'JaMarr Chase',
+        team: 'CIN',
+        pos: 'WR',
+        age: 26,
+        sfRank: 1,
+        budget: 250,
+        ceiling: 288,
+        floor: 218,
+        notes: '',
+      };
+      const assets = generateFuturePickAssets({ teams, year: 2027, startingRank: 900 });
+
+      const visible = filterFuturePickAssetsForMode([basePlayer, ...assets], mode);
+
+      expect(visible.map((p) => p.player)).toEqual(['JaMarr Chase', ...expectedNames]);
+    },
+  );
+
+  it.each([
+    ['packages', ['JaMarr Chase']],
+    ['individual', ['JaMarr Chase']],
+    ['none', ['JaMarr Chase']],
+  ] satisfies Array<[FuturePickAuctionMode, string[]]>)(
+    'hides untagged legacy PICK and PKG rows in %s mode',
+    (mode, expectedNames) => {
+      const basePlayer: Player = {
+        player: 'JaMarr Chase',
+        team: 'CIN',
+        pos: 'WR',
+        age: 26,
+        sfRank: 1,
+        budget: 250,
+        ceiling: 288,
+        floor: 218,
+        notes: '',
+      };
+      const legacyPackage: Player = {
+        player: 'Legacy Pick Package',
+        team: 'coreschke',
+        pos: 'PKG',
+        age: null,
+        sfRank: 900,
+        budget: 109,
+        ceiling: 131,
+        floor: 75,
+        notes: '',
+      };
+      const legacyPick: Player = {
+        player: 'Legacy 2027 1st',
+        team: 'coreschke',
+        pos: 'PICK',
+        age: null,
+        sfRank: 901,
+        budget: 75,
+        ceiling: 90,
+        floor: 52,
+        notes: '',
+      };
+
+      const visible = filterFuturePickAssetsForMode([basePlayer, legacyPackage, legacyPick], mode);
+
+      expect(visible.map((p) => p.player)).toEqual(expectedNames);
+    },
+  );
+
+  it('excludes static future pick rows from seed inputs', () => {
+    const basePlayer: Player = {
+      player: 'JaMarr Chase',
+      team: 'CIN',
+      pos: 'WR',
+      age: 26,
+      sfRank: 1,
+      budget: 250,
+      ceiling: 288,
+      floor: 218,
+      notes: '',
+    };
+    const legacyPackage: Player = {
+      player: 'Matt Gay',
+      team: 'coreschke',
+      pos: 'PKG',
+      age: null,
+      sfRank: 900,
+      budget: 109,
+      ceiling: 131,
+      floor: 75,
+      notes: '',
+    };
+    const legacyPick: Player = {
+      player: '2027 1st Round Pick',
+      team: 'FA',
+      pos: 'PICK',
+      age: null,
+      sfRank: 901,
+      budget: 75,
+      ceiling: 90,
+      floor: 52,
+      notes: '',
+    };
+
+    expect(excludeStaticFuturePickRows([basePlayer, legacyPackage, legacyPick])).toEqual([
+      basePlayer,
+    ]);
+  });
+});

@@ -539,7 +539,16 @@ Weights and caps need tuning; start conservative (±15% max total adjustment) so
 1. Signal activation is non-uniform — gate each signal on a combination of **% of draft budget spent** AND **number of players won** for that team. These thresholds will need empirical tuning; revisit after the first real draft that uses dynamic valuation.
 2. Adjusted values are surfaced in the UI with a directional indicator (↑/↓ arrow) next to the pick's displayed value, so users know the static baseline has been modified and in which direction. The raw adjusted value (not just the direction) should be visible somewhere — tooltip or inline.
 3. Pick packages affect nomination scores directly — validate that the adjustment doesn't cause picks to dominate or disappear from nomination suggestions in edge cases before shipping.
-4. The model operates on team-level aggregate picks, not per-team-of-origin. A player-heavy competing team could still hold a high-value rival's picks — noted as a known limitation; revisit if it causes real confusion in use.
+4. The model operates from the pick origin team's roster quality, not just the current holder of the
+   pick asset. This keeps "what are this team's future picks worth?" separate from "who currently
+   owns them?"
+
+**Long-term asset model option:**
+If DraftOps grows beyond live draft management into trade tracking or post-draft roster operations,
+future picks may need to move out of the `Player`-row auction model and become first-class assets
+with origin team, current owner, component picks, package grouping, and transfer history. That
+system would better support trades, package splitting, and ownership edits, but it is intentionally
+out of scope for the initial dynamic valuation work.
 
 ---
 

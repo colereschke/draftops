@@ -28,6 +28,7 @@ interface FilterControlsProps {
   strategyLens: StrategyLens;
   onStrategyLensChange: (value: StrategyLens) => void;
   resultCount: number;
+  futurePickYear?: number | null;
 }
 
 export default function FilterControls({
@@ -42,7 +43,10 @@ export default function FilterControls({
   strategyLens,
   onStrategyLensChange,
   resultCount,
+  futurePickYear,
 }: FilterControlsProps) {
+  const packageLabel = futurePickYear ? `${futurePickYear} pick package` : 'pick package';
+
   return (
     <>
       <div className="flex flex-col gap-2.5 border-b border-border-subtle bg-card px-5 py-3 md:flex-row md:flex-wrap md:items-center">
@@ -161,10 +165,9 @@ export default function FilterControls({
           <span style={{ color: 'var(--age-aging)' }}>28-30</span>{' '}
           <span style={{ color: 'var(--age-old)' }}>31+</span>
         </span>
-        <span>
+        <span data-testid="pkg-legend">
           <b style={{ color: 'var(--pos-wr)', fontSize: 9 }}>R</b> = Rookie ·{' '}
-          <b style={{ color: 'var(--pos-pkg)', fontSize: 9 }}>PKG</b> = 2027 1st+2nd+3rd via kicker
-          bid
+          <b style={{ color: 'var(--pos-pkg)', fontSize: 9 }}>PKG</b> = {packageLabel}
         </span>
       </div>
     </>

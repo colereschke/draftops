@@ -1,4 +1,4 @@
-import { players, PKG_PLAYERS } from '@/data/players';
+import { players } from '@/data/players';
 
 describe('players data', () => {
   it('should have players', () => {
@@ -21,11 +21,9 @@ describe('players data', () => {
     });
   });
 
-  it('exports PKG_PLAYERS as a subset of players', () => {
-    expect(PKG_PLAYERS.length).toBeGreaterThan(0);
-    PKG_PLAYERS.forEach((p) => {
-      expect(p.pos).toBe('PKG');
-      expect(players).toContainEqual(p);
-    });
+  it('does not include generated future pick assets in the static base list', () => {
+    expect(players.some((p) => p.pos === 'PICK' || p.pos === 'PKG')).toBe(false);
+    expect(players.some((p) => p.player === 'Matt Gay')).toBe(false);
+    expect(players.some((p) => p.player === '2027 1st Round Pick')).toBe(false);
   });
 });

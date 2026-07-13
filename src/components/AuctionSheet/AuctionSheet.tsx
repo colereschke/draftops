@@ -72,6 +72,11 @@ export default function AuctionSheet({
     [players, strategyLens],
   );
 
+  const futurePickYear = useMemo(
+    () => players.find((p) => p.futurePickYear != null)?.futurePickYear ?? null,
+    [players],
+  );
+
   const mySpent = useMemo(() => {
     const myTeam = ownerHandle ? teams.find((t) => t.handle === ownerHandle) : null;
     if (!myTeam) return 0;
@@ -258,6 +263,7 @@ export default function AuctionSheet({
         strategyLens={strategyLens}
         onStrategyLensChange={setStrategyLens}
         resultCount={filtered.length}
+        futurePickYear={futurePickYear}
       />
       <PlayerTable
         players={filtered}
@@ -277,7 +283,7 @@ export default function AuctionSheet({
           dynasty values
         </span>
         <span className="ml-auto">
-          PKG target for 2027 kicker = $109 (1st+2nd+3rd bundled w/ SF speculative premium)
+          PKG target = {futurePickYear ?? 'future'} 1st+2nd+3rd package
         </span>
       </div>
       {modalPlayer && (

@@ -24,7 +24,7 @@ export function computeTeamStats(
   return teams.map((team) => {
     const spent = team.results.reduce((sum, r) => sum + r.price, 0);
     const remaining = team.budget - spent;
-    const rosterCount = team.results.length;
+    const rosterCount = team.results.filter((r) => isRosterPosition(r.position)).length;
     const rosterRemaining = rosterSize - rosterCount;
     const buyingPower = remaining - rosterRemaining;
     const pkgCount = team.results.filter((r) => r.position === 'PKG').length;
@@ -65,4 +65,8 @@ export function computeTeamStats(
       results,
     };
   });
+}
+
+function isRosterPosition(position: string): boolean {
+  return position === 'QB' || position === 'RB' || position === 'WR' || position === 'TE';
 }

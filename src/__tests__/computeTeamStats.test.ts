@@ -75,6 +75,22 @@ describe('computeTeamStats', () => {
     expect(stats.rosterRemaining).toBe(27);
   });
 
+  it('does not count future pick assets as roster spots', () => {
+    const team = makeTeam({
+      results: [
+        makeResult({ position: 'PKG', price: 109 }),
+        makeResult({ id: 2, position: 'PICK', price: 75 }),
+        makeResult({ id: 3, position: 'QB', price: 200 }),
+      ],
+    });
+    const [stats] = computeTeamStats([team], [], 30);
+
+    expect(stats.spent).toBe(384);
+    expect(stats.rosterCount).toBe(1);
+    expect(stats.rosterRemaining).toBe(29);
+    expect(stats.buyingPower).toBe(587);
+  });
+
   it('computes buyingPower as remaining minus rosterRemaining', () => {
     const team = makeTeam({ results: [makeResult({ price: 100 })] });
     const [stats] = computeTeamStats([team], [], 30);

@@ -96,4 +96,11 @@ describe('FilterControls', () => {
 
     expect(screen.getByText('42 players shown')).toBeInTheDocument();
   });
+
+  it('renders a year-specific package legend', () => {
+    renderControls({ futurePickYear: 2027 });
+
+    expect(screen.getByTestId('pkg-legend')).toHaveTextContent('PKG = 2027 pick package');
+    expect(screen.queryByText(/next-year pick package/)).not.toBeInTheDocument();
+  });
 });

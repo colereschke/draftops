@@ -4,6 +4,7 @@ import { useMemo, useState, useTransition } from 'react';
 import { Command, CommandInput, CommandList, CommandItem } from '@/components/ui/command';
 import { resolveRankingMatch } from '@/lib/rankings-actions';
 import { normalizeName } from '@/lib/sleeperNormalize';
+import ErrorText from './ErrorText';
 
 export interface UnmatchedRankingPlayer {
   id: number;
@@ -131,17 +132,7 @@ function UnmatchedRow({
           ))}
         </CommandList>
       </Command>
-      {error && (
-        <span
-          style={{
-            color: '#e05050',
-            fontFamily: 'var(--font-barlow)',
-            fontSize: '0.8rem',
-          }}
-        >
-          {error}
-        </span>
-      )}
+      {error && <ErrorText messages={[error]} />}
     </div>
   );
 }

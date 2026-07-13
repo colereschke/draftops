@@ -2,6 +2,7 @@
 
 import { useRef, useState, useTransition } from 'react';
 import { uploadRankingsCsv } from '@/lib/rankings-actions';
+import ErrorText from './ErrorText';
 
 export interface RankingSummaryView {
   fileName: string | null;
@@ -106,19 +107,11 @@ export default function RankingsUploadForm({ summary }: RankingsUploadFormProps)
       </label>
 
       {errors && (
-        <ul
-          data-testid="rankings-upload-errors"
-          style={{
-            color: '#e05050',
-            fontFamily: 'var(--font-barlow)',
-            fontSize: '0.8rem',
-            marginTop: '0.5rem',
-          }}
-        >
-          {errors.map((e, i) => (
-            <li key={i}>{e}</li>
-          ))}
-        </ul>
+        <ErrorText
+          messages={errors}
+          testId="rankings-upload-errors"
+          style={{ marginTop: '0.5rem' }}
+        />
       )}
     </div>
   );

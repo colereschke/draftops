@@ -16,7 +16,7 @@ This spec covers four independent, additive changes to `/rankings` addressing al
 - **No CSV header renaming.** Required/optional column names stay exactly as the parser defines them (`Player`, `Team`, `Position`, `Age`, `2QBAuction`, `SF/TE Prem`, `Notes`). Generalizing "not necessarily ETR" is a framing/copy change only, not a parsing contract change.
 - **No alias/synonym header matching.** The parser does not attempt to accept multiple names for the same column.
 - **No per-upload "which optional columns were detected" indicator.** This would require a new persisted flag on `UserRankingSet` (a migration) to know, after the fact, whether e.g. `SF/TE Prem` was present in the header of the file that produced the current set. Static documentation of what's optional is sufficient for this round.
-- **No diff against the full `SleeperPlayer` table.** The coverage feature (point 4 below) diffs against the curated ~267-player ETR default pool (`src/data/players.ts`), not the full active roster pool (~600+ players), to avoid burying the signal under bench/practice-squad noise.
+- **No diff against the full `SleeperPlayer` table.** The coverage feature (point 4 below) diffs against the curated ~327-player ETR default pool (`src/data/players.ts`), not the full active roster pool (~600+ players), to avoid burying the signal under bench/practice-squad noise. (Opus plan review flagged that ~327 is realistic startup-pool depth for a 12-team, 25-30 man league, not noise — confirmed as the right target during plan review, no threshold filter needed.)
 - **No auto-fill of missing players.** If a player is missing from the uploaded set, this spec only surfaces that fact — it does not attempt to backfill them from Sleeper or any other source at draft creation.
 
 ## 1. Copy generalization
@@ -76,9 +76,9 @@ const missingFromEtr = ETR_SKILL_PLAYERS.filter((p) => !uploadedNames.has(normal
 
 `PICK`/`PKG` entries in `src/data/players.ts` are excluded — they're not real players a rankings CSV would ever list, and are seeded separately via `PKG_PLAYERS` regardless of source. Comparison uses all uploaded rows regardless of `matchStatus` (an unmatched row still represents an intended player).
 
-**Summary line** — extend `RankingSummaryView` (`RankingsUploadForm.tsx`) with a new field, e.g. `etrCoverage: { covered: number; total: number }`, rendered as a line in the existing summary block: "Covers 245 of 267 ETR-ranked players."
+**Summary line** — extend `RankingSummaryView` (`RankingsUploadForm.tsx`) with a new field, e.g. `etrCoverage: { covered: number; total: number }`, rendered as a line in the existing summary block: "Covers 300 of 327 ETR-ranked players."
 
-**Missing-players list** — new sibling component (e.g. `MissingFromEtrList.tsx`), rendered from `page.tsx` next to `RankingsUploadForm`, only when `missingFromEtr.length > 0` — mirroring how `ResolveUnmatchedList` is already a separate component rendered conditionally next to the upload form. Collapsed by default (a `<details>` disclosure or equivalent toggle state) with a plain text filter input (`useState` + `useMemo`, no `cmdk` — there's no selection action here, just browsing/searching a read-only list), since the list can range from a handful of names to potentially all 267 depending on how different the uploaded source is from ETR's pool.
+**Missing-players list** — new sibling component (e.g. `MissingFromEtrList.tsx`), rendered from `page.tsx` next to `RankingsUploadForm`, only when `missingFromEtr.length > 0` — mirroring how `ResolveUnmatchedList` is already a separate component rendered conditionally next to the upload form. Collapsed by default (a `<details>` disclosure or equivalent toggle state) with a plain text filter input (`useState` + `useMemo`, no `cmdk` — there's no selection action here, just browsing/searching a read-only list), since the list can range from a handful of names to potentially all 327 depending on how different the uploaded source is from ETR's pool.
 
 ## Testing
 

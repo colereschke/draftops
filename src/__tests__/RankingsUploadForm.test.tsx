@@ -29,6 +29,12 @@ describe('RankingsUploadForm', () => {
     expect(screen.getByText(/SF\/TE Prem/)).toBeInTheDocument();
   });
 
+  it('links to the downloadable template CSV', () => {
+    render(<RankingsUploadForm summary={null} />);
+    const link = screen.getByTestId('rankings-template-link');
+    expect(link).toHaveAttribute('href', '/rankings-template.csv');
+  });
+
   it('shows the summary card when a ranking set exists', () => {
     render(
       <RankingsUploadForm

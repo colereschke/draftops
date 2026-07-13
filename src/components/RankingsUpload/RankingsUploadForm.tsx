@@ -103,6 +103,21 @@ export default function RankingsUploadForm({ summary }: RankingsUploadFormProps)
             <strong style={{ color: 'var(--text-primary)' }}>Optional:</strong> SF/TE Prem (explicit
             rank — used instead of deriving rank from value), Notes
           </p>
+          <a
+            href="/rankings-template.csv"
+            download
+            data-testid="rankings-template-link"
+            style={{
+              display: 'inline-block',
+              marginTop: '0.5rem',
+              color: 'var(--pos-te)',
+              fontFamily: 'var(--font-barlow)',
+              fontSize: '0.8rem',
+              fontWeight: 700,
+            }}
+          >
+            Download template CSV
+          </a>
         </div>
       )}
 

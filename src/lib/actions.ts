@@ -6,7 +6,7 @@ import { auth } from '@/auth';
 import { prisma } from '@/lib/db';
 import { getDraft } from '@/lib/draft';
 import type { Position, StartingSlot, ScoringSettings } from '@/types';
-import { players as BASE_PLAYERS } from '@/data/players';
+import { players as BASE_PLAYERS, PKG_PLAYERS } from '@/data/players';
 import { adjustPlayerValues } from '@/lib/valueAdjustment';
 
 export async function logBid(data: {
@@ -95,6 +95,7 @@ export async function createDraft(data: {
   startingLineup: StartingSlot[];
   scoringSettings: ScoringSettings;
   teams: TeamInput[];
+  playerSource?: 'etr' | 'custom';
 }): Promise<void> {
   const session = await auth();
   if (!session) throw new Error('Unauthorized');
@@ -139,7 +140,31 @@ export async function createDraft(data: {
 
     await tx.draft.update({ where: { id: draft.id }, data: { ownerTeamId } });
 
-    const valued = adjustPlayerValues(BASE_PLAYERS, {
+    let basePlayers = BASE_PLAYERS;
+    if (data.playerSource === 'custom') {
+      const rankingSet = await tx.userRankingSet.findUnique({
+        where: { userId: session.user.id },
+        include: { players: true },
+      });
+      if (!rankingSet) throw new Error('No custom ranking set found');
+      basePlayers = [
+        ...rankingSet.players.map((p) => ({
+          player: p.name,
+          team: p.team,
+          pos: p.pos as Position,
+          age: p.age,
+          sfRank: p.sfRank,
+          budget: p.budget,
+          ceiling: p.ceiling,
+          floor: p.floor,
+          notes: p.notes,
+          sleeperId: p.sleeperId,
+        })),
+        ...PKG_PLAYERS,
+      ];
+    }
+
+    const valued = adjustPlayerValues(basePlayers, {
       startingLineup: data.startingLineup,
       scoringSettings: data.scoringSettings,
       teamCount: data.teams.length,
@@ -158,7 +183,7 @@ export async function createDraft(data: {
         baseBudget: p.baseBudget,
         baseCeiling: p.baseCeiling,
         baseFloor: p.baseFloor,
-        sleeperId: null,
+        sleeperId: p.sleeperId ?? null,
         notes: p.notes,
         draftId: draft.id,
       })),

@@ -1,4 +1,5 @@
 import type { Player, Position } from '@/types';
+import { scaleRankingValue } from '@/lib/scaleRankingValue';
 
 // RAW tuple format: [player, team, pos, age, sfRank, val2QB, notes]
 type RawEntry = [string, string, string, number | null, number, number, string];
@@ -425,9 +426,6 @@ const RAW: RawEntry[] = [
   ['2028 4th Round Pick', 'NFL', 'PICK', null, 306, 0, ''],
 ];
 
-const SCALE = 5;
-const TE_PREMIUM = 1.18;
-
 // PKG values are manually calibrated (not formula-derived):
 // 2027 kicker packages: 1st($75)+2nd($15)+3rd($5)=$95 * SF speculative premium ~1.15 ≈ $109
 // 2028: 1st($50)+2nd($10)+3rd($5)=$65 * 1.1 ≈ $72
@@ -454,9 +452,8 @@ export const players: Player[] = RAW.map(([player, team, pos, age, sfRank, val2Q
     if (!v) throw new Error(`Unknown PKG entry "${player}" — add it to PKG_VALUES`);
     return { player, team, pos: pos as Position, age, sfRank, ...v, notes };
   }
-  let base = Math.max(5, Math.round(val2QB * SCALE));
-  if (pos === 'TE') base = Math.round(base * TE_PREMIUM);
-  const ceiling = Math.round(base * 1.15);
-  const floor = Math.max(5, Math.round(base * 0.87));
-  return { player, team, pos: pos as Position, age, sfRank, budget: base, ceiling, floor, notes };
+  const scaled = scaleRankingValue(pos as Position, val2QB);
+  return { player, team, pos: pos as Position, age, sfRank, ...scaled, notes };
 });
+
+export const PKG_PLAYERS: Player[] = players.filter((p) => p.pos === 'PKG');

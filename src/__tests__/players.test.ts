@@ -1,4 +1,4 @@
-import { players } from '@/data/players';
+import { players, PKG_PLAYERS } from '@/data/players';
 
 describe('players data', () => {
   it('should have players', () => {
@@ -18,6 +18,14 @@ describe('players data', () => {
     const validPositions = ['QB', 'RB', 'WR', 'TE', 'PICK', 'PKG'];
     players.forEach((p) => {
       expect(validPositions).toContain(p.pos);
+    });
+  });
+
+  it('exports PKG_PLAYERS as a subset of players', () => {
+    expect(PKG_PLAYERS.length).toBeGreaterThan(0);
+    PKG_PLAYERS.forEach((p) => {
+      expect(p.pos).toBe('PKG');
+      expect(players).toContainEqual(p);
     });
   });
 });

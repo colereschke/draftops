@@ -17,6 +17,23 @@ enum FuturePickAuctionMode {
   NONE
 }
 
+enum OnboardingPhase {
+  DRAFT_SETUP
+  FEATURE_TOUR
+  COMPLETED
+}
+
+enum OnboardingStep {
+  VALUE_SHEET_INTRO
+  BID_PRACTICE
+  BID_UNDO
+  BUDGET_PRESSURE
+  TEAM_ROSTERS
+  NOMINATE_INTRO
+  NOMINATE_PRACTICE
+  NOMINATE_UNDO
+}
+
 // A draft is the top-level container for a single auction. One owner, all data scoped here.
 model Draft {
   id          Int         @id @default(autoincrement())
@@ -35,12 +52,29 @@ model Draft {
   futurePickAuctionMode FuturePickAuctionMode @default(PACKAGES)
   players               Player[]
   playerValues          DraftPlayerValue[]
+  onboardingProgress    OnboardingProgress?
 
   teams            Team[]            @relation("DraftTeams")
   ownerTeam        Team?             @relation("DraftOwnerTeam", fields: [ownerTeamId], references: [id])
   auctionResults   AuctionResult[]
   watchlistEntries PlayerWatchlist[]
   nominatedPlayers NominatedPlayer[]
+}
+
+model OnboardingProgress {
+  id                Int            @id @default(autoincrement())
+  userId            String         @unique
+  phase             OnboardingPhase
+  step              OnboardingStep @default(VALUE_SHEET_INTRO)
+  draftId           Int?           @unique
+  subjectPlayerName String?
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+  completedAt       DateTime?
+
+  draft Draft? @relation(fields: [draftId], references: [id], onDelete: SetNull)
+
+  @@index([draftId])
 }
 
 model Team {

@@ -37,6 +37,7 @@ const SORT_COLUMNS: Array<{ key: SortKey; label: string }> = [
   { key: 'floor', label: 'Floor' },
   { key: 'budget', label: 'Target' },
   { key: 'ceiling', label: 'Ceiling' },
+  { key: 'spread', label: 'Spread' },
 ];
 
 interface SortIconProps {
@@ -52,6 +53,16 @@ function SortIcon({ col, sortBy, sortDir }: SortIconProps) {
   ) : (
     <ArrowDown className="ml-1 inline size-3.5" style={{ color: 'var(--primary)' }} />
   );
+}
+
+function spreadColor(spread: number | null | undefined): string {
+  if (spread == null || spread === 0) return 'var(--text-muted)';
+  return spread > 0 ? 'var(--age-young)' : 'var(--age-old)';
+}
+
+function formatSpread(spread: number | null | undefined): string {
+  if (spread == null) return '—';
+  return spread > 0 ? `+${spread}` : String(spread);
 }
 
 export default function PlayerTable({
@@ -259,6 +270,16 @@ export default function PlayerTable({
                   style={{ color: claim ? 'var(--text-muted)' : 'var(--text-secondary)' }}
                 >
                   ${p.ceiling}
+                </TableCell>
+                <TableCell
+                  data-testid={`spread-${p.sfRank}`}
+                  className={cn(
+                    'text-center font-mono text-xs tabular-nums',
+                    claim && 'text-muted-foreground',
+                  )}
+                  style={{ color: claim ? undefined : spreadColor(p.spread) }}
+                >
+                  {formatSpread(p.spread)}
                 </TableCell>
                 {showNotes && (
                   <TableCell className="max-w-[220px] whitespace-normal text-[10px] text-muted-foreground">

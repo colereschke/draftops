@@ -7,6 +7,7 @@ import { getDraft } from '@/lib/draft';
 import { mapPlayersWithDraftValues } from '@/lib/playerValueMapping';
 import { filterFuturePickAssetsForMode, fromPrismaFuturePickMode } from '@/lib/futurePickAssets';
 import { applyDynamicPickValues } from '@/lib/dynamicPickValues';
+import { computeSpreads } from '@/lib/valueSpread';
 import {
   DEFAULT_STARTING_LINEUP,
   DEFAULT_SCORING_SETTINGS,
@@ -80,9 +81,11 @@ export default async function DraftHomePage({ params }: { params: Promise<{ draf
     startingLineup: (draft.startingLineup ?? DEFAULT_STARTING_LINEUP) as StartingSlot[],
   });
 
-  const players = filterFuturePickAssetsForMode(
-    dynamicPlayers,
-    fromPrismaFuturePickMode(draft.futurePickAuctionMode),
+  const players = computeSpreads(
+    filterFuturePickAssetsForMode(
+      dynamicPlayers,
+      fromPrismaFuturePickMode(draft.futurePickAuctionMode),
+    ),
   );
 
   return (

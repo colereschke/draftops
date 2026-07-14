@@ -199,6 +199,18 @@ export default function AuctionSheet({
         (p) => p.player.toLowerCase().includes(q) || p.team.toLowerCase().includes(q),
       );
     }
+    if (sortBy === 'spread') {
+      data.sort((a, b) => {
+        const aV = a.spread ?? null;
+        const bV = b.spread ?? null;
+        if (aV === null && bV === null) return a.sfRank - b.sfRank;
+        if (aV === null) return 1; // nulls always last
+        if (bV === null) return -1;
+        if (aV !== bV) return sortDir === 'asc' ? aV - bV : bV - aV;
+        return a.sfRank - b.sfRank;
+      });
+      return data;
+    }
     data.sort((a, b) => {
       let aV: string | number | null = a[sortBy] as string | number | null;
       let bV: string | number | null = b[sortBy] as string | number | null;

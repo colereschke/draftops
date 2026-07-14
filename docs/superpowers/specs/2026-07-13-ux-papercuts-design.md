@@ -108,7 +108,7 @@ Additionally, the sort comparator currently returns `0` on a tie in the primary 
 
 ## Testing
 
-- `useNumericField.test.ts` (new): covers empty-string intermediate state (doesn't coerce to default), partial decimal entry (`float: true`), min/max clamping on `numericValue`, and that `value` never gets forcibly overwritten mid-typing.
+- `useNumericField.test.ts` (new): covers empty-string intermediate state (doesn't coerce to default), partial decimal entry (`float: true`), that a fully-typed out-of-range value is never clamped, and that `value` never gets forcibly overwritten mid-typing.
 - `src/__tests__/drafts-new-form.test.tsx` (existing — extend): add cases verifying a numeric field can be cleared to empty and retyped without snapping back, and that adding a slot re-sorts the lineup into canonical order (e.g. add a slot, change it to `RB` via the select, assert the resulting `startingLineup` order).
 - `src/__tests__/AuctionHeader.test.tsx` (existing — extend): parametrized cases for the TE caption — default settings (no clause), PPR-only premium, first-down-only premium, both.
 - `src/__tests__/TeamRosterDetail.test.tsx` (existing): no new behavioral test needed for a pure CSS alignment fix — covered by visual/manual check, not unit tests. Confirm the existing tests in this file still pass unchanged (the fix only adds a width class, no markup/testid changes).

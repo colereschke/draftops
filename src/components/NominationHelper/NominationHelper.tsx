@@ -106,11 +106,17 @@ export default function NominationHelper({ draftId, players }: NominationHelperP
   const nominatePlayer = async (playerName: string) => {
     const snapshot = data;
     setData((prev) => (prev ? { ...prev, nominated: [...prev.nominated, playerName] } : prev));
-    const res = await fetch(`/api/draft/${draftId}/nominated`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ playerName }),
-    });
+    let res: Response;
+    try {
+      res = await fetch(`/api/draft/${draftId}/nominated`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ playerName }),
+      });
+    } catch {
+      setData(snapshot);
+      return;
+    }
     if (!res.ok) {
       if (res.status === 401) {
         router.replace('/sign-in');

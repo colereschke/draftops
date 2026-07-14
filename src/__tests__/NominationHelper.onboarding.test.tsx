@@ -110,14 +110,12 @@ describe('NominationHelper onboarding nomination events', () => {
     await waitFor(() => expect(mockRecordPlayerNominated).toHaveBeenCalledWith('Josh Allen'));
   });
 
-  it('does not record a failed nomination and restores the player row', async () => {
+  it('does not record a rejected nomination and restores the player row', async () => {
     const user = userEvent.setup();
     global.fetch = jest.fn((_, init?: RequestInit) =>
-      Promise.resolve(
-        init?.method === 'POST'
-          ? ({ ok: false, status: 500 } as Response)
-          : ({ ok: true, status: 200, json: async () => NOMINATION_DATA } as Response),
-      ),
+      init?.method === 'POST'
+        ? Promise.reject(new Error('offline'))
+        : Promise.resolve({ ok: true, status: 200, json: async () => NOMINATION_DATA } as Response),
     );
     renderHelper();
 

@@ -77,6 +77,7 @@ export async function updateBid(data: {
   if (!session) throw new Error('Unauthorized');
 
   const draft = await requireActiveDraft(session.user.id, data.draftId);
+  requirePositiveInteger(data.price, 'price');
 
   const team = await prisma.team.findFirst({ where: { id: data.teamId, draftId: draft.id } });
   if (!team) throw new Error('Team not found in draft');

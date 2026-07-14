@@ -106,7 +106,7 @@ model AuctionResult {
   draft     Draft    @relation(fields: [draftId], references: [id])
   createdAt DateTime @default(now())
 
-  @@index([playerId])
+  @@unique([playerId, draftId])
 }
 
 model PlayerWatchlist {

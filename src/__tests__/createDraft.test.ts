@@ -11,15 +11,26 @@ const mockGetEtrSleeperMatches = jest.fn();
 
 // Mock tx client
 const mockTxDraftCreate = jest.fn();
+const mockTxDraftCount = jest.fn();
 const mockTxDraftUpdate = jest.fn();
 const mockTxTeamCreate = jest.fn();
 const mockTxPlayerCreateMany = jest.fn().mockResolvedValue({ count: 270 });
 const mockTxUserRankingSetFindUnique = jest.fn();
+const mockTxOnboardingFindUnique = jest.fn();
+const mockTxOnboardingCreate = jest.fn();
+const mockTxOnboardingUpdateMany = jest.fn();
+const mockTxExecuteRaw = jest.fn();
 const mockTx = {
-  draft: { create: mockTxDraftCreate, update: mockTxDraftUpdate },
+  $executeRaw: (...args: unknown[]) => mockTxExecuteRaw(...args),
+  draft: { count: mockTxDraftCount, create: mockTxDraftCreate, update: mockTxDraftUpdate },
   team: { create: mockTxTeamCreate },
   player: { createMany: mockTxPlayerCreateMany },
   userRankingSet: { findUnique: mockTxUserRankingSetFindUnique },
+  onboardingProgress: {
+    create: mockTxOnboardingCreate,
+    findUnique: mockTxOnboardingFindUnique,
+    updateMany: mockTxOnboardingUpdateMany,
+  },
 };
 
 jest.mock('@/auth', () => ({ auth: () => mockAuth() }));
@@ -83,12 +94,17 @@ const VALID_INPUT = {
 beforeEach(() => {
   jest.clearAllMocks();
   mockAuth.mockResolvedValue(MOCK_SESSION);
+  mockTxDraftCount.mockResolvedValue(0);
   mockTxDraftCreate.mockResolvedValue({ id: 5, createdAt: MOCK_DRAFT_CREATED_AT });
   mockTxTeamCreate
     .mockResolvedValueOnce({ id: 10, handle: 'coreschke' })
     .mockResolvedValueOnce({ id: 11, handle: 'team2' });
   mockTxDraftUpdate.mockResolvedValue({});
   mockApplyProjectionValuesToDraft.mockResolvedValue({ projectionSourceId: 7, appliedCount: 250 });
+  mockTxExecuteRaw.mockResolvedValue(1);
+  mockTxOnboardingCreate.mockResolvedValue({});
+  mockTxOnboardingFindUnique.mockResolvedValue(null);
+  mockTxOnboardingUpdateMany.mockResolvedValue({ count: 0 });
   mockGetEtrSleeperMatches.mockReturnValue(new Map([[BASE_PLAYERS[0].player, 'sleeper-1']]));
   mockTransaction.mockImplementation((callback) => callback(mockTx));
 });
@@ -181,6 +197,63 @@ describe('createDraft', () => {
       useBatchTransaction: false,
     });
     expect(mockRedirect).toHaveBeenCalledWith('/draft/5');
+  });
+
+  it('starts the feature tour after successfully creating the owner’s first draft', async () => {
+    mockTxOnboardingUpdateMany.mockResolvedValue({ count: 1 });
+
+    await createDraft(VALID_INPUT);
+
+    expect(mockTxDraftCount).toHaveBeenCalledWith({ where: { ownerId: '123456789' } });
+    expect(mockTxOnboardingUpdateMany).toHaveBeenCalledWith({
+      where: { userId: '123456789', phase: 'DRAFT_SETUP' },
+      data: {
+        phase: 'FEATURE_TOUR',
+        draftId: 5,
+        step: 'VALUE_SHEET_INTRO',
+        subjectPlayerName: null,
+      },
+    });
+  });
+
+  it('creates a feature tour when the first-draft owner has no onboarding progress', async () => {
+    await createDraft(VALID_INPUT);
+
+    expect(mockTxOnboardingCreate).toHaveBeenCalledWith({
+      data: {
+        userId: '123456789',
+        phase: 'FEATURE_TOUR',
+        draftId: 5,
+        step: 'VALUE_SHEET_INTRO',
+      },
+    });
+  });
+
+  it('preserves an existing feature tour for the first draft', async () => {
+    mockTxOnboardingFindUnique.mockResolvedValue({ phase: 'FEATURE_TOUR', draftId: 4 });
+
+    await createDraft(VALID_INPUT);
+
+    expect(mockTxOnboardingCreate).not.toHaveBeenCalled();
+  });
+
+  it('preserves completed onboarding for the first draft', async () => {
+    mockTxOnboardingFindUnique.mockResolvedValue({ phase: 'COMPLETED' });
+
+    await createDraft(VALID_INPUT);
+
+    expect(mockTxOnboardingCreate).not.toHaveBeenCalled();
+  });
+
+  it('serializes a user’s first-draft eligibility check with an advisory transaction lock', async () => {
+    await createDraft(VALID_INPUT);
+
+    expect(mockTxExecuteRaw).toHaveBeenCalledTimes(1);
+    expect(mockTxExecuteRaw.mock.calls[0][0].join('')).toContain('pg_advisory_xact_lock');
+    expect(mockTxExecuteRaw.mock.calls[0][1]).toBe('123456789');
+    expect(mockTxExecuteRaw.mock.invocationCallOrder[0]).toBeLessThan(
+      mockTxDraftCount.mock.invocationCallOrder[0],
+    );
   });
 
   it('fails loudly when automatic projection application fails', async () => {

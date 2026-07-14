@@ -37,6 +37,14 @@ jest.mock('@/lib/actions', () => ({
   deleteBid: jest.fn().mockResolvedValue(undefined),
 }));
 
+jest.mock('@/components/Onboarding/OnboardingContext', () => ({
+  useOnboarding: () => ({
+    progress: null,
+    recordBidLogged: jest.fn().mockResolvedValue(undefined),
+    recordPlayerNominated: jest.fn().mockResolvedValue(undefined),
+  }),
+}));
+
 const mockTeams: LeagueTeam[] = [
   { id: 1, handle: 'coreschke', displayName: 'Cole' },
   { id: 2, handle: 'chappy72', displayName: null },

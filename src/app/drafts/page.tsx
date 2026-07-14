@@ -3,22 +3,27 @@ import { auth } from '@/auth';
 import { redirect } from 'next/navigation';
 import { prisma } from '@/lib/db';
 import { completeDraft } from '@/lib/actions';
+import FirstRunWelcome from '@/components/Onboarding/FirstRunWelcome';
+import { isFirstDraftOnboardingEligible } from '@/lib/onboarding';
 
 export default async function DraftsPage() {
   const session = await auth();
   if (!session) redirect('/sign-in');
 
-  const drafts = await prisma.draft.findMany({
-    where: { ownerId: session.user.id },
-    select: {
-      id: true,
-      name: true,
-      status: true,
-      createdAt: true,
-      _count: { select: { teams: true } },
-    },
-    orderBy: { createdAt: 'desc' },
-  });
+  const [drafts, onboardingEligible] = await Promise.all([
+    prisma.draft.findMany({
+      where: { ownerId: session.user.id },
+      select: {
+        id: true,
+        name: true,
+        status: true,
+        createdAt: true,
+        _count: { select: { teams: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+    }),
+    isFirstDraftOnboardingEligible(session.user.id),
+  ]);
 
   const activeDrafts = drafts.filter((d) => d.status === 'ACTIVE');
   const completeDrafts = drafts.filter((d) => d.status === 'COMPLETE');
@@ -58,6 +63,8 @@ export default async function DraftsPage() {
           + Create Draft
         </Link>
       </div>
+
+      <FirstRunWelcome eligible={onboardingEligible} />
 
       {drafts.length === 0 && (
         <p style={{ color: 'var(--text-secondary)', textAlign: 'center', marginTop: '3rem' }}>

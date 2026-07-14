@@ -10,6 +10,14 @@ jest.mock('next/navigation', () => ({
   }),
 }));
 
+jest.mock('@/components/Onboarding/OnboardingContext', () => ({
+  useOnboarding: () => ({
+    progress: null,
+    recordBidLogged: jest.fn(),
+    recordPlayerNominated: jest.fn(),
+  }),
+}));
+
 const PLAYERS: Player[] = [
   {
     player: 'Josh Allen',

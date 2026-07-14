@@ -167,6 +167,24 @@ describe('NewDraftPage — scoring settings', () => {
     expect(screen.getByTestId<HTMLInputElement>('scoring-pprWR').value).toBe('1');
     expect(screen.getByTestId<HTMLInputElement>('scoring-pprTE').value).toBe('1');
   });
+
+  it('allows clearing a scoring field to empty while retyping', () => {
+    render(<NewDraftPage />);
+    const input = screen.getByTestId<HTMLInputElement>('scoring-passYdsPerPoint');
+    fireEvent.change(input, { target: { value: '' } });
+    expect(input.value).toBe('');
+    fireEvent.change(input, { target: { value: '20' } });
+    expect(input.value).toBe('20');
+  });
+
+  it('allows a decimal scoring field to be edited without snapping back', () => {
+    render(<NewDraftPage />);
+    const input = screen.getByTestId<HTMLInputElement>('scoring-pprTE');
+    fireEvent.change(input, { target: { value: '' } });
+    expect(input.value).toBe('');
+    fireEvent.change(input, { target: { value: '1.5' } });
+    expect(input.value).toBe('1.5');
+  });
 });
 
 describe('NewDraftPage — lineup validation', () => {

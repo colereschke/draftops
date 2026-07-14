@@ -57,9 +57,27 @@ export default function NewDraftPage() {
   const [startingLineup, setStartingLineup] = useState<StartingSlot[]>([
     ...DEFAULT_STARTING_LINEUP,
   ]);
-  const [scoringSettings, setScoringSettings] = useState<ScoringSettings>({
-    ...DEFAULT_SCORING_SETTINGS,
+  const passYdsPerPointField = useNumericField(DEFAULT_SCORING_SETTINGS.passYdsPerPoint, {
+    float: true,
   });
+  const passTDField = useNumericField(DEFAULT_SCORING_SETTINGS.passTD, { float: true });
+  const passIntField = useNumericField(DEFAULT_SCORING_SETTINGS.passInt, { float: true });
+  const rushAttField = useNumericField(DEFAULT_SCORING_SETTINGS.rushAtt, { float: true });
+  const rushFDField = useNumericField(DEFAULT_SCORING_SETTINGS.rushFD, { float: true });
+  const pprRBField = useNumericField(DEFAULT_SCORING_SETTINGS.pprRB, { float: true });
+  const pprWRField = useNumericField(DEFAULT_SCORING_SETTINGS.pprWR, { float: true });
+  const pprTEField = useNumericField(DEFAULT_SCORING_SETTINGS.pprTE, { float: true });
+  const recFDField = useNumericField(DEFAULT_SCORING_SETTINGS.recFD, { float: true });
+  const rbFDBonusField = useNumericField(DEFAULT_SCORING_SETTINGS.rbFDBonus, { float: true });
+  const wrFDBonusField = useNumericField(DEFAULT_SCORING_SETTINGS.wrFDBonus, { float: true });
+  const teFDBonusField = useNumericField(DEFAULT_SCORING_SETTINGS.teFDBonus, { float: true });
+  const pprFields = { pprRB: pprRBField, pprWR: pprWRField, pprTE: pprTEField } as const;
+  const fdBonusFields = {
+    recFD: recFDField,
+    rbFDBonus: rbFDBonusField,
+    wrFDBonus: wrFDBonusField,
+    teFDBonus: teFDBonusField,
+  } as const;
   const [rankingSummary, setRankingSummary] = useState<RankingSummary | null>(null);
   const [rankingSummaryError, setRankingSummaryError] = useState(false);
   const [playerSource, setPlayerSource] = useState<'etr' | 'custom'>('etr');
@@ -93,10 +111,6 @@ export default function NewDraftPage() {
       }
       return prev.slice(0, safeTeamCount);
     });
-  }
-
-  function updateScoring<K extends keyof ScoringSettings>(key: K, value: ScoringSettings[K]) {
-    setScoringSettings((prev) => ({ ...prev, [key]: value }));
   }
 
   function setMine(index: number) {
@@ -136,7 +150,18 @@ export default function NewDraftPage() {
       teamCountField.setNumericValue(data.teamCount);
       rosterSizeField.setNumericValue(data.rosterSize);
       setStartingLineup(data.startingLineup);
-      setScoringSettings(data.scoringSettings);
+      passYdsPerPointField.setNumericValue(data.scoringSettings.passYdsPerPoint);
+      passTDField.setNumericValue(data.scoringSettings.passTD);
+      passIntField.setNumericValue(data.scoringSettings.passInt);
+      rushAttField.setNumericValue(data.scoringSettings.rushAtt);
+      rushFDField.setNumericValue(data.scoringSettings.rushFD);
+      pprRBField.setNumericValue(data.scoringSettings.pprRB);
+      pprWRField.setNumericValue(data.scoringSettings.pprWR);
+      pprTEField.setNumericValue(data.scoringSettings.pprTE);
+      recFDField.setNumericValue(data.scoringSettings.recFD);
+      rbFDBonusField.setNumericValue(data.scoringSettings.rbFDBonus);
+      wrFDBonusField.setNumericValue(data.scoringSettings.wrFDBonus);
+      teFDBonusField.setNumericValue(data.scoringSettings.teFDBonus);
       setTeams(
         data.teams.map((t: SleeperImportResult['teams'][number], i: number) => ({
           handle: t.handle,
@@ -193,7 +218,20 @@ export default function NewDraftPage() {
             TE: targetRosterFields.TE.numericValue,
           },
           startingLineup,
-          scoringSettings,
+          scoringSettings: {
+            passYdsPerPoint: passYdsPerPointField.numericValue,
+            passTD: passTDField.numericValue,
+            passInt: passIntField.numericValue,
+            rushAtt: rushAttField.numericValue,
+            rushFD: rushFDField.numericValue,
+            pprRB: pprRBField.numericValue,
+            pprWR: pprWRField.numericValue,
+            pprTE: pprTEField.numericValue,
+            recFD: recFDField.numericValue,
+            rbFDBonus: rbFDBonusField.numericValue,
+            wrFDBonus: wrFDBonusField.numericValue,
+            teFDBonus: teFDBonusField.numericValue,
+          } satisfies ScoringSettings,
           teams,
           playerSource,
         });
@@ -596,10 +634,8 @@ export default function NewDraftPage() {
                   type="number"
                   min={1}
                   step="any"
-                  value={scoringSettings.passYdsPerPoint}
-                  onChange={(e) =>
-                    updateScoring('passYdsPerPoint', parseFloat(e.target.value) || 25)
-                  }
+                  value={passYdsPerPointField.value}
+                  onChange={passYdsPerPointField.onChange}
                   style={inputStyle}
                 />
               </label>
@@ -610,11 +646,8 @@ export default function NewDraftPage() {
                   type="number"
                   min={0}
                   step="any"
-                  value={scoringSettings.passTD}
-                  onChange={(e) => {
-                    const v = parseFloat(e.target.value);
-                    updateScoring('passTD', Number.isNaN(v) ? 4 : v);
-                  }}
+                  value={passTDField.value}
+                  onChange={passTDField.onChange}
                   style={inputStyle}
                 />
               </label>
@@ -625,8 +658,8 @@ export default function NewDraftPage() {
                   type="number"
                   max={0}
                   step="any"
-                  value={scoringSettings.passInt}
-                  onChange={(e) => updateScoring('passInt', parseFloat(e.target.value) || -2)}
+                  value={passIntField.value}
+                  onChange={passIntField.onChange}
                   style={inputStyle}
                 />
               </label>
@@ -644,8 +677,8 @@ export default function NewDraftPage() {
                   type="number"
                   min={0}
                   step="any"
-                  value={scoringSettings.rushAtt}
-                  onChange={(e) => updateScoring('rushAtt', parseFloat(e.target.value) || 0)}
+                  value={rushAttField.value}
+                  onChange={rushAttField.onChange}
                   style={inputStyle}
                 />
               </label>
@@ -656,8 +689,8 @@ export default function NewDraftPage() {
                   type="number"
                   min={0}
                   step="any"
-                  value={scoringSettings.rushFD}
-                  onChange={(e) => updateScoring('rushFD', parseFloat(e.target.value) || 0)}
+                  value={rushFDField.value}
+                  onChange={rushFDField.onChange}
                   style={inputStyle}
                 />
               </label>
@@ -682,8 +715,8 @@ export default function NewDraftPage() {
                     type="number"
                     min={0}
                     step="any"
-                    value={scoringSettings[key]}
-                    onChange={(e) => updateScoring(key, parseFloat(e.target.value) || 0)}
+                    value={pprFields[key].value}
+                    onChange={pprFields[key].onChange}
                     style={inputStyle}
                   />
                 </label>
@@ -710,8 +743,8 @@ export default function NewDraftPage() {
                     type="number"
                     min={0}
                     step="any"
-                    value={scoringSettings[key]}
-                    onChange={(e) => updateScoring(key, parseFloat(e.target.value) || 0)}
+                    value={fdBonusFields[key].value}
+                    onChange={fdBonusFields[key].onChange}
                     style={inputStyle}
                   />
                 </label>

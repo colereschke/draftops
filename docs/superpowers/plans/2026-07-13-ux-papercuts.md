@@ -31,7 +31,7 @@
 **Interfaces:**
 
 - Consumes: nothing project-specific (plain React `useState`).
-- Produces: `useNumericField(initial: number, options?: { min?: number; max?: number; float?: boolean }): { value: string; onChange: (e: React.ChangeEvent<HTMLInputElement>) => void; numericValue: number; setNumericValue: (n: number) => void }`, consumed by Tasks 2 and 3.
+- Produces: `useNumericField(initial: number, options?: { float?: boolean }): { value: string; onChange: (e: React.ChangeEvent<HTMLInputElement>) => void; numericValue: number; setNumericValue: (n: number) => void }`, consumed by Tasks 2 and 3. Deliberately has no `min`/`max` clamping — see Step 3's note.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -54,24 +54,24 @@ describe('useNumericField', () => {
   });
 
   it('allows clearing to an empty string without forcing a default back into the field', () => {
-    const { result } = renderHook(() => useNumericField(30, { min: 10, max: 60 }));
+    const { result } = renderHook(() => useNumericField(30));
     act(() => result.current.onChange(changeEvent('')));
     expect(result.current.value).toBe('');
     expect(result.current.numericValue).toBe(30); // falls back to initial while empty
   });
 
   it('allows a lone minus sign as an intermediate typing state', () => {
-    const { result } = renderHook(() => useNumericField(-2, { max: 0, float: true }));
+    const { result } = renderHook(() => useNumericField(-2, { float: true }));
     act(() => result.current.onChange(changeEvent('-')));
     expect(result.current.value).toBe('-'); // displayed value is never coerced away
     expect(result.current.numericValue).toBe(-2); // "-" doesn't parse, falls back to initial
   });
 
-  it('clamps numericValue to min/max without altering the displayed string', () => {
-    const { result } = renderHook(() => useNumericField(30, { min: 10, max: 60 }));
-    act(() => result.current.onChange(changeEvent('5')));
-    expect(result.current.value).toBe('5');
-    expect(result.current.numericValue).toBe(10); // clamped to min
+  it('does not clamp a fully-typed out-of-range value — the caller trusts the user', () => {
+    const { result } = renderHook(() => useNumericField(30));
+    act(() => result.current.onChange(changeEvent('9999')));
+    expect(result.current.value).toBe('9999');
+    expect(result.current.numericValue).toBe(9999); // no clamping, no silent mismatch
   });
 
   it('uses parseInt by default and parseFloat when float is set', () => {
@@ -85,7 +85,7 @@ describe('useNumericField', () => {
   });
 
   it('setNumericValue updates both the displayed value and numericValue imperatively', () => {
-    const { result } = renderHook(() => useNumericField(30, { min: 10, max: 60 }));
+    const { result } = renderHook(() => useNumericField(30));
     act(() => result.current.setNumericValue(45));
     expect(result.current.value).toBe('45');
     expect(result.current.numericValue).toBe(45);
@@ -100,7 +100,7 @@ Expected: FAIL — `Cannot find module '@/lib/useNumericField'`
 
 - [ ] **Step 3: Implement the hook**
 
-Create `src/lib/useNumericField.ts`:
+Create `src/lib/useNumericField.ts`. Note: no `min`/`max` clamping — an earlier version of this design clamped `numericValue` to a range, but that silently diverges the displayed value from what gets submitted (the field shows what you typed, a different clamped number gets saved, with no visible feedback). The only field that previously had real range enforcement (team count) did so by immediately snapping the _displayed_ value, which is itself a version of the mid-typing snap-back bug this whole hook exists to fix. So this hook never clamps; any range enforcement a specific field genuinely needs belongs at that field's own call site, not in the shared hook.
 
 ```ts
 'use client';
@@ -109,8 +109,6 @@ import { useState } from 'react';
 import type { ChangeEvent } from 'react';
 
 export interface UseNumericFieldOptions {
-  min?: number;
-  max?: number;
   float?: boolean;
 }
 
@@ -125,7 +123,7 @@ export function useNumericField(
   initial: number,
   options: UseNumericFieldOptions = {},
 ): UseNumericField {
-  const { min, max, float = false } = options;
+  const { float = false } = options;
   const [value, setValue] = useState(String(initial));
 
   function onChange(e: ChangeEvent<HTMLInputElement>) {
@@ -137,9 +135,7 @@ export function useNumericField(
   }
 
   const parsed = float ? parseFloat(value) : parseInt(value, 10);
-  let numericValue = Number.isFinite(parsed) ? parsed : initial;
-  if (min !== undefined) numericValue = Math.max(min, numericValue);
-  if (max !== undefined) numericValue = Math.min(max, numericValue);
+  const numericValue = Number.isFinite(parsed) ? parsed : initial;
 
   return { value, onChange, numericValue, setNumericValue };
 }
@@ -269,13 +265,13 @@ const [targetRoster, setTargetRoster] = useState<Record<'QB' | 'RB' | 'WR' | 'TE
 Replace all four with:
 
 ```tsx
-const teamCountField = useNumericField(12, { min: 2, max: 32 });
-const budgetField = useNumericField(1000, { min: 1 });
-const rosterSizeField = useNumericField(30, { min: 10, max: 60 });
-const targetRosterQBField = useNumericField(DEFAULT_TARGET_ROSTER.QB ?? 4, { min: 0 });
-const targetRosterRBField = useNumericField(DEFAULT_TARGET_ROSTER.RB ?? 9, { min: 0 });
-const targetRosterWRField = useNumericField(DEFAULT_TARGET_ROSTER.WR ?? 11, { min: 0 });
-const targetRosterTEField = useNumericField(DEFAULT_TARGET_ROSTER.TE ?? 3, { min: 0 });
+const teamCountField = useNumericField(12);
+const budgetField = useNumericField(1000);
+const rosterSizeField = useNumericField(30);
+const targetRosterQBField = useNumericField(DEFAULT_TARGET_ROSTER.QB ?? 4);
+const targetRosterRBField = useNumericField(DEFAULT_TARGET_ROSTER.RB ?? 9);
+const targetRosterWRField = useNumericField(DEFAULT_TARGET_ROSTER.WR ?? 11);
+const targetRosterTEField = useNumericField(DEFAULT_TARGET_ROSTER.TE ?? 3);
 const targetRosterFields = {
   QB: targetRosterQBField,
   RB: targetRosterRBField,
@@ -283,6 +279,8 @@ const targetRosterFields = {
   TE: targetRosterTEField,
 } as const;
 ```
+
+None of these carry `min`/`max` — per Task 1's note, the hook never clamps. Budget, roster size, and target roster never had real range enforcement before either (only a NaN-or-falsy `|| default` fallback), so this preserves their exact prior behavior while fixing the editing bug. Team count is the one field that previously had explicit `[2, 32]` range enforcement (`handleTeamCountChange`'s `Math.max(2, Math.min(32, newCount))`) — Step 4 below preserves that enforcement, but scoped only to the `teams`-array resize computation (where an out-of-range value could genuinely corrupt the roster table), not fed back into what the field displays or submits.
 
 - [ ] **Step 4: Replace `handleTeamCountChange` with a resize effect**
 
@@ -306,27 +304,27 @@ function handleTeamCountChange(newCount: number) {
 }
 ```
 
-Replace it with a `useEffect` that reacts to the field's numeric value, placed near the other hooks (after the `useEffect` that loads the ranking summary):
+Replace it with a `useEffect` that reacts to the field's numeric value, placed near the other hooks (after the `useEffect` that loads the ranking summary). The `[2, 32]` clamp is applied here — locally, only for sizing the `teams` array — because an unclamped negative or extreme value would make `Array.prototype.slice`'s negative-index behavior misbehave (a negative `clamped` doesn't mean "empty," it means "count from the end") or generate an absurdly large roster table; this local clamp never touches `teamCountField`'s displayed value or `numericValue`, so the field itself still shows exactly what was typed:
 
 ```tsx
 useEffect(() => {
-  const clamped = teamCountField.numericValue;
+  const safeCount = Math.max(2, Math.min(32, teamCountField.numericValue));
   setTeams((prev) => {
-    if (clamped > prev.length) {
-      const added = Array.from({ length: clamped - prev.length }, (_, i) => ({
+    if (safeCount > prev.length) {
+      const added = Array.from({ length: safeCount - prev.length }, (_, i) => ({
         handle: `team-${prev.length + i + 1}`,
         displayName: '',
         isMine: false,
       }));
       return [...prev, ...added];
     }
-    if (clamped < prev.length) return prev.slice(0, clamped);
+    if (safeCount < prev.length) return prev.slice(0, safeCount);
     return prev;
   });
 }, [teamCountField.numericValue]);
 ```
 
-This also correctly no-ops on Sleeper import (Step 5 below sets `teams` directly to the imported list, which already has `teamCount` entries, so this effect's resize logic finds `clamped === prev.length` and returns `prev` unchanged).
+This also correctly no-ops on Sleeper import (Step 5 below sets `teams` directly to the imported list, which already has `teamCount` entries — assuming that count is itself within `[2, 32]`, which real Sleeper leagues always are — so this effect's resize logic finds `safeCount === prev.length` and returns `prev` unchanged).
 
 - [ ] **Step 5: Update the Sleeper import handler**
 
@@ -578,29 +576,19 @@ Replace with 12 individual hooks, placed where `scoringSettings` used to be decl
 
 ```tsx
 const passYdsPerPointField = useNumericField(DEFAULT_SCORING_SETTINGS.passYdsPerPoint, {
-  min: 1,
   float: true,
 });
-const passTDField = useNumericField(DEFAULT_SCORING_SETTINGS.passTD, { min: 0, float: true });
-const passIntField = useNumericField(DEFAULT_SCORING_SETTINGS.passInt, { max: 0, float: true });
-const rushAttField = useNumericField(DEFAULT_SCORING_SETTINGS.rushAtt, { min: 0, float: true });
-const rushFDField = useNumericField(DEFAULT_SCORING_SETTINGS.rushFD, { min: 0, float: true });
-const pprRBField = useNumericField(DEFAULT_SCORING_SETTINGS.pprRB, { min: 0, float: true });
-const pprWRField = useNumericField(DEFAULT_SCORING_SETTINGS.pprWR, { min: 0, float: true });
-const pprTEField = useNumericField(DEFAULT_SCORING_SETTINGS.pprTE, { min: 0, float: true });
-const recFDField = useNumericField(DEFAULT_SCORING_SETTINGS.recFD, { min: 0, float: true });
-const rbFDBonusField = useNumericField(DEFAULT_SCORING_SETTINGS.rbFDBonus, {
-  min: 0,
-  float: true,
-});
-const wrFDBonusField = useNumericField(DEFAULT_SCORING_SETTINGS.wrFDBonus, {
-  min: 0,
-  float: true,
-});
-const teFDBonusField = useNumericField(DEFAULT_SCORING_SETTINGS.teFDBonus, {
-  min: 0,
-  float: true,
-});
+const passTDField = useNumericField(DEFAULT_SCORING_SETTINGS.passTD, { float: true });
+const passIntField = useNumericField(DEFAULT_SCORING_SETTINGS.passInt, { float: true });
+const rushAttField = useNumericField(DEFAULT_SCORING_SETTINGS.rushAtt, { float: true });
+const rushFDField = useNumericField(DEFAULT_SCORING_SETTINGS.rushFD, { float: true });
+const pprRBField = useNumericField(DEFAULT_SCORING_SETTINGS.pprRB, { float: true });
+const pprWRField = useNumericField(DEFAULT_SCORING_SETTINGS.pprWR, { float: true });
+const pprTEField = useNumericField(DEFAULT_SCORING_SETTINGS.pprTE, { float: true });
+const recFDField = useNumericField(DEFAULT_SCORING_SETTINGS.recFD, { float: true });
+const rbFDBonusField = useNumericField(DEFAULT_SCORING_SETTINGS.rbFDBonus, { float: true });
+const wrFDBonusField = useNumericField(DEFAULT_SCORING_SETTINGS.wrFDBonus, { float: true });
+const teFDBonusField = useNumericField(DEFAULT_SCORING_SETTINGS.teFDBonus, { float: true });
 const pprFields = { pprRB: pprRBField, pprWR: pprWRField, pprTE: pprTEField } as const;
 const fdBonusFields = {
   recFD: recFDField,
@@ -610,7 +598,9 @@ const fdBonusFields = {
 } as const;
 ```
 
-`ScoringSettings` and `DEFAULT_SCORING_SETTINGS` stay imported from `@/types` (already imported) — `ScoringSettings` is still used as the type of the reconstructed object in Step 6.
+None of these carry `min`/`max` — none of the twelve scoring fields had real range enforcement before (`passInt`'s native `max={0}` and the others' native `min={0}` were always cosmetic HTML hints only; the actual state update was just `parseFloat(...) || default`), so dropping clamping here preserves exact prior behavior while fixing the editing bug. The native HTML `min`/`max`/`step` attributes on each `<input>` are untouched in Step 5 below.
+
+`ScoringSettings` and `DEFAULT_SCORING_SETTINGS` stay imported from `@/types` (already imported) — `ScoringSettings` is still used as the type of the reconstructed object in Step 7.
 
 - [ ] **Step 4: Update the Sleeper import handler**
 

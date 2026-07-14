@@ -1,15 +1,18 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { advanceOnboardingStep, completeOnboarding } from '@/lib/onboarding-actions';
+import { OnboardingProvider, useOnboarding } from '@/components/Onboarding/OnboardingContext';
 import OnboardingTour from '@/components/Onboarding/OnboardingTour';
 import { TOUR_STEPS } from '@/components/Onboarding/tourSteps';
 import type { TourProgress } from '@/components/Onboarding/types';
 
 const mockPush = jest.fn();
 const mockRouter = { push: mockPush };
+let mockPathname = '/draft/5';
 
 jest.mock('next/navigation', () => ({
   useRouter: () => mockRouter,
+  usePathname: () => mockPathname,
 }));
 
 jest.mock('@/lib/onboarding-actions', () => ({
@@ -28,11 +31,43 @@ const FEATURE_TOUR_PROGRESS: TourProgress = {
 
 beforeEach(() => {
   jest.clearAllMocks();
+  mockPathname = '/draft/5';
   mockAdvanceOnboardingStep.mockResolvedValue();
   mockCompleteOnboarding.mockResolvedValue();
 });
 
 describe('OnboardingTour', () => {
+  it('defines the reviewed anchor and route contract for every step', () => {
+    expect(
+      Object.fromEntries(
+        Object.entries(TOUR_STEPS).map(([step, definition]) => [
+          step,
+          { route: definition.route(5), target: definition.target },
+        ]),
+      ),
+    ).toEqual({
+      VALUE_SHEET_INTRO: { route: '/draft/5', target: 'value-sheet' },
+      BID_PRACTICE: { route: '/draft/5', target: 'bid-practice' },
+      BID_UNDO: { route: '/draft/5', target: 'bid-undo' },
+      BUDGET_PRESSURE: { route: '/draft/5/budget', target: 'budget-pressure' },
+      TEAM_ROSTERS: { route: '/draft/5/teams', target: 'team-rosters' },
+      NOMINATE_INTRO: { route: '/draft/5/nominate', target: 'nominate-intro' },
+      NOMINATE_PRACTICE: { route: '/draft/5/nominate', target: 'nominate-practice' },
+      NOMINATE_UNDO: { route: '/draft/5/nominate', target: 'nominate-undo' },
+    });
+  });
+
+  it('navigates to the current step route before checking for its anchor', async () => {
+    mockPathname = '/draft/5/budget';
+
+    render(<OnboardingTour progress={FEATURE_TOUR_PROGRESS} />);
+
+    await waitFor(() => {
+      expect(mockPush).toHaveBeenCalledWith('/draft/5');
+    });
+    expect(mockAdvanceOnboardingStep).not.toHaveBeenCalled();
+  });
+
   it('persists the next step before navigating', async () => {
     const user = userEvent.setup();
     const valueSheet = TOUR_STEPS.VALUE_SHEET_INTRO;
@@ -128,4 +163,126 @@ describe('OnboardingTour', () => {
 
     expect(mockCompleteOnboarding).toHaveBeenCalledTimes(1);
   });
+
+  it('does not complete twice when Escape is pressed synchronously', async () => {
+    const user = userEvent.setup();
+    const valueSheet = TOUR_STEPS.VALUE_SHEET_INTRO;
+    let resolveCompletion: (() => void) | undefined;
+    mockCompleteOnboarding.mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveCompletion = resolve;
+        }),
+    );
+
+    render(
+      <>
+        <div data-onboarding-target={valueSheet.target} />
+        <OnboardingTour progress={FEATURE_TOUR_PROGRESS} />
+      </>,
+    );
+
+    await user.keyboard('{Escape}{Escape}');
+
+    expect(mockCompleteOnboarding).toHaveBeenCalledTimes(1);
+    await act(async () => resolveCompletion?.());
+  });
+
+  it('skips bid practice directly to budget pressure without creating an undo step', async () => {
+    const user = userEvent.setup();
+    const progress: TourProgress = { ...FEATURE_TOUR_PROGRESS, step: 'BID_PRACTICE' };
+    const bidPractice = TOUR_STEPS.BID_PRACTICE;
+
+    render(
+      <>
+        <div data-onboarding-target={bidPractice.target} />
+        <OnboardingTour progress={progress} />
+      </>,
+    );
+    await user.click(screen.getByTestId('onboarding-next'));
+
+    expect(mockAdvanceOnboardingStep).toHaveBeenCalledWith({ draftId: 5, step: 'BUDGET_PRESSURE' });
+    expect(mockPush).toHaveBeenCalledWith('/draft/5/budget');
+  });
+
+  it('finishes when nomination practice is continued without an action', async () => {
+    const user = userEvent.setup();
+    const progress: TourProgress = { ...FEATURE_TOUR_PROGRESS, step: 'NOMINATE_PRACTICE' };
+    const nominationPractice = TOUR_STEPS.NOMINATE_PRACTICE;
+    mockPathname = '/draft/5/nominate';
+
+    render(
+      <>
+        <div data-onboarding-target={nominationPractice.target} />
+        <OnboardingTour progress={progress} />
+      </>,
+    );
+    await user.click(screen.getByTestId('onboarding-next'));
+
+    expect(mockCompleteOnboarding).toHaveBeenCalledTimes(1);
+    expect(mockAdvanceOnboardingStep).not.toHaveBeenCalled();
+  });
+
+  it('records a successful bid practice action with its player before showing the undo step', async () => {
+    const user = userEvent.setup();
+    const progress: TourProgress = { ...FEATURE_TOUR_PROGRESS, step: 'BID_PRACTICE' };
+    const bidPractice = TOUR_STEPS.BID_PRACTICE;
+
+    render(
+      <OnboardingProvider progress={progress}>
+        <div data-onboarding-target={bidPractice.target} />
+        <OnboardingEventButton />
+      </OnboardingProvider>,
+    );
+    await user.click(screen.getByTestId('record-bid'));
+
+    expect(mockAdvanceOnboardingStep).toHaveBeenCalledWith({
+      draftId: 5,
+      step: 'BID_UNDO',
+      subjectPlayerName: 'Ja’Marr Chase',
+    });
+    expect(screen.getByTestId('onboarding-tour')).toHaveTextContent(
+      'Ja’Marr Chase is now in the auction log',
+    );
+  });
+
+  it('records a successful nomination practice action with its player before showing the undo step', async () => {
+    const user = userEvent.setup();
+    const progress: TourProgress = { ...FEATURE_TOUR_PROGRESS, step: 'NOMINATE_PRACTICE' };
+    const nominationPractice = TOUR_STEPS.NOMINATE_PRACTICE;
+    mockPathname = '/draft/5/nominate';
+
+    render(
+      <OnboardingProvider progress={progress}>
+        <div data-onboarding-target={nominationPractice.target} />
+        <OnboardingEventButton />
+      </OnboardingProvider>,
+    );
+    await user.click(screen.getByTestId('record-nomination'));
+
+    expect(mockAdvanceOnboardingStep).toHaveBeenCalledWith({
+      draftId: 5,
+      step: 'NOMINATE_UNDO',
+      subjectPlayerName: 'Ja’Marr Chase',
+    });
+    expect(screen.getByTestId('onboarding-tour')).toHaveTextContent('Ja’Marr Chase is live');
+  });
 });
+
+function OnboardingEventButton() {
+  const { recordBidLogged, recordPlayerNominated } = useOnboarding();
+  return (
+    <>
+      <button
+        data-testid="record-bid"
+        onClick={() => void recordBidLogged('Ja’Marr Chase')}
+        type="button"
+      />
+      <button
+        data-testid="record-nomination"
+        onClick={() => void recordPlayerNominated('Ja’Marr Chase')}
+        type="button"
+      />
+    </>
+  );
+}

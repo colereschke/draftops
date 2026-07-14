@@ -7,6 +7,7 @@ export interface TourProgress {
 }
 
 export interface OnboardingContextValue {
+  /** Available to client descendants of the draft-layout OnboardingProvider. */
   progress: TourProgress | null;
   recordBidLogged: (playerName: string) => Promise<void>;
   recordPlayerNominated: (playerName: string) => Promise<void>;

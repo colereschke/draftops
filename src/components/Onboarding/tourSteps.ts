@@ -14,16 +14,16 @@ export const TOUR_STEPS: Record<OnboardingStep, TourStep> = {
   },
   BID_PRACTICE: {
     route: (draftId) => `/draft/${draftId}`,
-    target: 'bid-log',
+    target: 'bid-practice',
     title: 'Log a practice bid',
     copy: () => 'Try logging a bid to see budgets and rosters update together.',
-    nextStep: 'BID_UNDO',
-    nextRoute: (draftId) => `/draft/${draftId}`,
+    nextStep: 'BUDGET_PRESSURE',
+    nextRoute: (draftId) => `/draft/${draftId}/budget`,
     waitsForAction: true,
   },
   BID_UNDO: {
     route: (draftId) => `/draft/${draftId}`,
-    target: 'auction-results',
+    target: 'bid-undo',
     title: 'Undo a bid',
     copy: (playerName) =>
       playerName
@@ -54,7 +54,7 @@ export const TOUR_STEPS: Record<OnboardingStep, TourStep> = {
   },
   NOMINATE_INTRO: {
     route: (draftId) => `/draft/${draftId}/nominate`,
-    target: 'nomination-helper',
+    target: 'nominate-intro',
     title: 'Nomination helper',
     copy: () => 'Use rival demand to surface players who will make other managers spend.',
     nextStep: 'NOMINATE_PRACTICE',
@@ -63,16 +63,16 @@ export const TOUR_STEPS: Record<OnboardingStep, TourStep> = {
   },
   NOMINATE_PRACTICE: {
     route: (draftId) => `/draft/${draftId}/nominate`,
-    target: 'nominate-player',
+    target: 'nominate-practice',
     title: 'Try a nomination',
     copy: () => 'Nominate a player to mark them live for the room.',
-    nextStep: 'NOMINATE_UNDO',
-    nextRoute: (draftId) => `/draft/${draftId}/nominate`,
+    nextStep: null,
+    nextRoute: null,
     waitsForAction: true,
   },
   NOMINATE_UNDO: {
     route: (draftId) => `/draft/${draftId}/nominate`,
-    target: 'nominated-players',
+    target: 'nominate-undo',
     title: 'Undo a nomination',
     copy: (playerName) =>
       playerName

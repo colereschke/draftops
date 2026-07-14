@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import type { OnboardingStep } from '@prisma/client';
 import { advanceOnboardingStep, completeOnboarding } from '@/lib/onboarding-actions';
 import { TOUR_STEPS } from './tourSteps';
@@ -28,6 +28,7 @@ export default function OnboardingTour({
   persistenceError,
 }: OnboardingTourProps) {
   const router = useRouter();
+  const pathname = usePathname();
   const [uncontrolledProgress, setUncontrolledProgress] = useState(initialProgress);
   const [error, setError] = useState<string | null>(null);
   const [isPending, setIsPending] = useState(false);
@@ -38,6 +39,7 @@ export default function OnboardingTour({
   const popoverRef = useRef<HTMLDivElement>(null);
   const previousFocusRef = useRef<HTMLElement | null>(null);
   const bypassedProgressRef = useRef<string | null>(null);
+  const isCompletingRef = useRef(false);
   const isControlled = onProgressChange !== undefined;
   const progress = isControlled ? initialProgress : uncontrolledProgress;
   const displayedError = error ?? persistenceError;
@@ -59,7 +61,8 @@ export default function OnboardingTour({
   }, []);
 
   const finishTour = useCallback(async () => {
-    if (isPending) return;
+    if (isPending || isCompletingRef.current) return;
+    isCompletingRef.current = true;
     setIsPending(true);
     setError(null);
     try {
@@ -67,6 +70,7 @@ export default function OnboardingTour({
       updateProgress(null);
       restoreFocus();
     } catch {
+      isCompletingRef.current = false;
       setError(PERSISTENCE_ERROR);
     } finally {
       setIsPending(false);
@@ -107,6 +111,10 @@ export default function OnboardingTour({
   useEffect(() => {
     if (!progress) return;
     const step = TOUR_STEPS[progress.step];
+    if (pathname !== step.route(progress.draftId)) {
+      router.push(step.route(progress.draftId));
+      return;
+    }
     const anchor = document.querySelector<HTMLElement>(`[data-onboarding-target="${step.target}"]`);
 
     if (!anchor) {
@@ -140,7 +148,7 @@ export default function OnboardingTour({
       window.removeEventListener('resize', updatePosition);
       window.removeEventListener('scroll', updatePosition, true);
     };
-  }, [bypassMissingTarget, progress]);
+  }, [bypassMissingTarget, pathname, progress, router]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {

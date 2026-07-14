@@ -5,6 +5,8 @@ const mockUpdateMany = jest.fn().mockResolvedValue({ count: 1 });
 const mockDeleteMany = jest.fn().mockResolvedValue({ count: 1 });
 const mockNomDeleteMany = jest.fn().mockResolvedValue({});
 const mockTeamFindFirst = jest.fn();
+const mockPlayerFindUnique = jest.fn();
+const mockAuctionResultFindFirst = jest.fn();
 const mockRevalidatePath = jest.fn();
 const mockAuth = jest.fn();
 const mockGetDraft = jest.fn();
@@ -15,6 +17,7 @@ jest.mock('@/lib/db', () => ({
       create: (...args: unknown[]) => mockCreate(...args),
       updateMany: (...args: unknown[]) => mockUpdateMany(...args),
       deleteMany: (...args: unknown[]) => mockDeleteMany(...args),
+      findFirst: (...args: unknown[]) => mockAuctionResultFindFirst(...args),
     },
     nominatedPlayer: {
       deleteMany: (...args: unknown[]) => mockNomDeleteMany(...args),
@@ -22,6 +25,14 @@ jest.mock('@/lib/db', () => ({
     team: {
       findFirst: (...args: unknown[]) => mockTeamFindFirst(...args),
     },
+    player: {
+      findUnique: (...args: unknown[]) => mockPlayerFindUnique(...args),
+    },
+    $transaction: (cb: (tx: unknown) => unknown) =>
+      cb({
+        auctionResult: { create: mockCreate },
+        nominatedPlayer: { deleteMany: mockNomDeleteMany },
+      }),
   },
 }));
 
@@ -44,14 +55,15 @@ const MOCK_DRAFT = {
   ownerId: '123456789',
   ownerTeamId: 7,
   ownerTeam: null,
+  status: 'ACTIVE',
 };
+const MOCK_COMPLETE_DRAFT = { ...MOCK_DRAFT, status: 'COMPLETE' };
+
+const MOCK_PLAYER = { name: 'Josh Allen', pos: 'QB', nflTeam: 'BUF', sfRank: 1 };
 
 const BID_DATA = {
   player: 'Josh Allen',
-  position: 'QB',
-  nflTeam: 'BUF',
   price: 120,
-  sfRank: 1,
   teamId: 3,
   draftId: 1,
 };
@@ -61,11 +73,16 @@ beforeEach(() => {
   mockAuth.mockResolvedValue(MOCK_SESSION);
   mockGetDraft.mockResolvedValue(MOCK_DRAFT);
   mockTeamFindFirst.mockResolvedValue({ id: 3 });
+  mockPlayerFindUnique.mockResolvedValue(MOCK_PLAYER);
+  mockAuctionResultFindFirst.mockResolvedValue(null);
 });
 
 describe('logBid', () => {
-  it('inserts a bid record with all fields including draftId', async () => {
+  it('resolves the player from the database and inserts a bid using DB-derived fields', async () => {
     await logBid(BID_DATA);
+    expect(mockPlayerFindUnique).toHaveBeenCalledWith({
+      where: { name_draftId: { name: 'Josh Allen', draftId: 1 } },
+    });
     expect(mockCreate).toHaveBeenCalledWith({
       data: {
         player: 'Josh Allen',
@@ -76,6 +93,14 @@ describe('logBid', () => {
         teamId: 3,
         draftId: 1,
       },
+    });
+  });
+
+  it('ignores extra client-supplied fields and uses the DB record instead', async () => {
+    const craftedPayload = { ...BID_DATA, position: 'RB', nflTeam: 'ZZZ', sfRank: 999 };
+    await logBid(craftedPayload);
+    expect(mockCreate).toHaveBeenCalledWith({
+      data: expect.objectContaining({ position: 'QB', nflTeam: 'BUF', sfRank: 1 }),
     });
   });
 
@@ -101,9 +126,35 @@ describe('logBid', () => {
     await expect(logBid(BID_DATA)).rejects.toThrow('No draft found');
   });
 
+  it('throws when the draft is not ACTIVE', async () => {
+    mockGetDraft.mockResolvedValue(MOCK_COMPLETE_DRAFT);
+    await expect(logBid(BID_DATA)).rejects.toThrow('Draft is not active');
+    expect(mockCreate).not.toHaveBeenCalled();
+  });
+
   it('throws when teamId does not belong to the draft', async () => {
     mockTeamFindFirst.mockResolvedValue(null);
     await expect(logBid(BID_DATA)).rejects.toThrow('Team not found in draft');
+  });
+
+  it('throws when the player does not exist in the draft', async () => {
+    mockPlayerFindUnique.mockResolvedValue(null);
+    await expect(logBid(BID_DATA)).rejects.toThrow('Player not found in draft');
+    expect(mockCreate).not.toHaveBeenCalled();
+  });
+
+  it.each([0, -5, 4.5])('rejects a non-positive/non-integer price (%p)', async (price) => {
+    await expect(logBid({ ...BID_DATA, price })).rejects.toThrow(
+      'price must be a positive integer',
+    );
+    expect(mockTeamFindFirst).not.toHaveBeenCalled();
+    expect(mockCreate).not.toHaveBeenCalled();
+  });
+
+  it('surfaces a clear conflict error on a duplicate insert and leaves nomination state unchanged', async () => {
+    mockCreate.mockRejectedValueOnce({ code: 'P2002' });
+    await expect(logBid(BID_DATA)).rejects.toThrow('Player already has a winning bid');
+    expect(mockNomDeleteMany).not.toHaveBeenCalled();
   });
 });
 

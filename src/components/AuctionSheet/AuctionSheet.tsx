@@ -121,10 +121,7 @@ export default function AuctionSheet({
         try {
           await logBid({
             player: modalPlayer.player,
-            position: modalPlayer.pos,
-            nflTeam: modalPlayer.team,
             price,
-            sfRank: modalPlayer.sfRank,
             teamId,
             draftId,
           });

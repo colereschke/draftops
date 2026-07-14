@@ -9,19 +9,21 @@ import { normalizeName } from '@/lib/sleeperNormalize';
 
 interface WatchlistSidebarProps {
   players: Player[];
-  nominated: string[];
-  watchlist: string[];
-  wonNames: Set<string>;
-  onAddToWatchlist: (playerName: string) => void;
-  onRemoveFromWatchlist: (playerName: string) => void;
-  onUnNominate: (playerName: string) => void;
+  nominated: Array<number | string>;
+  watchlist: Array<number | string>;
+  wonIds?: Set<number>;
+  wonNames?: Set<string>;
+  onAddToWatchlist: (player: Player) => void;
+  onRemoveFromWatchlist: (playerId: number | string) => void;
+  onUnNominate: (playerId: number | string) => void;
 }
 
 export default function WatchlistSidebar({
   players,
   nominated,
   watchlist,
-  wonNames,
+  wonIds = new Set(),
+  wonNames = new Set(),
   onAddToWatchlist,
   onRemoveFromWatchlist,
   onUnNominate,
@@ -41,6 +43,15 @@ export default function WatchlistSidebar({
 
   const watchlistSet = useMemo(() => new Set(watchlist), [watchlist]);
   const nominatedSet = useMemo(() => new Set(nominated), [nominated]);
+  const playerById = useMemo(
+    () =>
+      new Map(players.flatMap((player) => (player.id === undefined ? [] : [[player.id, player]]))),
+    [players],
+  );
+  const playerByName = useMemo(
+    () => new Map(players.map((player) => [player.player, player])),
+    [players],
+  );
 
   const searchResults = useMemo(() => {
     if (!search.trim()) return [];
@@ -49,11 +60,13 @@ export default function WatchlistSidebar({
     return players
       .filter(
         (p) =>
-          !wonNames.has(p.player) && !watchlistSet.has(p.player) && !nominatedSet.has(p.player),
+          !isListed(p, wonIds, wonNames) &&
+          !isListed(p, watchlistSet) &&
+          !isListed(p, nominatedSet),
       )
       .filter((p) => normalizeName(p.player).includes(q) || p.team.toLowerCase().includes(q))
       .slice(0, 8);
-  }, [search, players, wonNames, watchlistSet, nominatedSet]);
+  }, [search, players, wonIds, wonNames, watchlistSet, nominatedSet]);
 
   return (
     <div className="flex w-full flex-col gap-3 border-b border-border-subtle bg-card px-3 py-4 md:w-60 md:min-w-60 md:border-r md:border-b-0">
@@ -70,11 +83,12 @@ export default function WatchlistSidebar({
               No players currently nominated
             </div>
           ) : (
-            nominated.map((name) => {
-              const p = players.find((pl) => pl.player === name);
+            nominated.map((playerId) => {
+              const p = resolvePlayer(playerId, playerById, playerByName);
+              const name = p?.player ?? String(playerId);
               return (
                 <div
-                  key={name}
+                  key={playerId}
                   className="flex items-center gap-1.5 rounded-[5px] border border-border-subtle bg-muted px-2 py-1.5"
                   style={{ borderLeft: '3px solid var(--primary)' }}
                 >
@@ -88,7 +102,7 @@ export default function WatchlistSidebar({
                   </div>
                   <button
                     type="button"
-                    onClick={() => onUnNominate(name)}
+                    onClick={() => onUnNominate(playerId)}
                     title="Remove from in auction"
                     aria-label={`Remove ${name} from in auction`}
                     className="shrink-0 text-muted-foreground transition-colors hover:text-primary"
@@ -123,7 +137,7 @@ export default function WatchlistSidebar({
                   key={p.player}
                   value={p.player}
                   onSelect={() => {
-                    onAddToWatchlist(p.player);
+                    onAddToWatchlist(p);
                     setSearch('');
                   }}
                 >
@@ -145,12 +159,13 @@ export default function WatchlistSidebar({
             No players marked — add players you still want to win
           </div>
         ) : (
-          watchlist.map((name) => {
-            const p = players.find((pl) => pl.player === name);
+          watchlist.map((playerId) => {
+            const p = resolvePlayer(playerId, playerById, playerByName);
+            const name = p?.player ?? String(playerId);
             const accent = p ? POS_COLORS[p.pos].accent : '#4a5168';
             return (
               <div
-                key={name}
+                key={playerId}
                 className="flex items-center gap-1.5 rounded-[5px] border border-border-subtle bg-muted px-2 py-1.5"
                 style={{ borderLeft: `3px solid ${accent}` }}
               >
@@ -164,7 +179,7 @@ export default function WatchlistSidebar({
                 </div>
                 <button
                   type="button"
-                  onClick={() => onRemoveFromWatchlist(name)}
+                  onClick={() => onRemoveFromWatchlist(playerId)}
                   title="Remove from watchlist"
                   aria-label={`Remove ${name} from watchlist`}
                   className="shrink-0 text-muted-foreground transition-colors hover:text-destructive"
@@ -178,4 +193,20 @@ export default function WatchlistSidebar({
       </div>
     </div>
   );
+}
+
+function isListed(player: Player, ids: Set<number | string>, names = new Set<string>()): boolean {
+  return (
+    (player.id !== undefined && ids.has(player.id)) ||
+    ids.has(player.player) ||
+    names.has(player.player)
+  );
+}
+
+function resolvePlayer(
+  identity: number | string,
+  playerById: Map<number, Player>,
+  playerByName: Map<string, Player>,
+): Player | undefined {
+  return typeof identity === 'number' ? playerById.get(identity) : playerByName.get(identity);
 }

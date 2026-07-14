@@ -16,12 +16,21 @@ export function computeNominationScores(
   players: Player[],
   teamStats: TeamStats[],
   auctionResults: AuctionResultEntry[],
-  watchlist: string[],
-  nominated: string[],
+  watchlist: Array<number | string>,
+  nominated: Array<number | string>,
   myHandle: string,
   targetRoster: Partial<Record<Position, number>>,
 ): ScoredPlayer[] {
-  const wonPlayerNames = new Set(auctionResults.map((r) => r.player));
+  const wonPlayerIds = new Set(
+    auctionResults.flatMap((result) =>
+      typeof result.playerId === 'number' ? [result.playerId] : [],
+    ),
+  );
+  const legacyWonPlayerNames = new Set(
+    auctionResults.flatMap((result) =>
+      typeof result.playerId === 'number' ? [] : [result.player],
+    ),
+  );
   const watchlistSet = new Set(watchlist);
   const nominatedSet = new Set(nominated);
   const rivals = teamStats.filter((t) => t.handle !== myHandle && t.buyingPower > 0);
@@ -35,7 +44,9 @@ export function computeNominationScores(
 
   const available = players.filter(
     (p) =>
-      !wonPlayerNames.has(p.player) && !watchlistSet.has(p.player) && !nominatedSet.has(p.player),
+      !isExcludedByIdentity(p, wonPlayerIds, legacyWonPlayerNames) &&
+      !isListedByIdentity(p, watchlistSet) &&
+      !isListedByIdentity(p, nominatedSet),
   );
 
   const scored: ScoredPlayer[] = available.map((player) => {
@@ -70,4 +81,18 @@ export function computeNominationScores(
   return scored
     .filter((s) => s.nominationScore > 0)
     .sort((a, b) => b.nominationScore - a.nominationScore);
+}
+
+function isListedByIdentity(player: Player, identities: Set<number | string>): boolean {
+  if (player.id !== undefined && identities.has(player.id)) return true;
+  return identities.has(player.player);
+}
+
+function isExcludedByIdentity(
+  player: Player,
+  wonPlayerIds: Set<number>,
+  legacyWonPlayerNames: Set<string>,
+): boolean {
+  if (player.id !== undefined) return wonPlayerIds.has(player.id);
+  return legacyWonPlayerNames.has(player.player);
 }

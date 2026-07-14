@@ -18,7 +18,7 @@ interface AuctionSheetProps {
   players: Player[];
   claimedBids: ClaimedBid[];
   teams: LeagueTeam[];
-  nominatedPlayers: string[];
+  nominatedPlayers: Array<number | string>;
   draftId: number;
   ownerHandle: string | null;
   ownerBudget: number;
@@ -44,7 +44,7 @@ export default function AuctionSheet({
   const [modalPlayer, setModalPlayer] = useState<Player | null>(null);
   const [modalError, setModalError] = useState<string>('');
   const [, startTransition] = useTransition();
-  const [extraNominated, setExtraNominated] = useState<string[]>([]);
+  const [extraNominated, setExtraNominated] = useState<Array<number | string>>([]);
 
   const [optimisticBids, dispatchOptimistic] = useOptimistic<ClaimedBid[], OptimisticAction>(
     claimedBids,
@@ -58,7 +58,7 @@ export default function AuctionSheet({
   );
 
   const claimMap = useMemo(
-    () => new Map(optimisticBids.map((b) => [b.player, b])),
+    () => new Map(optimisticBids.map((b) => [bidIdentityKey(b), b])),
     [optimisticBids],
   );
 
@@ -82,7 +82,7 @@ export default function AuctionSheet({
 
   function handleModalSubmit({ price, teamId }: { price: number; teamId: number }) {
     if (!modalPlayer) return;
-    const existingBid = claimMap.get(modalPlayer.player);
+    const existingBid = claimMap.get(playerIdentityKey(modalPlayer));
     const team = teams.find((t) => t.id === teamId);
     if (!team) return;
     setModalError('');
@@ -108,8 +108,14 @@ export default function AuctionSheet({
         }
       });
     } else {
+      if (modalPlayer.id === undefined) {
+        setModalError('Player identity missing. Please refresh and try again.');
+        return;
+      }
+      const playerId = modalPlayer.id;
       const tempBid: ClaimedBid = {
         id: -Date.now(),
+        playerId,
         player: modalPlayer.player,
         position: modalPlayer.pos,
         price,
@@ -120,11 +126,8 @@ export default function AuctionSheet({
         dispatchOptimistic({ type: 'add', bid: tempBid });
         try {
           await logBid({
-            player: modalPlayer.player,
-            position: modalPlayer.pos,
-            nflTeam: modalPlayer.team,
+            playerId,
             price,
-            sfRank: modalPlayer.sfRank,
             teamId,
             draftId,
           });
@@ -147,7 +150,7 @@ export default function AuctionSheet({
 
   function handleModalDelete() {
     if (!modalPlayer) return;
-    const existingBid = claimMap.get(modalPlayer.player);
+    const existingBid = claimMap.get(playerIdentityKey(modalPlayer));
     if (!existingBid) return;
     setModalError('');
     startTransition(async () => {
@@ -170,19 +173,21 @@ export default function AuctionSheet({
     });
   }
 
-  function handleNominate(playerName: string) {
-    setExtraNominated((prev) => [...prev, playerName]);
+  function handleNominate(player: Player) {
+    const key = playerIdentityKey(player);
+    if (typeof key !== 'number') return;
+    setExtraNominated((prev) => [...prev, key]);
     void fetch(`/api/draft/${draftId}/nominated`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ playerName }),
+      body: JSON.stringify({ playerId: key }),
     }).then((res) => {
       if (res.status === 401) {
         window.location.href = '/sign-in';
         return;
       }
       if (!res.ok) {
-        setExtraNominated((prev) => prev.filter((n) => n !== playerName));
+        setExtraNominated((prev) => prev.filter((n) => n !== key));
       }
     });
   }
@@ -192,7 +197,7 @@ export default function AuctionSheet({
   const filtered = useMemo<Player[]>(() => {
     let data = [...players];
     if (posFilter !== 'ALL') data = data.filter((p) => p.pos === posFilter);
-    if (availableOnly) data = data.filter((p) => !claimMap.has(p.player));
+    if (availableOnly) data = data.filter((p) => !claimMap.has(playerIdentityKey(p)));
     if (search) {
       const q = search.toLowerCase();
       data = data.filter(
@@ -225,7 +230,7 @@ export default function AuctionSheet({
   const posStats = useMemo(() => {
     const stats = {} as Record<'QB' | 'RB' | 'WR' | 'TE', { count: number; total: number }>;
     (['QB', 'RB', 'WR', 'TE'] as const).forEach((pos) => {
-      const pp = players.filter((p) => p.pos === pos && !claimMap.has(p.player));
+      const pp = players.filter((p) => p.pos === pos && !claimMap.has(playerIdentityKey(p)));
       stats[pos] = { count: pp.length, total: pp.reduce((s, p) => s + p.budget, 0) };
     });
     return stats;
@@ -284,15 +289,23 @@ export default function AuctionSheet({
         <BidModal
           player={modalPlayer}
           teams={teams}
-          existingBid={claimMap.get(modalPlayer.player)}
+          existingBid={claimMap.get(playerIdentityKey(modalPlayer))}
           onClose={() => setModalPlayer(null)}
           onSubmit={handleModalSubmit}
-          onDelete={claimMap.has(modalPlayer.player) ? handleModalDelete : undefined}
+          onDelete={claimMap.has(playerIdentityKey(modalPlayer)) ? handleModalDelete : undefined}
           serverError={modalError}
-          isNominated={nominatedSet.has(modalPlayer.player)}
-          onNominate={() => handleNominate(modalPlayer.player)}
+          isNominated={nominatedSet.has(playerIdentityKey(modalPlayer))}
+          onNominate={() => handleNominate(modalPlayer)}
         />
       )}
     </div>
   );
+}
+
+function playerIdentityKey(player: Player): number | string {
+  return player.id ?? player.player;
+}
+
+function bidIdentityKey(bid: ClaimedBid): number | string {
+  return bid.playerId ?? bid.player;
 }

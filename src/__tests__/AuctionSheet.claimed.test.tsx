@@ -8,6 +8,7 @@ import { DEFAULT_SCORING_SETTINGS } from '@/types';
 
 const MOCK_PLAYERS: Player[] = [
   {
+    id: 10,
     player: 'Josh Allen',
     team: 'BUF',
     pos: 'QB',
@@ -19,6 +20,7 @@ const MOCK_PLAYERS: Player[] = [
     notes: '',
   },
   {
+    id: 11,
     player: 'Justin Jefferson',
     team: 'MIN',
     pos: 'WR',
@@ -44,6 +46,7 @@ const mockTeams: LeagueTeam[] = [
 
 const mockClaim: ClaimedBid = {
   id: 1,
+  playerId: 10,
   player: 'Josh Allen',
   position: 'QB',
   price: 110,
@@ -154,7 +157,7 @@ describe('AuctionSheet with claimed bids', () => {
   });
 
   it('shows LIVE badge for a player in the nominatedPlayers prop', () => {
-    renderSheet({ nominatedPlayers: ['Josh Allen'] });
+    renderSheet({ nominatedPlayers: [10] });
 
     expect(screen.getByText('LIVE')).toBeInTheDocument();
   });
@@ -170,7 +173,7 @@ describe('AuctionSheet with claimed bids', () => {
 
   it('shows In Auction in modal for an already-nominated player', async () => {
     const user = userEvent.setup();
-    renderSheet({ nominatedPlayers: ['Josh Allen'] });
+    renderSheet({ nominatedPlayers: [10] });
 
     await user.click(screen.getAllByText('Josh Allen')[0]);
 
@@ -192,7 +195,7 @@ describe('AuctionSheet with claimed bids', () => {
       '/api/draft/1/nominated',
       expect.objectContaining({
         method: 'POST',
-        body: JSON.stringify({ playerName: 'Josh Allen' }),
+        body: JSON.stringify({ playerId: 10 }),
       }),
     );
   });

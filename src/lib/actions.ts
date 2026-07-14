@@ -16,13 +16,11 @@ import { players as BASE_PLAYERS } from '@/data/players';
 import { adjustPlayerValues } from '@/lib/valueAdjustment';
 import { applyProjectionValuesToDraft } from '@/lib/projectionApplication';
 import { getEtrSleeperMatches } from '@/lib/projectionIdentity';
+import { getCustomPlayerKey } from '@/lib/playerIdentity';
 
 export async function logBid(data: {
-  player: string;
-  position: string;
-  nflTeam: string;
+  playerId: number;
   price: number;
-  sfRank: number | null;
   teamId: number;
   draftId: number;
 }): Promise<void> {
@@ -35,19 +33,26 @@ export async function logBid(data: {
   const team = await prisma.team.findFirst({ where: { id: data.teamId, draftId: draft.id } });
   if (!team) throw new Error('Team not found in draft');
 
+  const player = await prisma.player.findFirst({
+    where: { id: data.playerId, draftId: draft.id },
+    select: { id: true, name: true, pos: true, nflTeam: true, sfRank: true },
+  });
+  if (!player) throw new Error('Player not found in draft');
+
   await prisma.auctionResult.create({
     data: {
-      player: data.player,
-      position: data.position,
-      nflTeam: data.nflTeam,
+      player: player.name,
+      playerId: player.id,
+      position: player.pos,
+      nflTeam: player.nflTeam,
       price: data.price,
-      sfRank: data.sfRank,
+      sfRank: player.sfRank,
       teamId: data.teamId,
       draftId: draft.id,
     },
   });
   await prisma.nominatedPlayer.deleteMany({
-    where: { playerName: data.player, draftId: draft.id },
+    where: { playerId: player.id, draftId: draft.id },
   });
   revalidatePath(`/draft/${data.draftId}`);
 }
@@ -196,7 +201,7 @@ export async function createDraft(data: {
     const seededPlayers = [...excludeStaticFuturePickRows(valued), ...futurePickAssets];
 
     await tx.player.createMany({
-      data: seededPlayers.map((p) => ({
+      data: seededPlayers.map((p, index) => ({
         name: p.player,
         nflTeam: p.team,
         pos: p.pos,
@@ -209,6 +214,7 @@ export async function createDraft(data: {
         baseCeiling: p.baseCeiling ?? p.ceiling,
         baseFloor: p.baseFloor ?? p.floor,
         sleeperId: p.sleeperId ?? etrMatches.get(p.player) ?? null,
+        customKey: getCustomPlayerKey(p, index),
         notes: p.notes,
         futurePickYear: p.futurePickYear ?? null,
         futurePickRound: p.futurePickRound ?? null,

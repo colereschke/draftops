@@ -61,6 +61,8 @@ model Team {
 model AuctionResult {
   id        Int      @id @default(autoincrement())
   player    String
+  playerId  Int?
+  playerRow Player?  @relation(fields: [playerId], references: [id], onDelete: SetNull)
   position  String
   nflTeam   String
   price     Int
@@ -71,26 +73,36 @@ model AuctionResult {
   draftId   Int
   draft     Draft    @relation(fields: [draftId], references: [id])
   createdAt DateTime @default(now())
+
+  @@index([playerId])
 }
 
 model PlayerWatchlist {
   id         Int      @id @default(autoincrement())
   playerName String
+  playerId   Int?
+  player     Player?  @relation(fields: [playerId], references: [id], onDelete: SetNull)
   draftId    Int
   draft      Draft    @relation(fields: [draftId], references: [id])
   createdAt  DateTime @default(now())
 
   @@unique([playerName, draftId])
+  @@unique([playerId, draftId])
+  @@index([playerId])
 }
 
 model NominatedPlayer {
   id         Int      @id @default(autoincrement())
   playerName String
+  playerId   Int?
+  player     Player?  @relation(fields: [playerId], references: [id], onDelete: SetNull)
   draftId    Int
   draft      Draft    @relation(fields: [draftId], references: [id])
   createdAt  DateTime @default(now())
 
   @@unique([playerName, draftId])
+  @@unique([playerId, draftId])
+  @@index([playerId])
 }
 
 model Player {
@@ -107,6 +119,7 @@ model Player {
   baseCeiling            Int
   baseFloor              Int
   sleeperId              String?
+  customKey              String?
   notes                  String             @default("")
   futurePickYear         Int?
   futurePickRound        Int?
@@ -115,8 +128,13 @@ model Player {
   draftId                Int
   draft                  Draft              @relation(fields: [draftId], references: [id])
   draftValues            DraftPlayerValue[]
+  auctionResults         AuctionResult[]
+  watchlistEntries       PlayerWatchlist[]
+  nominatedEntries       NominatedPlayer[]
 
-  @@unique([name, draftId])
+  @@unique([sleeperId, draftId])
+  @@unique([customKey, draftId])
+  @@index([name, draftId])
   @@index([sleeperId])
   @@index([draftId, futurePickOriginHandle])
 }
@@ -136,7 +154,7 @@ model ProjectionSource {
 }
 
 model PlayerProjection {
-  id                 Int    @id @default(autoincrement())
+  id                 Int     @id @default(autoincrement())
   sleeperId          String
   position           String
   games              Float
@@ -201,10 +219,10 @@ model SleeperPlayer {
 }
 
 model UserRankingSet {
-  id         Int      @id @default(autoincrement())
-  userId     String   @unique
+  id         Int                 @id @default(autoincrement())
+  userId     String              @unique
   fileName   String?
-  uploadedAt DateTime @default(now())
+  uploadedAt DateTime            @default(now())
   players    UserRankingPlayer[]
 }
 

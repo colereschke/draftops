@@ -12,6 +12,7 @@ jest.mock('next/navigation', () => ({
 
 const PLAYERS: Player[] = [
   {
+    id: 10,
     player: 'Josh Allen',
     team: 'BUF',
     pos: 'QB',
@@ -23,6 +24,7 @@ const PLAYERS: Player[] = [
     notes: '',
   },
   {
+    id: 11,
     player: 'Justin Jefferson',
     team: 'MIN',
     pos: 'WR',
@@ -73,9 +75,9 @@ describe('WatchlistSidebar', () => {
     render(
       <WatchlistSidebar
         players={PLAYERS}
-        nominated={['Josh Allen']}
-        watchlist={['Justin Jefferson']}
-        wonNames={new Set()}
+        nominated={[10]}
+        watchlist={[11]}
+        wonIds={new Set()}
         onAddToWatchlist={jest.fn()}
         onRemoveFromWatchlist={onRemoveFromWatchlist}
         onUnNominate={onUnNominate}
@@ -87,7 +89,7 @@ describe('WatchlistSidebar', () => {
       screen.getByRole('button', { name: /remove justin jefferson from watchlist/i }),
     );
 
-    expect(onUnNominate).toHaveBeenCalledWith('Josh Allen');
-    expect(onRemoveFromWatchlist).toHaveBeenCalledWith('Justin Jefferson');
+    expect(onUnNominate).toHaveBeenCalledWith(10);
+    expect(onRemoveFromWatchlist).toHaveBeenCalledWith(11);
   });
 });

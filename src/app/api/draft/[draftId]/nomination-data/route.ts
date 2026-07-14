@@ -46,6 +46,7 @@ export async function GET(
   const auctionResults: AuctionResultEntry[] = teams.flatMap((team) =>
     team.results.map((r) => ({
       id: r.id,
+      playerId: r.playerId,
       player: r.player,
       position: r.position,
       nflTeam: r.nflTeam,
@@ -71,8 +72,8 @@ export async function GET(
   return NextResponse.json({
     teamStats,
     auctionResults,
-    watchlist: watchlistEntries.map((e) => e.playerName),
-    nominated: nominatedEntries.map((e) => e.playerName),
+    watchlist: watchlistEntries.flatMap((e) => (e.playerId === null ? [] : [e.playerId])),
+    nominated: nominatedEntries.flatMap((e) => (e.playerId === null ? [] : [e.playerId])),
     ownerHandle: draft.ownerTeam?.handle ?? null,
     targetRoster:
       (draft.targetRoster as Partial<Record<Position, number>> | null) ?? DEFAULT_TARGET_ROSTER,

@@ -12,6 +12,7 @@ export interface DbPlayerValueRow {
   floor: number;
   notes: string;
   sleeperId: string | null;
+  customKey?: string | null;
   futurePickYear?: number | null;
   futurePickRound?: number | null;
   futurePickOriginHandle?: string | null;
@@ -56,6 +57,7 @@ export function mapPlayersWithDraftValues(
     const activeTarget = draftValue.activeAuctionValue;
 
     return {
+      id: player.id,
       player: player.name,
       team: player.nflTeam,
       pos: player.pos as Position,
@@ -66,6 +68,7 @@ export function mapPlayersWithDraftValues(
       floor: calculateFloor(activeTarget),
       notes: player.notes,
       sleeperId: player.sleeperId,
+      customKey: player.customKey ?? null,
       baseBudget: player.budget,
       baseCeiling: player.ceiling,
       baseFloor: player.floor,
@@ -84,6 +87,7 @@ export function mapPlayersWithDraftValues(
 
 function mapFallbackPlayer(player: DbPlayerValueRow): Player {
   return {
+    id: player.id,
     player: player.name,
     team: player.nflTeam,
     pos: player.pos as Position,
@@ -94,6 +98,7 @@ function mapFallbackPlayer(player: DbPlayerValueRow): Player {
     floor: player.floor,
     notes: player.notes,
     sleeperId: player.sleeperId,
+    customKey: player.customKey ?? null,
     baseBudget: player.budget,
     baseCeiling: player.ceiling,
     baseFloor: player.floor,

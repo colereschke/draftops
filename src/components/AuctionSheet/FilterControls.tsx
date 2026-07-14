@@ -1,6 +1,6 @@
 'use client';
 
-import type { Position } from '@/types';
+import type { Position, StrategyTag } from '@/types';
 import { POS_COLORS } from '@/lib/posColors';
 import { Toggle } from '@/components/ui/toggle';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
@@ -9,6 +9,16 @@ import { Input } from '@/components/ui/input';
 export type PositionFilter = 'ALL' | Position;
 
 const POSITIONS: PositionFilter[] = ['ALL', 'QB', 'RB', 'WR', 'TE', 'PICK', 'PKG'];
+
+export type StrategyFilter = StrategyTag | 'ALL';
+
+const STRATEGY_CHIPS: Array<{ value: StrategyFilter; label: string }> = [
+  { value: 'ALL', label: 'All' },
+  { value: 'WIN-NOW', label: 'Win-now' },
+  { value: 'BARGAIN', label: 'Bargain' },
+  { value: 'FUTURE', label: 'Future' },
+  { value: 'FADE', label: 'Fade' },
+];
 
 interface FilterControlsProps {
   posFilter: PositionFilter;
@@ -21,6 +31,9 @@ interface FilterControlsProps {
   onAvailableOnlyChange: (value: boolean) => void;
   resultCount: number;
   futurePickYear?: number | null;
+  strategyFilter: StrategyFilter;
+  onStrategyFilterChange: (value: StrategyFilter) => void;
+  showStrategyFilter?: boolean;
 }
 
 export default function FilterControls({
@@ -34,6 +47,9 @@ export default function FilterControls({
   onAvailableOnlyChange,
   resultCount,
   futurePickYear,
+  strategyFilter,
+  onStrategyFilterChange,
+  showStrategyFilter = false,
 }: FilterControlsProps) {
   const packageLabel = futurePickYear ? `${futurePickYear} pick package` : 'pick package';
 
@@ -101,6 +117,27 @@ export default function FilterControls({
         <div className="font-mono text-[11px] text-muted-foreground tabular-nums md:ml-auto">
           {resultCount} players shown
         </div>
+
+        {showStrategyFilter && (
+          <ToggleGroup
+            value={[strategyFilter]}
+            onValueChange={(vals) =>
+              onStrategyFilterChange((vals[0] as StrategyFilter | undefined) ?? 'ALL')
+            }
+            className="w-full flex-wrap gap-[3px] md:w-auto"
+          >
+            {STRATEGY_CHIPS.map((chip) => (
+              <ToggleGroupItem
+                key={chip.value}
+                value={chip.value}
+                data-testid={`strategy-chip-${chip.value}`}
+                className="font-label h-8 rounded-md border border-border bg-background px-2.5 text-[11px] font-semibold tracking-wide text-muted-foreground hover:bg-accent hover:text-foreground data-[state=on]:border-[var(--pos-pick)] data-[state=on]:text-[var(--pos-pick)]"
+              >
+                {chip.label}
+              </ToggleGroupItem>
+            ))}
+          </ToggleGroup>
+        )}
       </div>
 
       {/* Legend */}

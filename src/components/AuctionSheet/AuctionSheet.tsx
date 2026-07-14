@@ -6,7 +6,7 @@ import type { Player, Position, ClaimedBid, LeagueTeam, ScoringSettings } from '
 import { logBid, updateBid, deleteBid } from '@/lib/actions';
 import BidModal from '@/components/BidModal';
 import AuctionHeader from './AuctionHeader';
-import FilterControls, { type PositionFilter } from './FilterControls';
+import FilterControls, { type PositionFilter, type StrategyFilter } from './FilterControls';
 import PlayerTable, { type SortKey } from './PlayerTable';
 
 type OptimisticAction =
@@ -36,6 +36,7 @@ export default function AuctionSheet({
   scoringSettings,
 }: AuctionSheetProps) {
   const [posFilter, setPosFilter] = useState<PositionFilter>('ALL');
+  const [strategyFilter, setStrategyFilter] = useState<StrategyFilter>('ALL');
   const [search, setSearch] = useState<string>('');
   const [sortBy, setSortBy] = useState<SortKey>('budget');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
@@ -71,6 +72,8 @@ export default function AuctionSheet({
     () => players.find((p) => p.futurePickYear != null)?.futurePickYear ?? null,
     [players],
   );
+
+  const hasStrategyTags = useMemo(() => players.some((p) => p.strategyTag != null), [players]);
 
   const mySpent = useMemo(() => {
     const myTeam = ownerHandle ? teams.find((t) => t.handle === ownerHandle) : null;
@@ -193,6 +196,7 @@ export default function AuctionSheet({
     let data = [...players];
     if (posFilter !== 'ALL') data = data.filter((p) => p.pos === posFilter);
     if (availableOnly) data = data.filter((p) => !claimMap.has(p.player));
+    if (strategyFilter !== 'ALL') data = data.filter((p) => p.strategyTag === strategyFilter);
     if (search) {
       const q = search.toLowerCase();
       data = data.filter(
@@ -223,7 +227,7 @@ export default function AuctionSheet({
       return a.sfRank - b.sfRank;
     });
     return data;
-  }, [posFilter, search, availableOnly, claimMap, sortBy, sortDir, players]);
+  }, [posFilter, search, availableOnly, strategyFilter, claimMap, sortBy, sortDir, players]);
 
   const handleSort = (col: SortKey) => {
     if (sortBy === col) {
@@ -270,6 +274,9 @@ export default function AuctionSheet({
         onAvailableOnlyChange={setAvailableOnly}
         resultCount={filtered.length}
         futurePickYear={futurePickYear}
+        strategyFilter={strategyFilter}
+        onStrategyFilterChange={setStrategyFilter}
+        showStrategyFilter={hasStrategyTags}
       />
       <PlayerTable
         players={filtered}

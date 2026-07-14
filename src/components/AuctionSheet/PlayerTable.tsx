@@ -213,7 +213,7 @@ export default function PlayerTable({
                     'text-center font-mono text-[11px] tabular-nums',
                     claim && 'text-secondary-fg',
                   )}
-                  style={{ color: claim ? undefined : ageColor(p.age) }}
+                  style={{ color: claim ? undefined : ageColor(p.age, p.pos) }}
                 >
                   {p.age !== null ? p.age.toFixed(1) : '—'}
                 </TableCell>

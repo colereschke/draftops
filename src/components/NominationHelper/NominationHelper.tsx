@@ -168,7 +168,10 @@ export default function NominationHelper({ draftId, players }: NominationHelperP
       />
 
       <div className="min-w-0 flex-1 overflow-x-auto px-5 pt-4 pb-10">
-        <div className="mb-4 grid gap-3 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-stretch">
+        <div
+          data-onboarding-target="nominate-intro"
+          className="mb-4 grid gap-3 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-stretch"
+        >
           <section className="rounded-lg border border-border-subtle bg-card px-4 py-3">
             <div className="font-label mb-1 text-[10px] tracking-[2.5px] text-muted-foreground uppercase">
               Live Workbench

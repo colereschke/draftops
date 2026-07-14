@@ -238,38 +238,42 @@ export default function AuctionSheet({
 
   return (
     <div className="min-h-screen bg-background text-foreground">
-      <AuctionHeader
-        ownerBudget={ownerBudget}
-        mySpent={mySpent}
-        remaining={remaining}
-        posStats={posStats}
-        grandTotal={grandTotal}
-        totalPlayerCount={totalPlayerCount}
-        scoringSettings={scoringSettings}
-      />
-      <FilterControls
-        posFilter={posFilter}
-        onPosFilterChange={setPosFilter}
-        search={search}
-        onSearchChange={setSearch}
-        showNotes={showNotes}
-        onShowNotesChange={setShowNotes}
-        availableOnly={availableOnly}
-        onAvailableOnlyChange={setAvailableOnly}
-        resultCount={filtered.length}
-        futurePickYear={futurePickYear}
-      />
-      <PlayerTable
-        players={filtered}
-        showNotes={showNotes}
-        hasClaims={hasClaims}
-        claimMap={claimMap}
-        nominatedSet={nominatedSet}
-        sortBy={sortBy}
-        sortDir={sortDir}
-        onSort={handleSort}
-        onRowClick={setModalPlayer}
-      />
+      <div data-onboarding-target="value-sheet">
+        <AuctionHeader
+          ownerBudget={ownerBudget}
+          mySpent={mySpent}
+          remaining={remaining}
+          posStats={posStats}
+          grandTotal={grandTotal}
+          totalPlayerCount={totalPlayerCount}
+          scoringSettings={scoringSettings}
+        />
+        <FilterControls
+          posFilter={posFilter}
+          onPosFilterChange={setPosFilter}
+          search={search}
+          onSearchChange={setSearch}
+          showNotes={showNotes}
+          onShowNotesChange={setShowNotes}
+          availableOnly={availableOnly}
+          onAvailableOnlyChange={setAvailableOnly}
+          resultCount={filtered.length}
+          futurePickYear={futurePickYear}
+        />
+      </div>
+      <div data-onboarding-target="bid-practice">
+        <PlayerTable
+          players={filtered}
+          showNotes={showNotes}
+          hasClaims={hasClaims}
+          claimMap={claimMap}
+          nominatedSet={nominatedSet}
+          sortBy={sortBy}
+          sortDir={sortDir}
+          onSort={handleSort}
+          onRowClick={setModalPlayer}
+        />
+      </div>
 
       <div className="flex flex-wrap gap-4 border-t border-border-subtle px-5 py-2.5 text-[10px] text-muted-foreground/40">
         <span>

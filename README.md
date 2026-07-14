@@ -74,18 +74,25 @@ projection value.
    starting lineup, team count, and scoring settings to create draft-specific `Player.budget`,
    `ceiling`, and `floor` values while preserving the original market values in
    `baseBudget`, `baseCeiling`, and `baseFloor`.
-4. Draft creation then applies the latest stored `ProjectionSource` from Postgres and writes
-   `DraftPlayerValue` rows. The auction sheet uses `DraftPlayerValue.activeAuctionValue` when
-   available. That value is still anchored to the draft's dynasty market value; projections only
-   shape it by comparing each player's points under the draft scoring settings against baseline
-   scoring and then normalizing that lift against positional peers.
+4. Draft creation resolves ETR players to Sleeper IDs, applies the latest stored
+   `ProjectionSource` from Postgres, and writes `DraftPlayerValue` rows inside the same
+   transaction. The auction sheet uses `DraftPlayerValue.activeAuctionValue` when available. That
+   value is still anchored to the draft's dynasty market value; projections only shape it by
+   comparing each player's points under the draft scoring settings against baseline scoring and
+   then normalizing that lift against positional peers.
 5. If a player has no row for the active projection source, the sheet falls back to the
    draft-specific `Player.budget`.
 
 Projection source data must be imported into Postgres before creating drafts. Draft creation fails
 loudly if no usable projection source exists.
 
-To refresh/import projection data manually and reapply it to an existing draft:
+To import projection data before creating drafts:
+
+```bash
+pnpm tsx prisma/apply-projection-values.ts
+```
+
+To refresh/import projection data and reapply it to an existing draft:
 
 ```bash
 pnpm tsx prisma/apply-projection-values.ts --draft-id <draft-id>

@@ -371,8 +371,8 @@ Implemented:
 - Adds projection-shaped active market values: the active auction target remains anchored to the
   draft's adjusted dynasty `Player.budget`, then projections adjust it by relative scoring lift
   within position/value buckets.
-- Adds `prisma/apply-projection-values.ts --draft-id <id>` to import generated projection CSVs into
-  Postgres and reapply values to an existing draft.
+- Adds `prisma/apply-projection-values.ts` to import generated projection CSVs into Postgres.
+  Passing `--draft-id <id>` additionally reapplies values to an existing draft.
 - Adds automatic projection application during `createDraft`; ETR player rows get Sleeper IDs from
   the generated match CSV, and draft creation fails loudly without persisting a partial draft if no
   usable `ProjectionSource` exists.
@@ -385,11 +385,10 @@ Current process:
 
 1. Generate or confirm `data/generated/etr_sleeper_matches.csv` and
    `data/generated/master_projections.csv` exist locally.
-2. Import projection source data into Postgres by running the apply script against an existing
-   draft:
+2. Import projection source data into Postgres:
 
 ```bash
-pnpm tsx prisma/apply-projection-values.ts --draft-id <draft-id>
+pnpm tsx prisma/apply-projection-values.ts
 ```
 
 3. Create drafts normally. `createDraft` automatically resolves ETR Sleeper IDs, seeds adjusted
@@ -404,8 +403,7 @@ pnpm tsx prisma/apply-projection-values.ts --draft-id <draft-id>
 
 Next steps:
 
-1. Add a dedicated projection import/admin command or setup step so the first import no longer
-   depends on an existing draft.
+1. Add an admin UI or setup wrapper around the projection import command.
 2. Feed projection-aware lineup strength into #8 dynamic pick valuation, keeping dynasty market
    strength and redraft projection strength as separate signals.
 3. Rebuild the strategy lens in a follow-up PR using a shape-preserving signal, not raw VOR-dollar

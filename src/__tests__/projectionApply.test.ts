@@ -8,6 +8,7 @@ import {
   importProjectionRows,
   joinPlayersToProjectionRows,
   parseProjectionRows,
+  runProjectionImportWorkflow,
 } from '../../prisma/apply-projection-values';
 
 function projectionRow(overrides: Partial<CsvProjectionRow>): CsvProjectionRow {
@@ -318,4 +319,33 @@ it('imports projection rows into source and player projection tables', async () 
       }),
     }),
   );
+});
+
+it('imports projection sources without requiring a draft', async () => {
+  const projectionSourceFindFirst = jest.fn().mockResolvedValue(null);
+  const projectionSourceCreate = jest.fn().mockResolvedValue({ id: 7 });
+  const playerProjectionUpsert = jest.fn().mockResolvedValue({});
+  const transaction = jest.fn().mockImplementation(async (operations) => Promise.all(operations));
+  const prisma = {
+    projectionSource: {
+      findFirst: projectionSourceFindFirst,
+      create: projectionSourceCreate,
+    },
+    playerProjection: {
+      upsert: playerProjectionUpsert,
+    },
+    $transaction: transaction,
+  };
+
+  const result = await runProjectionImportWorkflow(prisma, {
+    draftId: null,
+    projectionRows: [projectionRow({ sleeperId: '10' })],
+    etrMatches: new Map(),
+  });
+
+  expect(result).toEqual({
+    importResults: [{ projectionSourceId: 7, importedCount: 1 }],
+    applyResult: null,
+  });
+  expect(playerProjectionUpsert).toHaveBeenCalledTimes(1);
 });

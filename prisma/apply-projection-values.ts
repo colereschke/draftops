@@ -4,10 +4,12 @@ import { parseCsv } from '@/lib/csv';
 import { readEtrMatchRows } from '@/lib/projectionIdentity';
 import {
   applyProjectionValuesToDraft,
+  type ApplyProjectionValuesResult,
   buildDraftPlayerValueData,
   buildStaleDraftPlayerValueDeleteWhere,
   getSleeperIdUpdates,
   joinPlayersToProjectionRows,
+  type ProjectionApplyPrisma,
   resolvePlayerSleeperIds,
   type VorPosition,
 } from '@/lib/projectionApplication';
@@ -172,9 +174,28 @@ interface ProjectionImportPrisma {
   $transaction(operations: unknown[], options?: { timeout: number }): Promise<unknown[]>;
 }
 
+interface ProjectionImportWorkflowPrisma extends ProjectionImportPrisma {
+  draft?: ProjectionApplyPrisma['draft'];
+  player?: ProjectionApplyPrisma['player'];
+  playerProjection: ProjectionImportPrisma['playerProjection'] &
+    Partial<ProjectionApplyPrisma['playerProjection']>;
+  draftPlayerValue?: ProjectionApplyPrisma['draftPlayerValue'];
+}
+
 export interface ProjectionImportResult {
   projectionSourceId: number;
   importedCount: number;
+}
+
+export interface ProjectionImportWorkflowOptions {
+  draftId: number | null;
+  projectionRows: CsvProjectionRow[];
+  etrMatches: Map<string, string>;
+}
+
+export interface ProjectionImportWorkflowResult {
+  importResults: ProjectionImportResult[];
+  applyResult: ApplyProjectionValuesResult | null;
 }
 
 export async function importProjectionRows(
@@ -225,10 +246,43 @@ export async function importProjectionRows(
   return results;
 }
 
+export async function runProjectionImportWorkflow(
+  prisma: ProjectionImportWorkflowPrisma,
+  options: ProjectionImportWorkflowOptions,
+): Promise<ProjectionImportWorkflowResult> {
+  const importResults = await importProjectionRows(prisma, options.projectionRows);
+  if (options.draftId === null) {
+    return { importResults, applyResult: null };
+  }
+
+  assertProjectionApplyPrisma(prisma);
+  const projectionSourceId = importResults.at(-1)?.projectionSourceId;
+  const applyResult = await applyProjectionValuesToDraft(prisma, {
+    draftId: options.draftId,
+    projectionSourceId,
+    etrMatches: options.etrMatches,
+  });
+
+  return { importResults, applyResult };
+}
+
+function assertProjectionApplyPrisma(
+  prisma: ProjectionImportWorkflowPrisma,
+): asserts prisma is ProjectionImportPrisma & ProjectionApplyPrisma {
+  if (
+    !prisma.draft ||
+    !prisma.player ||
+    !prisma.playerProjection ||
+    !prisma.playerProjection.findMany ||
+    !prisma.draftPlayerValue
+  ) {
+    throw new Error('Draft projection application requires a full Prisma client');
+  }
+}
+
 async function main(): Promise<void> {
   dotenvConfig({ path: '.env.local' });
   const args = parseArgs(process.argv.slice(2));
-  if (args.draftId === null) throw new Error('Missing required --draft-id');
   if (!process.env.DATABASE_URL) throw new Error('DATABASE_URL is not set');
 
   const [{ PrismaClient }, { PrismaPg }, { Pool }] = await Promise.all([
@@ -241,34 +295,29 @@ async function main(): Promise<void> {
   const prisma = new PrismaClient({ adapter });
 
   try {
-    const draft = await prisma.draft.findUnique({
-      where: { id: args.draftId },
-      select: {
-        id: true,
-        teamCount: true,
-        rosterSize: true,
-        budget: true,
-        startingLineup: true,
-        scoringSettings: true,
-        targetRoster: true,
-      },
-    });
-    if (!draft) throw new Error(`Draft ${args.draftId} not found`);
-
-    const scoringSettings = toScoringSettings(draft.scoringSettings);
-    const etrMatches = new Map(
-      readEtrMatchRows(args.etrMatchesCsv).map((row) => [row.name, row.sleeperId]),
-    );
-    const projectionRows = readProjectionRows(args.projectionsCsv, scoringSettings);
-    const importResults = await importProjectionRows(prisma, projectionRows);
-    const projectionSourceId = importResults.at(-1)?.projectionSourceId;
-    const applyResult = await applyProjectionValuesToDraft(prisma, {
-      draftId: draft.id,
-      projectionSourceId,
+    const etrMatches =
+      args.draftId === null
+        ? new Map<string, string>()
+        : new Map(readEtrMatchRows(args.etrMatchesCsv).map((row) => [row.name, row.sleeperId]));
+    const projectionRows = readProjectionRows(args.projectionsCsv, DEFAULT_SCORING_SETTINGS);
+    const result = await runProjectionImportWorkflow(prisma, {
+      draftId: args.draftId,
+      projectionRows,
       etrMatches,
     });
+    const importedCount = result.importResults.reduce(
+      (total, importResult) => total + importResult.importedCount,
+      0,
+    );
 
-    console.log(`Applied projection values to ${applyResult.appliedCount} player-source row(s).`);
+    console.log(`Imported ${importedCount} projection row(s).`);
+    if (result.applyResult) {
+      console.log(
+        `Applied projection values to ${result.applyResult.appliedCount} player-source row(s).`,
+      );
+    } else {
+      console.log('No --draft-id provided; skipped draft-specific projection application.');
+    }
   } finally {
     await prisma.$disconnect();
     await pool.end();
@@ -355,11 +404,6 @@ function toVorPosition(position: string): VorPosition | null {
     return position;
   }
   return null;
-}
-
-function toScoringSettings(value: unknown): ScoringSettings {
-  if (value === null || typeof value !== 'object') return { ...DEFAULT_SCORING_SETTINGS };
-  return { ...DEFAULT_SCORING_SETTINGS, ...(value as Partial<ScoringSettings>) };
 }
 
 if (require.main === module) {

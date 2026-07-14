@@ -165,6 +165,22 @@ describe('Sleeper roster actions', () => {
     });
   });
 
+  it('rethrows an unexpected preview failure instead of masking it as a Sleeper error', async () => {
+    mockFetchRosters.mockRejectedValue(new Error('DB connection lost'));
+    await expect(previewSleeperRosterSync({ draftId: 4 })).rejects.toThrow('DB connection lost');
+  });
+
+  it('rethrows an unexpected mapping-save failure instead of masking it as a Sleeper error', async () => {
+    mockFetchLeague.mockRejectedValue(new Error('DB connection lost'));
+    await expect(
+      saveSleeperRosterMapping({
+        draftId: 4,
+        leagueId: 'league-1',
+        mappings: [{ teamId: 7, sleeperRosterId: 9 }],
+      }),
+    ).rejects.toThrow('DB connection lost');
+  });
+
   it('creates only currently assigned bids and clears their nominations', async () => {
     const result = await logSleeperRosterCatchUp({
       draftId: 4,

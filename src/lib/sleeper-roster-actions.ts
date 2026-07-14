@@ -104,7 +104,7 @@ export async function previewSleeperRosterSync(input: {
     return { ok: true, preview };
   } catch (error) {
     if (isSleeperError(error)) return { ok: false, code: 'sleeper_error' };
-    return { ok: false, code: 'sleeper_error' };
+    throw error;
   }
 }
 
@@ -144,7 +144,7 @@ export async function saveSleeperRosterMapping(input: {
     ]);
   } catch (error) {
     if (isSleeperError(error)) return { ok: false, code: 'sleeper_error' };
-    return { ok: false, code: 'sleeper_error' };
+    throw error;
   }
 
   const [teams, players, loggedResults] = await Promise.all([

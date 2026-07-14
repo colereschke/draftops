@@ -87,7 +87,11 @@ export default function FirstRunWelcome({ eligible }: FirstRunWelcomeProps) {
         your own from the standard draft form.
       </p>
       {error && (
-        <p role="alert" style={{ color: 'var(--age-old)', margin: '0 0 0.75rem' }}>
+        <p
+          data-testid="first-run-welcome-error"
+          role="alert"
+          style={{ color: 'var(--age-old)', margin: '0 0 0.75rem' }}
+        >
           {error}
         </p>
       )}

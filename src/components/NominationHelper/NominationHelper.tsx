@@ -41,9 +41,14 @@ export default function NominationHelper({ draftId, players }: NominationHelperP
           setDraftError('No draft configured');
           return;
         }
-        if (res.ok) setData(await res.json());
+        if (!res.ok) {
+          setDraftError('Unable to load nomination data');
+          return;
+        }
+        setData(await res.json());
+        setDraftError(null);
       } catch {
-        // silent — show stale data
+        setDraftError('Unable to load nomination data');
       }
     }
     void fetchData();
@@ -149,7 +154,11 @@ export default function NominationHelper({ draftId, players }: NominationHelperP
 
   if (!data) {
     return (
-      <div className="flex h-[400px] items-center justify-center text-muted-foreground">
+      <div
+        data-onboarding-nomination-state={draftError ? 'error' : 'loading'}
+        data-testid="nomination-helper-state"
+        className="flex h-[400px] items-center justify-center text-muted-foreground"
+      >
         {draftError ?? 'Loading nomination data...'}
       </div>
     );
@@ -165,6 +174,7 @@ export default function NominationHelper({ draftId, players }: NominationHelperP
   return (
     <div
       data-testid="nomination-helper-layout"
+      data-onboarding-nomination-state="ready"
       className="flex min-h-screen flex-col bg-background text-foreground md:flex-row"
     >
       <WatchlistSidebar

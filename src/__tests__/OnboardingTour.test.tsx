@@ -159,7 +159,8 @@ describe('OnboardingTour', () => {
     expect(screen.getByTestId('onboarding-tour')).toHaveTextContent('Log a practice bid');
   });
 
-  it('waits for nomination anchors while nomination data is loading', async () => {
+  it('keeps the nomination step active when data resolves after the normal missing-target timeout', async () => {
+    jest.useFakeTimers();
     mockPathname = '/draft/5/nominate';
     let resolveNominationData: ((value: Response) => void) | undefined;
     global.fetch = jest.fn(
@@ -170,24 +171,51 @@ describe('OnboardingTour', () => {
     );
     const progress: TourProgress = { ...FEATURE_TOUR_PROGRESS, step: 'NOMINATE_INTRO' };
 
+    try {
+      render(
+        <OnboardingProvider progress={progress}>
+          <NominationHelper draftId={5} players={NOMINATION_PLAYERS} />
+        </OnboardingProvider>,
+      );
+
+      expect(screen.getByTestId('onboarding-tour')).toHaveTextContent('Nomination helper');
+      await act(async () => {
+        jest.advanceTimersByTime(1_001);
+      });
+      expect(screen.getByTestId('onboarding-tour')).toHaveTextContent('Nomination helper');
+      expect(mockAdvanceOnboardingStep).not.toHaveBeenCalled();
+
+      resolveNominationData?.({
+        ok: true,
+        status: 200,
+        json: async () => NOMINATION_DATA,
+      } as Response);
+
+      await act(async () => undefined);
+      expect(screen.getByTestId('nomination-helper-layout')).toBeInTheDocument();
+      expect(screen.getByTestId('onboarding-tour')).toHaveTextContent('Nomination helper');
+      expect(mockAdvanceOnboardingStep).not.toHaveBeenCalled();
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it('allows skipping the tour while nomination data is still loading', async () => {
+    mockPathname = '/draft/5/nominate';
+    global.fetch = jest.fn(() => new Promise<Response>(() => undefined));
+    const progress: TourProgress = { ...FEATURE_TOUR_PROGRESS, step: 'NOMINATE_INTRO' };
+    const user = userEvent.setup();
+
     render(
       <OnboardingProvider progress={progress}>
         <NominationHelper draftId={5} players={NOMINATION_PLAYERS} />
       </OnboardingProvider>,
     );
 
-    expect(screen.getByTestId('onboarding-tour')).toHaveTextContent('Nomination helper');
-    expect(mockAdvanceOnboardingStep).not.toHaveBeenCalled();
+    await user.click(screen.getByTestId('onboarding-skip'));
 
-    resolveNominationData?.({
-      ok: true,
-      status: 200,
-      json: async () => NOMINATION_DATA,
-    } as Response);
-
-    await screen.findByTestId('nomination-helper-layout');
-    expect(screen.getByTestId('onboarding-tour')).toHaveTextContent('Nomination helper');
-    expect(mockAdvanceOnboardingStep).not.toHaveBeenCalled();
+    expect(mockCompleteOnboarding).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(screen.queryByTestId('onboarding-tour')).not.toBeInTheDocument());
   });
 
   it('shows compact progress for the current tour step', () => {

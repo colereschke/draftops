@@ -12,6 +12,10 @@ const PERSISTENCE_ERROR =
 const VIEWPORT_MARGIN = 16;
 const ANCHOR_READY_TIMEOUT_MS = 1_000;
 
+function isNominationStep(step: OnboardingStep): boolean {
+  return step === 'NOMINATE_INTRO' || step === 'NOMINATE_PRACTICE';
+}
+
 interface OnboardingTourProps {
   progress: TourProgress | null;
   onProgressChange?: (progress: TourProgress | null) => void;
@@ -157,19 +161,39 @@ export default function OnboardingTour({
       };
     }
 
+    const nominationStep = isNominationStep(progress.step);
+    const hasNominationLoadError = () =>
+      document.querySelector('[data-onboarding-nomination-state="error"]') !== null;
+    let timeout: number | undefined;
     const observer = new MutationObserver(() => {
-      if (!connectAnchor()) return;
+      if (connectAnchor()) {
+        observer.disconnect();
+        if (timeout !== undefined) window.clearTimeout(timeout);
+        return;
+      }
+      if (nominationStep && !hasNominationLoadError()) return;
+
       observer.disconnect();
-      window.clearTimeout(timeout);
+      if (timeout !== undefined) window.clearTimeout(timeout);
+      void bypassMissingTarget();
     });
     observer.observe(document.body, { childList: true, subtree: true });
-    const timeout = window.setTimeout(() => {
-      observer.disconnect();
-      void bypassMissingTarget();
-    }, ANCHOR_READY_TIMEOUT_MS);
+    if (nominationStep) {
+      if (hasNominationLoadError()) {
+        observer.disconnect();
+        timeout = window.setTimeout(() => {
+          void bypassMissingTarget();
+        }, 0);
+      }
+    } else {
+      timeout = window.setTimeout(() => {
+        observer.disconnect();
+        void bypassMissingTarget();
+      }, ANCHOR_READY_TIMEOUT_MS);
+    }
     return () => {
       observer.disconnect();
-      window.clearTimeout(timeout);
+      if (timeout !== undefined) window.clearTimeout(timeout);
       if (updatePosition) {
         window.removeEventListener('resize', updatePosition);
         window.removeEventListener('scroll', updatePosition, true);

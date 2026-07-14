@@ -41,7 +41,9 @@ describe('FirstRunWelcome', () => {
 
     await user.click(screen.getByTestId('first-run-create-draft'));
 
-    expect(screen.getByRole('alert')).toHaveTextContent('Could not start setup. Please try again.');
+    expect(screen.getByTestId('first-run-welcome-error')).toHaveTextContent(
+      'Could not start setup. Please try again.',
+    );
     expect(screen.getByTestId('first-run-welcome')).toBeInTheDocument();
     expect(mockPush).not.toHaveBeenCalled();
   });
@@ -63,7 +65,9 @@ describe('FirstRunWelcome', () => {
 
     await user.click(screen.getByTestId('first-run-skip'));
 
-    expect(screen.getByRole('alert')).toHaveTextContent('Could not skip setup. Please try again.');
+    expect(screen.getByTestId('first-run-welcome-error')).toHaveTextContent(
+      'Could not skip setup. Please try again.',
+    );
     expect(screen.getByTestId('first-run-welcome')).toBeInTheDocument();
   });
 

@@ -11,7 +11,12 @@ const config: Config = {
     '^@/(.*)$': '<rootDir>/src/$1',
   },
   testMatch: ['**/__tests__/**/*.{ts,tsx}', '**/*.{spec,test}.{ts,tsx}'],
-  testPathIgnorePatterns: ['/node_modules/', '<rootDir>/.claude/'],
+  testPathIgnorePatterns: [
+    '/node_modules/',
+    '<rootDir>/.claude/',
+    '<rootDir>/.claire/',
+    '<rootDir>/.worktrees/',
+  ],
   collectCoverageFrom: ['src/**/*.{ts,tsx}', '!src/**/*.d.ts', '!src/app/layout.tsx'],
 };
 

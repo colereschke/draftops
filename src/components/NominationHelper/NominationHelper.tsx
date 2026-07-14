@@ -4,6 +4,7 @@ import { useState, useMemo, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import type { Player, Position, TeamStats, AuctionResultEntry } from '@/types';
 import { computeNominationScores, type ScoredPlayer } from '@/lib/nominationScoring';
+import { useOnboarding } from '@/components/Onboarding/OnboardingContext';
 import WatchlistSidebar from './WatchlistSidebar';
 import NominationTable from './NominationTable';
 
@@ -23,6 +24,7 @@ interface NominationHelperProps {
 
 export default function NominationHelper({ draftId, players }: NominationHelperProps) {
   const router = useRouter();
+  const { progress, recordPlayerNominated } = useOnboarding();
   const [data, setData] = useState<NomData | null>(null);
   const [draftError, setDraftError] = useState<string | null>(null);
   const [posFilter, setPosFilter] = useState<'ALL' | Position>('ALL');
@@ -39,9 +41,14 @@ export default function NominationHelper({ draftId, players }: NominationHelperP
           setDraftError('No draft configured');
           return;
         }
-        if (res.ok) setData(await res.json());
+        if (!res.ok) {
+          setDraftError('Unable to load nomination data');
+          return;
+        }
+        setData(await res.json());
+        setDraftError(null);
       } catch {
-        // silent — show stale data
+        setDraftError('Unable to load nomination data');
       }
     }
     void fetchData();
@@ -116,18 +123,26 @@ export default function NominationHelper({ draftId, players }: NominationHelperP
     if (playerId === undefined) return;
     const snapshot = data;
     setData((prev) => (prev ? { ...prev, nominated: [...prev.nominated, playerId] } : prev));
-    const res = await fetch(`/api/draft/${draftId}/nominated`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ playerId }),
-    });
+    let res: Response;
+    try {
+      res = await fetch(`/api/draft/${draftId}/nominated`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ playerId }),
+      });
+    } catch {
+      setData(snapshot);
+      return;
+    }
     if (!res.ok) {
       if (res.status === 401) {
         router.replace('/sign-in');
         return;
       }
       setData(snapshot);
+      return;
     }
+    await recordPlayerNominated(player.player);
   };
 
   const unNominatePlayer = async (playerId: number) => {
@@ -151,7 +166,11 @@ export default function NominationHelper({ draftId, players }: NominationHelperP
 
   if (!data) {
     return (
-      <div className="flex h-[400px] items-center justify-center text-muted-foreground">
+      <div
+        data-onboarding-nomination-state={draftError ? 'error' : 'loading'}
+        data-testid="nomination-helper-state"
+        className="flex h-[400px] items-center justify-center text-muted-foreground"
+      >
         {draftError ?? 'Loading nomination data...'}
       </div>
     );
@@ -167,6 +186,7 @@ export default function NominationHelper({ draftId, players }: NominationHelperP
   return (
     <div
       data-testid="nomination-helper-layout"
+      data-onboarding-nomination-state="ready"
       className="flex min-h-screen flex-col bg-background text-foreground md:flex-row"
     >
       <WatchlistSidebar
@@ -181,10 +201,14 @@ export default function NominationHelper({ draftId, players }: NominationHelperP
         onUnNominate={(playerId) => {
           if (typeof playerId === 'number') void unNominatePlayer(playerId);
         }}
+        onboardingSubjectPlayerName={progress?.subjectPlayerName ?? null}
       />
 
       <div className="min-w-0 flex-1 overflow-x-auto px-5 pt-4 pb-10">
-        <div className="mb-4 grid gap-3 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-stretch">
+        <div
+          data-onboarding-target="nominate-intro"
+          className="mb-4 grid gap-3 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-stretch"
+        >
           <section className="rounded-lg border border-border-subtle bg-card px-4 py-3">
             <div className="font-label mb-1 text-[10px] tracking-[2.5px] text-muted-foreground uppercase">
               Live Workbench

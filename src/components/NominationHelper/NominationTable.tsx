@@ -186,6 +186,8 @@ export default function NominationTable({
                     variant="outline"
                     size="xs"
                     onClick={() => onNominate(player)}
+                    data-testid={`nominate-player-${player.player}`}
+                    data-onboarding-target="nominate-practice"
                     className="font-label tracking-wide hover:border-[var(--pos-pick)]"
                     style={{ color: 'var(--pos-pick)' }}
                   >

@@ -16,6 +16,7 @@ interface WatchlistSidebarProps {
   onAddToWatchlist: (player: Player) => void;
   onRemoveFromWatchlist: (playerId: number | string) => void;
   onUnNominate: (playerId: number | string) => void;
+  onboardingSubjectPlayerName?: string | null;
 }
 
 export default function WatchlistSidebar({
@@ -27,6 +28,7 @@ export default function WatchlistSidebar({
   onAddToWatchlist,
   onRemoveFromWatchlist,
   onUnNominate,
+  onboardingSubjectPlayerName,
 }: WatchlistSidebarProps) {
   const [search, setSearch] = useState('');
   const wrapperRef = useRef<HTMLDivElement>(null);
@@ -105,6 +107,14 @@ export default function WatchlistSidebar({
                     onClick={() => onUnNominate(playerId)}
                     title="Remove from in auction"
                     aria-label={`Remove ${name} from in auction`}
+                    data-testid={
+                      name === onboardingSubjectPlayerName
+                        ? `onboarding-nominate-undo-${name}`
+                        : undefined
+                    }
+                    data-onboarding-target={
+                      name === onboardingSubjectPlayerName ? 'nominate-undo' : undefined
+                    }
                     className="shrink-0 text-muted-foreground transition-colors hover:text-primary"
                   >
                     <X className="size-3.5" />

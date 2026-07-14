@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Fix four independent UX papercuts: numeric inputs on `/drafts/new` that can't be cleanly edited, a starting-lineup builder that doesn't regroup slots by position, a hardcoded value-sheet caption that ignores the draft's actual scoring settings, and misaligned per-position summaries on the Team Rosters page.
+**Goal:** Fix five independent UX papercuts: numeric inputs on `/drafts/new` that can't be cleanly edited, a starting-lineup builder that doesn't regroup slots by position, a hardcoded value-sheet caption that ignores the draft's actual scoring settings, misaligned per-position summaries on the Team Rosters page, and a value-sheet default sort that strands pick assets at the bottom.
 
-**Architecture:** A new shared `useNumericField` hook (`src/lib/useNumericField.ts`) replaces the `parseInt(...) || default` pattern at every numeric input on `/drafts/new` (Tasks 1-3). A pure sort function fixes lineup-slot grouping (Task 4). A new pure caption-formatting function plus prop-threading fixes the value-sheet caption (Task 5). A single Tailwind class fixes the roster-summary alignment (Task 6). No two tasks touch the same file region simultaneously except Tasks 2/3/4, which are sequenced (2 → 3 → 4) since all three edit `src/app/drafts/new/page.tsx`.
+**Architecture:** A new shared `useNumericField` hook (`src/lib/useNumericField.ts`) replaces the `parseInt(...) || default` pattern at every numeric input on `/drafts/new` (Tasks 1-3). A pure sort function fixes lineup-slot grouping (Task 4). A new pure caption-formatting function plus prop-threading fixes the value-sheet caption (Task 5). A single Tailwind class fixes the roster-summary alignment (Task 6). Two `useState` initializer values fix the value-sheet's default sort (Task 7). No two tasks touch the same file region simultaneously except Tasks 2/3/4 (all edit `src/app/drafts/new/page.tsx`, sequenced 2 → 3 → 4) and Tasks 5/7 (both touch `src/components/AuctionSheet/AuctionSheet.tsx` and `AuctionSheet.claimed.test.tsx`, but in non-overlapping regions — sequenced 5 → 7).
 
 **Tech Stack:** Next.js 16 App Router (client components for interactive forms, server components for data-fetching pages), React 19 hooks, Jest + React Testing Library (`renderHook`/`act` for hook tests), Tailwind CSS 4 + inline styles (existing per-file convention), `data-testid` selectors.
 
@@ -1227,15 +1227,19 @@ Add the prop to the `<AuctionSheet>` call, following the same nullable-JSON-fiel
 Run: `pnpm test -- AuctionHeader.test.tsx`
 Expected: PASS (all 7 tests — 3 existing + 4 new)
 
-- [ ] **Step 7: Typecheck and lint**
+- [ ] **Step 7: Fix the other test file that constructs `<AuctionSheet>`**
+
+`src/__tests__/AuctionSheet.claimed.test.tsx` has a `renderSheet` helper (around line 61) that builds `<AuctionSheet players={...} claimedBids={...} teams={...} nominatedPlayers={...} draftId={...} ownerHandle={...} ownerBudget={...} {...overrides} />` — once `scoringSettings` is required, this file fails to typecheck. Add the import `import { DEFAULT_SCORING_SETTINGS } from '@/types';` (alongside the existing `import type { Player, ClaimedBid, LeagueTeam } from '@/types';`) and add `scoringSettings={{ ...DEFAULT_SCORING_SETTINGS }}` to the `renderSheet` helper's `<AuctionSheet>` call, before `{...overrides}` so an individual test can still override it if ever needed.
+
+- [ ] **Step 8: Typecheck and lint**
 
 Run: `pnpm tsc --noEmit && pnpm lint`
-Expected: no errors — this will catch any other test file constructing `<AuctionSheet>` or `<AuctionHeader>` without the new required prop. If `pnpm tsc --noEmit` surfaces such a file, add `scoringSettings={{ ...DEFAULT_SCORING_SETTINGS }}` to its render calls too (search first: `grep -rn "<AuctionSheet" src/__tests__` and `grep -rn "<AuctionHeader" src/__tests__`).
+Expected: no errors. If `tsc` surfaces any other file constructing `<AuctionSheet>` or `<AuctionHeader>` beyond the two already handled in this task, add `scoringSettings={{ ...DEFAULT_SCORING_SETTINGS }}` to it too.
 
-- [ ] **Step 8: Commit**
+- [ ] **Step 9: Commit**
 
 ```bash
-git add src/components/AuctionSheet/AuctionHeader.tsx src/components/AuctionSheet/AuctionSheet.tsx "src/app/draft/[draftId]/page.tsx" src/__tests__/AuctionHeader.test.tsx
+git add src/components/AuctionSheet/AuctionHeader.tsx src/components/AuctionSheet/AuctionSheet.tsx "src/app/draft/[draftId]/page.tsx" src/__tests__/AuctionHeader.test.tsx src/__tests__/AuctionSheet.claimed.test.tsx
 git commit -m "feat: derive value-sheet TE caption from draft scoring settings"
 ```
 
@@ -1306,4 +1310,93 @@ Navigate to `/teams`, expand a team's roster drawer. Confirm every position grou
 ```bash
 git add src/components/RosterTracker/TeamRosterDetail.tsx
 git commit -m "fix: align team roster per-position summary subtotals"
+```
+
+---
+
+### Task 7: Default value-sheet sort by target value
+
+**Files:**
+
+- Modify: `src/components/AuctionSheet/AuctionSheet.tsx`
+- Test: `src/__tests__/AuctionSheet.claimed.test.tsx`
+
+**Interfaces:**
+
+- Consumes: nothing new.
+- Produces: nothing consumed by other tasks. Independent of Tasks 1-6 (different state, same file family as Task 5 but a different, non-overlapping section — sequenced after Task 5 since both touch `AuctionSheet.claimed.test.tsx`'s `renderSheet` helper area).
+
+- [ ] **Step 1: Write the failing test**
+
+Add to `src/__tests__/AuctionSheet.claimed.test.tsx`, inside `describe('AuctionSheet with claimed bids', ...)`:
+
+```tsx
+it('defaults to sorting by target value (budget) descending, interleaving pick assets by value instead of sinking them to the bottom', () => {
+  const { container } = renderSheet({
+    players: [
+      MOCK_PLAYERS[0], // Josh Allen — sfRank 1, budget 120
+      MOCK_PLAYERS[1], // Justin Jefferson — sfRank 5, budget 95
+      {
+        player: "coreschke's 2027 package",
+        team: 'coreschke',
+        pos: 'PKG',
+        age: null,
+        sfRank: 900, // deliberately far behind on sfRank...
+        budget: 109, // ...but worth more than Jefferson on target value
+        ceiling: 131,
+        floor: 75,
+        notes: '',
+        futurePickYear: 2027,
+        futurePickOriginHandle: 'coreschke',
+        futurePickAssetKind: 'package',
+      },
+    ],
+  });
+
+  const rows = container.querySelectorAll('[data-testid^="player-row-"]');
+  const order = Array.from(rows).map((row) => row.getAttribute('data-testid'));
+  // Row testids are keyed by sfRank (player-row-<sfRank>), not by sort order, so this
+  // asserts the actual DOM order under the new budget-descending default: Allen (120),
+  // the package (109), then Jefferson (95) — the package sits between the two players
+  // by value instead of trailing behind both of them the way sfRank-ascending would put it.
+  expect(order).toEqual(['player-row-1', 'player-row-900', 'player-row-5']);
+});
+```
+
+- [ ] **Step 2: Run the test to verify it fails**
+
+Run: `pnpm test -- AuctionSheet.claimed.test.tsx`
+Expected: FAIL — current default (`sfRank` ascending) produces `['player-row-1', 'player-row-5', 'player-row-900']`, package last.
+
+- [ ] **Step 3: Change the defaults**
+
+In `src/components/AuctionSheet/AuctionSheet.tsx`, replace:
+
+```tsx
+const [sortBy, setSortBy] = useState<SortKey>('sfRank');
+const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
+```
+
+with:
+
+```tsx
+const [sortBy, setSortBy] = useState<SortKey>('budget');
+const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
+```
+
+- [ ] **Step 4: Run the test to verify it passes**
+
+Run: `pnpm test -- AuctionSheet.claimed.test.tsx`
+Expected: PASS (full file — double check the pre-existing tests in this file still pass too, since several of them implicitly depend on row order or on `MOCK_PLAYERS`/fixture ordering; none of the existing assertions in this file check ordering by sfRank specifically, so none should be sort-order-sensitive, but the full-file run is the check for that)
+
+- [ ] **Step 5: Typecheck and lint**
+
+Run: `pnpm tsc --noEmit && pnpm lint`
+Expected: no errors
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add src/components/AuctionSheet/AuctionSheet.tsx src/__tests__/AuctionSheet.claimed.test.tsx
+git commit -m "fix: default value sheet sort to target value instead of SF rank"
 ```

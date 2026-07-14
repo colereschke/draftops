@@ -99,6 +99,53 @@ describe('NewDraftPage — roster settings and lineup', () => {
     fireEvent.change(screen.getByTestId('lineup-slot-0'), { target: { value: 'SUPER_FLEX' } });
     expect(screen.getByTestId<HTMLSelectElement>('lineup-slot-0').value).toBe('SUPER_FLEX');
   });
+
+  it('allows clearing the roster size field to empty while retyping', () => {
+    render(<NewDraftPage />);
+    const input = screen.getByTestId<HTMLInputElement>('roster-size-input');
+    fireEvent.change(input, { target: { value: '' } });
+    expect(input.value).toBe('');
+    fireEvent.change(input, { target: { value: '25' } });
+    expect(input.value).toBe('25');
+  });
+
+  it('allows clearing the team count field to empty while retyping', () => {
+    render(<NewDraftPage />);
+    const input = screen.getByTestId<HTMLInputElement>('team-count-input');
+    fireEvent.change(input, { target: { value: '' } });
+    expect(input.value).toBe('');
+    fireEvent.change(input, { target: { value: '8' } });
+    expect(input.value).toBe('8');
+  });
+
+  it('allows clearing the budget field to empty while retyping', () => {
+    render(<NewDraftPage />);
+    const input = screen.getByTestId<HTMLInputElement>('budget-input');
+    fireEvent.change(input, { target: { value: '' } });
+    expect(input.value).toBe('');
+    fireEvent.change(input, { target: { value: '500' } });
+    expect(input.value).toBe('500');
+  });
+
+  it('allows clearing a target roster field to empty while retyping', () => {
+    render(<NewDraftPage />);
+    const input = screen.getByTestId<HTMLInputElement>('target-roster-QB');
+    fireEvent.change(input, { target: { value: '' } });
+    expect(input.value).toBe('');
+    fireEvent.change(input, { target: { value: '6' } });
+    expect(input.value).toBe('6');
+  });
+
+  it('resizes the team roster table when team count changes', () => {
+    render(<NewDraftPage />);
+    const input = screen.getByTestId<HTMLInputElement>('team-count-input');
+    fireEvent.change(input, { target: { value: '14' } });
+    // Team handle inputs render as plain text inputs inside the roster table;
+    // there are 14 team rows once team count is 14, plus the fixed-count
+    // Yds/point etc. number inputs elsewhere — assert via the roster-size
+    // default-value pattern already used above instead of counting all inputs.
+    expect(screen.getAllByDisplayValue(/^team-\d+$/)).toHaveLength(14);
+  });
 });
 
 describe('NewDraftPage — scoring settings', () => {

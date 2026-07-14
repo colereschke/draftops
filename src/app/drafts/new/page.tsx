@@ -5,6 +5,7 @@ import { useEffect, useState, useTransition } from 'react';
 import { createDraft } from '@/lib/actions';
 import { importFromSleeper } from '@/lib/sleeper-actions';
 import { getRankingSummary, type RankingSummary } from '@/lib/rankings-actions';
+import { useNumericField } from '@/lib/useNumericField';
 import type { SleeperImportResult } from '@/lib/sleeper';
 import type { FuturePickAuctionMode, StartingSlot, ScoringSettings } from '@/types';
 import { DEFAULT_STARTING_LINEUP, DEFAULT_TARGET_ROSTER, DEFAULT_SCORING_SETTINGS } from '@/types';
@@ -30,24 +31,29 @@ function defaultTeams(count: number): TeamRow[] {
 
 export default function NewDraftPage() {
   const [name, setName] = useState('');
-  const [teamCount, setTeamCount] = useState(12);
-  const [budget, setBudget] = useState(1000);
+  const teamCountField = useNumericField(12);
+  const budgetField = useNumericField(1000);
+  const rosterSizeField = useNumericField(30);
+  const targetRosterQBField = useNumericField(DEFAULT_TARGET_ROSTER.QB ?? 4);
+  const targetRosterRBField = useNumericField(DEFAULT_TARGET_ROSTER.RB ?? 9);
+  const targetRosterWRField = useNumericField(DEFAULT_TARGET_ROSTER.WR ?? 11);
+  const targetRosterTEField = useNumericField(DEFAULT_TARGET_ROSTER.TE ?? 3);
+  const targetRosterFields = {
+    QB: targetRosterQBField,
+    RB: targetRosterRBField,
+    WR: targetRosterWRField,
+    TE: targetRosterTEField,
+  } as const;
   const [teams, setTeams] = useState<TeamRow[]>(() => defaultTeams(12));
+  const [syncedTeamCount, setSyncedTeamCount] = useState(12);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
   const [isImporting, startImportTransition] = useTransition();
   const [leagueId, setLeagueId] = useState('');
   const [ownerUsername, setOwnerUsername] = useState('');
   const [importState, setImportState] = useState<ImportState>({ status: 'idle' });
-  const [rosterSize, setRosterSize] = useState(30);
   const [futurePickAuctionMode, setFuturePickAuctionMode] =
     useState<FuturePickAuctionMode>('packages');
-  const [targetRoster, setTargetRoster] = useState<Record<'QB' | 'RB' | 'WR' | 'TE', number>>({
-    QB: DEFAULT_TARGET_ROSTER.QB ?? 4,
-    RB: DEFAULT_TARGET_ROSTER.RB ?? 9,
-    WR: DEFAULT_TARGET_ROSTER.WR ?? 11,
-    TE: DEFAULT_TARGET_ROSTER.TE ?? 3,
-  });
   const [startingLineup, setStartingLineup] = useState<StartingSlot[]>([
     ...DEFAULT_STARTING_LINEUP,
   ]);
@@ -67,24 +73,30 @@ export default function NewDraftPage() {
       });
   }, []);
 
-  function updateScoring<K extends keyof ScoringSettings>(key: K, value: ScoringSettings[K]) {
-    setScoringSettings((prev) => ({ ...prev, [key]: value }));
-  }
-
-  function handleTeamCountChange(newCount: number) {
-    const clamped = Math.max(2, Math.min(32, newCount));
-    setTeamCount(clamped);
+  // Resize the `teams` array to track the team count field, clamped to [2, 32] so an
+  // unclamped negative or extreme value can't corrupt `Array.prototype.slice` behavior or
+  // generate an absurd roster table. This intentionally adjusts state during render (the
+  // React-documented pattern for "state derived from a changed value while preserving prior
+  // state") rather than in a useEffect, since a synchronous setState in an effect body here
+  // would trigger a needless extra commit/render pass.
+  const safeTeamCount = Math.max(2, Math.min(32, teamCountField.numericValue));
+  if (safeTeamCount !== syncedTeamCount) {
+    setSyncedTeamCount(safeTeamCount);
     setTeams((prev) => {
-      if (clamped > prev.length) {
-        const added = Array.from({ length: clamped - prev.length }, (_, i) => ({
+      if (safeTeamCount > prev.length) {
+        const added = Array.from({ length: safeTeamCount - prev.length }, (_, i) => ({
           handle: `team-${prev.length + i + 1}`,
           displayName: '',
           isMine: false,
         }));
         return [...prev, ...added];
       }
-      return prev.slice(0, clamped);
+      return prev.slice(0, safeTeamCount);
     });
+  }
+
+  function updateScoring<K extends keyof ScoringSettings>(key: K, value: ScoringSettings[K]) {
+    setScoringSettings((prev) => ({ ...prev, [key]: value }));
   }
 
   function setMine(index: number) {
@@ -121,8 +133,8 @@ export default function NewDraftPage() {
       }
       const { data } = result;
       if (data.leagueName) setName(data.leagueName);
-      setTeamCount(data.teamCount);
-      setRosterSize(data.rosterSize);
+      teamCountField.setNumericValue(data.teamCount);
+      rosterSizeField.setNumericValue(data.rosterSize);
       setStartingLineup(data.startingLineup);
       setScoringSettings(data.scoringSettings);
       setTeams(
@@ -171,10 +183,15 @@ export default function NewDraftPage() {
       try {
         await createDraft({
           name: name.trim(),
-          budgetPerTeam: budget,
-          rosterSize,
+          budgetPerTeam: budgetField.numericValue,
+          rosterSize: rosterSizeField.numericValue,
           futurePickAuctionMode,
-          targetRoster,
+          targetRoster: {
+            QB: targetRosterFields.QB.numericValue,
+            RB: targetRosterFields.RB.numericValue,
+            WR: targetRosterFields.WR.numericValue,
+            TE: targetRosterFields.TE.numericValue,
+          },
           startingLineup,
           scoringSettings,
           teams,
@@ -336,21 +353,23 @@ export default function NewDraftPage() {
             <label style={{ ...labelStyle, flex: 1 }}>
               Teams
               <input
+                data-testid="team-count-input"
                 type="number"
                 min={2}
                 max={32}
-                value={teamCount}
-                onChange={(e) => handleTeamCountChange(parseInt(e.target.value, 10) || 2)}
+                value={teamCountField.value}
+                onChange={teamCountField.onChange}
                 style={inputStyle}
               />
             </label>
             <label style={{ ...labelStyle, flex: 1 }}>
               Budget per team ($)
               <input
+                data-testid="budget-input"
                 type="number"
                 min={1}
-                value={budget}
-                onChange={(e) => setBudget(parseInt(e.target.value, 10) || 1000)}
+                value={budgetField.value}
+                onChange={budgetField.onChange}
                 style={inputStyle}
               />
             </label>
@@ -433,8 +452,8 @@ export default function NewDraftPage() {
               type="number"
               min={10}
               max={60}
-              value={rosterSize}
-              onChange={(e) => setRosterSize(parseInt(e.target.value, 10) || 30)}
+              value={rosterSizeField.value}
+              onChange={rosterSizeField.onChange}
               style={inputStyle}
             />
           </label>
@@ -454,13 +473,8 @@ export default function NewDraftPage() {
                   data-testid={`target-roster-${pos}`}
                   type="number"
                   min={0}
-                  value={targetRoster[pos]}
-                  onChange={(e) =>
-                    setTargetRoster((prev) => ({
-                      ...prev,
-                      [pos]: parseInt(e.target.value, 10) || 0,
-                    }))
-                  }
+                  value={targetRosterFields[pos].value}
+                  onChange={targetRosterFields[pos].onChange}
                   style={inputStyle}
                 />
               </label>

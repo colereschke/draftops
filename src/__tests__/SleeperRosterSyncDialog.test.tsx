@@ -122,8 +122,7 @@ describe('SleeperRosterSyncDialog', () => {
     expect(mockLogCatchUp).not.toHaveBeenCalled();
   });
 
-  it('reports already reconciled rows and action errors', async () => {
-    const user = userEvent.setup();
+  it('routes a mapping_required preview response to the configuration view for repair', async () => {
     mockPreview.mockResolvedValueOnce({ ok: false, code: 'mapping_required' });
     render(
       <SleeperRosterSyncDialog
@@ -134,8 +133,13 @@ describe('SleeperRosterSyncDialog', () => {
       />,
     );
     expect(await screen.findByTestId('sleeper-sync-error')).toHaveTextContent('mapping');
+    expect(screen.getByTestId('sleeper-sync-league-id')).toBeInTheDocument();
+    expect(screen.getByTestId('sleeper-sync-team-map-1')).toBeInTheDocument();
+    expect(screen.queryByTestId('sleeper-sync-retry')).not.toBeInTheDocument();
+  });
 
-    mockPreview.mockResolvedValue({
+  it('reports already reconciled rows from an initial preview', async () => {
+    mockPreview.mockResolvedValueOnce({
       ok: true,
       preview: {
         ...PREVIEW,
@@ -144,7 +148,14 @@ describe('SleeperRosterSyncDialog', () => {
         diagnostics: { ...PREVIEW.diagnostics, alreadyLoggedCount: 2 },
       },
     });
-    await user.click(screen.getByTestId('sleeper-sync-retry'));
+    render(
+      <SleeperRosterSyncDialog
+        draftId={4}
+        teams={TEAMS}
+        initiallyConfigured={true}
+        onClose={jest.fn()}
+      />,
+    );
     expect(await screen.findByTestId('sleeper-sync-already-reconciled')).toHaveTextContent('2');
   });
 
@@ -160,6 +171,72 @@ describe('SleeperRosterSyncDialog', () => {
     );
     expect(await screen.findByTestId('sleeper-sync-error')).toHaveTextContent(
       code === 'sleeper_error' ? 'Sleeper' : 'mapping',
+    );
+  });
+
+  it('refreshes after a batch submit where every row conflicts and nothing is created', async () => {
+    const user = userEvent.setup();
+    mockLogCatchUp.mockResolvedValueOnce({
+      ok: true,
+      createdPlayerIds: [],
+      conflicts: [{ playerId: 3, reason: 'already_logged' }],
+    });
+    render(
+      <SleeperRosterSyncDialog
+        draftId={4}
+        teams={TEAMS}
+        initiallyConfigured={true}
+        onClose={jest.fn()}
+      />,
+    );
+    await screen.findByTestId('sleeper-sync-price-3');
+    await user.type(screen.getByTestId('sleeper-sync-price-3'), '42');
+    await user.click(screen.getByTestId('sleeper-sync-submit'));
+
+    expect(await screen.findByTestId('sleeper-sync-conflict-3')).toBeInTheDocument();
+    expect(mockRefresh).toHaveBeenCalledTimes(1);
+  });
+
+  it('omits rows without an entered price from the submitted batch', async () => {
+    const user = userEvent.setup();
+    const twoRowPreview = {
+      ...PREVIEW,
+      actionable: [
+        PREVIEW.actionable[0],
+        {
+          playerId: 5,
+          sleeperId: 's-5',
+          playerName: 'Justin Jefferson',
+          position: 'WR',
+          nflTeam: 'MIN',
+          targetBudget: 120,
+          teamId: 8,
+          teamHandle: 'rival',
+          teamDisplayName: 'Rival',
+          sleeperRosterId: 10,
+        },
+      ],
+    };
+    mockPreview.mockResolvedValueOnce({ ok: true, preview: twoRowPreview });
+    render(
+      <SleeperRosterSyncDialog
+        draftId={4}
+        teams={TEAMS}
+        initiallyConfigured={true}
+        onClose={jest.fn()}
+      />,
+    );
+    await screen.findByTestId('sleeper-sync-price-3');
+    await screen.findByTestId('sleeper-sync-price-5');
+
+    await user.type(screen.getByTestId('sleeper-sync-price-3'), '42');
+    await user.click(screen.getByTestId('sleeper-sync-submit'));
+
+    await waitFor(() =>
+      expect(mockLogCatchUp).toHaveBeenCalledWith({
+        draftId: 4,
+        entries: [{ playerId: 3, teamId: 7, price: 42 }],
+      }),
     );
   });
 });

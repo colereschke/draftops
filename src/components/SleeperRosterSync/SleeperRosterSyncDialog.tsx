@@ -63,7 +63,11 @@ export default function SleeperRosterSyncDialog({
       const response = await previewSleeperRosterSync({ draftId });
       if (!response.ok) {
         setError(responseMessage(response.code));
-        setView(response.code === 'configuration_required' ? 'configuration' : 'error');
+        setView(
+          response.code === 'configuration_required' || response.code === 'mapping_required'
+            ? 'configuration'
+            : 'error',
+        );
         return;
       }
       setPreview(response.preview);
@@ -81,7 +85,11 @@ export default function SleeperRosterSyncDialog({
         const response = await previewSleeperRosterSync({ draftId });
         if (!response.ok) {
           setError(responseMessage(response.code));
-          setView(response.code === 'configuration_required' ? 'configuration' : 'error');
+          setView(
+            response.code === 'configuration_required' || response.code === 'mapping_required'
+              ? 'configuration'
+              : 'error',
+          );
           return;
         }
         setPreview(response.preview);
@@ -167,7 +175,7 @@ export default function SleeperRosterSyncDialog({
       setConflicts(
         new Map(response.conflicts.map((conflict) => [conflict.playerId, conflict.reason])),
       );
-      if (response.createdPlayerIds.length > 0) router.refresh();
+      router.refresh();
     } catch {
       setError('Unable to save the catch-up results. Please try again.');
     }

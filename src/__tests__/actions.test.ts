@@ -180,11 +180,26 @@ describe('updateBid', () => {
     );
   });
 
+  it('throws when the draft is not ACTIVE', async () => {
+    mockGetDraft.mockResolvedValue(MOCK_COMPLETE_DRAFT);
+    await expect(updateBid({ id: 5, price: 95, teamId: 2, draftId: 1 })).rejects.toThrow(
+      'Draft is not active',
+    );
+    expect(mockUpdateMany).not.toHaveBeenCalled();
+  });
+
   it('throws when teamId does not belong to the draft', async () => {
     mockTeamFindFirst.mockResolvedValue(null);
     await expect(updateBid({ id: 5, price: 95, teamId: 2, draftId: 1 })).rejects.toThrow(
       'Team not found in draft',
     );
+  });
+
+  it.each([0, -5, 4.5])('rejects a non-positive/non-integer price (%p)', async (price) => {
+    await expect(updateBid({ id: 5, price, teamId: 2, draftId: 1 })).rejects.toThrow(
+      'price must be a positive integer',
+    );
+    expect(mockUpdateMany).not.toHaveBeenCalled();
   });
 });
 
@@ -207,5 +222,11 @@ describe('deleteBid', () => {
   it('throws when no draft found for user', async () => {
     mockGetDraft.mockResolvedValue(null);
     await expect(deleteBid({ id: 7, draftId: 1 })).rejects.toThrow('No draft found');
+  });
+
+  it('throws when the draft is not ACTIVE', async () => {
+    mockGetDraft.mockResolvedValue(MOCK_COMPLETE_DRAFT);
+    await expect(deleteBid({ id: 7, draftId: 1 })).rejects.toThrow('Draft is not active');
+    expect(mockDeleteMany).not.toHaveBeenCalled();
   });
 });

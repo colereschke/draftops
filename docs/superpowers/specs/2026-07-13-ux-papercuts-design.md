@@ -26,25 +26,26 @@ A small hook that separates the input's _displayed_ string state from its _coerc
 
 ```ts
 interface UseNumericFieldOptions {
-  min?: number;
-  max?: number;
   float?: boolean; // parseFloat instead of parseInt; default false
 }
 
 interface UseNumericField {
   value: string; // bind to <input value={value}>
   onChange: (e: React.ChangeEvent<HTMLInputElement>) => void; // bind to <input onChange={onChange}>
-  numericValue: number; // the coerced, clamped number for use elsewhere (e.g. handleSubmit)
+  numericValue: number; // the coerced number for use elsewhere (e.g. handleSubmit)
+  setNumericValue: (n: number) => void; // imperative escape hatch (e.g. Sleeper import)
 }
 
 function useNumericField(initial: number, options?: UseNumericFieldOptions): UseNumericField;
 ```
 
-Behavior: `value` starts as `String(initial)`. `onChange` always updates `value` to the raw input string (so `""`, `"-"`, `"1."` are all valid intermediate states — never coerced away mid-edit). `numericValue` is derived on every render: if `value` parses to a valid finite number, it's clamped to `[min, max]` (when provided); otherwise `numericValue` falls back to `initial`. Consumers that need the live number (e.g. `handleTeamCountChange`'s downstream effects, `updateScoring`) read `numericValue`, not `value`.
+Behavior: `value` starts as `String(initial)`. `onChange` always updates `value` to the raw input string (so `""`, `"-"`, `"1."` are all valid intermediate states — never coerced away mid-edit). `numericValue` is derived on every render: if `value` parses to a valid finite number, that's the value; otherwise `numericValue` falls back to `initial`. Consumers that need the live number (e.g. `updateScoring`, `handleSubmit`) read `numericValue`, not `value`.
 
-This replaces the current pattern (`setState(parseInt(e.target.value, 10) || default)`) at all ~10 call sites in `src/app/drafts/new/page.tsx`: team count, budget, roster size, the four target-roster position counts, and the ScoringSettings fields (passInt, rushAtt, rushFD, and the PPR/first-down fields rendered from a `key` map). Each becomes `const teamCountField = useNumericField(12, { min: 2, max: 32 })`, etc., with `value={teamCountField.value}` / `onChange={teamCountField.onChange}` on the `<input>`, and `teamCountField.numericValue` used wherever the old state variable was read (including in `handleSubmit`'s `createDraft` call).
+**No min/max clamping.** An earlier draft of this hook clamped `numericValue` to a `[min, max]` range, but that creates a silent display/submit mismatch — the field shows what you typed while a different, clamped number gets submitted, with no visible feedback. The only field that previously had real range enforcement was team count (`handleTeamCountChange` explicitly clamped to `[2, 32]`), and it did so by immediately snapping the _displayed_ value — which is itself a version of the exact mid-typing snap-back bug this whole fix targets. So no field clamps at the hook level; native HTML `min`/`max` attributes stay as cosmetic browser hints only, unchanged from today. The one place this matters for correctness — the team-count-driven `teams` array resize, which would misbehave on a degenerate value like a negative count — gets its own local safety clamp scoped to just that computation (not fed back into the display), not a general hook feature.
 
-Note: fields whose current logic does extra work beyond a plain number (`handleTeamCountChange`, which also resizes the `teams` array) keep that logic, but trigger it from a `useEffect` watching `numericValue`, or by calling the resize function explicitly after reading `numericValue` in the change handler — the hook itself has no side effects, it's purely the string/number split.
+This replaces the current pattern (`setState(parseInt(e.target.value, 10) || default)`) at all ~19 numeric call sites in `src/app/drafts/new/page.tsx`: team count, budget, roster size, the four target-roster position counts, and the twelve ScoringSettings fields. Each becomes `const teamCountField = useNumericField(12)`, etc. (`{ float: true }` for the scoring fields), with `value={teamCountField.value}` / `onChange={teamCountField.onChange}` on the `<input>`, and `teamCountField.numericValue` used wherever the old state variable was read (including in `handleSubmit`'s `createDraft` call).
+
+Note: fields whose current logic does extra work beyond a plain number (team count, which also resizes the `teams` array) keep that logic, but trigger it from a `useEffect` watching `numericValue` — the hook itself has no side effects, it's purely the string/number split plus the `setNumericValue` escape hatch for programmatic updates like Sleeper import.
 
 ## 2. Starting-lineup slot ordering
 

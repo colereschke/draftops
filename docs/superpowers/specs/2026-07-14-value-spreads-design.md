@@ -103,7 +103,7 @@ logic, since we need per-position age bands anyway.
 
 | Pos | young ≤ | prime ≤ | aging ≤ | old ≥ |
 | --- | ------- | ------- | ------- | ----- |
-| QB  | 25      | 29      | 31      | 32    |
+| QB  | 25      | 29      | 32      | 33    |
 | RB  | 23      | 25      | 27      | 28    |
 | WR  | 24      | 27      | 29      | 30    |
 | TE  | 24      | 27      | 29      | 30    |
@@ -111,7 +111,7 @@ logic, since we need per-position age bands anyway.
 **Tag age mapping:** `YOUNGER = young` band; `OLDER = old` band. The `prime` and `aging` bands
 produce **no age lean** → no tag (Spread number still shown). Tags only fire at the clear young/old
 extremes; the amber "aging" middle stays untagged. This matches the conservative OLDER thresholds
-above (QB ≥32, RB ≥28, WR/TE ≥30).
+above (QB ≥33, RB ≥28, WR/TE ≥30).
 
 **Retrofit:** `ageColor` is rewritten to consume `ageBand(age, pos?)` and map band → existing CSS
 token (`--age-young` / `--age-prime` / `--age-aging` / `--age-old`). `PlayerTable.tsx:216` passes

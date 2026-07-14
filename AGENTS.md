@@ -189,8 +189,8 @@ Projection-shaped active values:
   projection values inside the same transaction.
 - Draft creation fails loudly, with no partial draft persisted, if no usable projection source
   exists or no draft players can be joined to current projections.
-- The CLI `pnpm tsx prisma/apply-projection-values.ts --draft-id <draft-id>` remains available to
-  import generated CSV data into Postgres and reapply values to an existing draft.
+- The CLI `pnpm tsx prisma/apply-projection-values.ts` imports generated CSV data into Postgres.
+  Passing `--draft-id <draft-id>` additionally reapplies values to an existing draft.
 - Projection application resolves Sleeper IDs, scores projections under both baseline and draft
   scoring settings, stores raw projection/VOR context, and writes `DraftPlayerValue` rows.
 - The active auction target uses `DraftPlayerValue.activeAuctionValue` only for players with a row

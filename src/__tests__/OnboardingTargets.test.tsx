@@ -43,6 +43,14 @@ jest.mock('@/components/Onboarding', () => ({
   ),
 }));
 
+jest.mock('@/components/Onboarding/OnboardingContext', () => ({
+  useOnboarding: () => ({
+    progress: null,
+    recordBidLogged: jest.fn().mockResolvedValue(undefined),
+    recordPlayerNominated: jest.fn().mockResolvedValue(undefined),
+  }),
+}));
+
 jest.mock('@/lib/actions', () => ({
   deleteBid: jest.fn(),
   logBid: jest.fn(),

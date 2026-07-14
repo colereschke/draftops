@@ -5,6 +5,7 @@ import { useState, useMemo, useOptimistic, useTransition } from 'react';
 import type { Player, Position, ClaimedBid, LeagueTeam, ScoringSettings } from '@/types';
 import { logBid, updateBid, deleteBid } from '@/lib/actions';
 import BidModal from '@/components/BidModal';
+import { useOnboarding } from '@/components/Onboarding/OnboardingContext';
 import AuctionHeader from './AuctionHeader';
 import FilterControls, { type PositionFilter } from './FilterControls';
 import PlayerTable, { type SortKey } from './PlayerTable';
@@ -35,6 +36,7 @@ export default function AuctionSheet({
   ownerBudget,
   scoringSettings,
 }: AuctionSheetProps) {
+  const { progress, recordBidLogged } = useOnboarding();
   const [posFilter, setPosFilter] = useState<PositionFilter>('ALL');
   const [search, setSearch] = useState<string>('');
   const [sortBy, setSortBy] = useState<SortKey>('budget');
@@ -128,6 +130,7 @@ export default function AuctionSheet({
             teamId,
             draftId,
           });
+          await recordBidLogged(modalPlayer.player);
           setModalPlayer(null);
         } catch (e) {
           if (e instanceof Error && e.message === 'Unauthorized') {
@@ -272,6 +275,7 @@ export default function AuctionSheet({
           sortDir={sortDir}
           onSort={handleSort}
           onRowClick={setModalPlayer}
+          onboardingSubjectPlayerName={progress?.subjectPlayerName}
         />
       </div>
 

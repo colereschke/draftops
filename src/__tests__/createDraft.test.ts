@@ -178,6 +178,7 @@ describe('createDraft', () => {
     expect(mockApplyProjectionValuesToDraft).toHaveBeenCalledWith(mockTx, {
       draftId: 5,
       etrMatches: expect.any(Map),
+      useBatchTransaction: false,
     });
     expect(mockRedirect).toHaveBeenCalledWith('/draft/5');
   });

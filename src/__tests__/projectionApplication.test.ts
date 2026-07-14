@@ -127,6 +127,17 @@ it('applies values when called with a transaction client', async () => {
   expect(mockTransaction).not.toHaveBeenCalled();
 });
 
+it('can skip batch transactions when running inside an outer transaction', async () => {
+  const result = await applyProjectionValuesToDraft(prisma, {
+    draftId: 5,
+    useBatchTransaction: false,
+  });
+
+  expect(result).toEqual({ projectionSourceId: 7, appliedCount: 1 });
+  expect(mockDraftPlayerValueUpsert).toHaveBeenCalledTimes(1);
+  expect(mockTransaction).not.toHaveBeenCalled();
+});
+
 it('throws when no projection source exists', async () => {
   mockProjectionSourceFindFirst.mockResolvedValue(null);
 

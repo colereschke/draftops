@@ -153,6 +153,7 @@ export interface ApplyProjectionValuesOptions {
   draftId: number;
   projectionSourceId?: number;
   etrMatches?: Map<string, string>;
+  useBatchTransaction?: boolean;
 }
 
 export interface ApplyProjectionValuesResult {
@@ -201,6 +202,7 @@ export async function applyProjectionValuesToDraft(
           data: { sleeperId: player.sleeperId },
         }),
       ),
+      options.useBatchTransaction,
     );
   }
 
@@ -281,15 +283,19 @@ export async function applyProjectionValuesToDraft(
   });
 
   for (const batch of chunk(writes, WRITE_BATCH_SIZE)) {
-    await runWriteBatch(prisma, batch);
+    await runWriteBatch(prisma, batch, options.useBatchTransaction);
   }
 
   return { projectionSourceId, appliedCount: joined.length };
 }
 
-async function runWriteBatch(prisma: ProjectionApplyPrisma, operations: unknown[]): Promise<void> {
+async function runWriteBatch(
+  prisma: ProjectionApplyPrisma,
+  operations: unknown[],
+  useBatchTransaction = true,
+): Promise<void> {
   if (operations.length === 0) return;
-  if (prisma.$transaction) {
+  if (useBatchTransaction && prisma.$transaction) {
     await prisma.$transaction(operations, { timeout: WRITE_TRANSACTION_TIMEOUT_MS });
     return;
   }

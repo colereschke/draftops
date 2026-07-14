@@ -3,11 +3,12 @@ import {
   requireActiveDraft,
   requirePositiveInteger,
   requireAvailablePlayer,
+  requirePlayerNotWon,
   isDuplicateAuctionResultError,
 } from '@/lib/draftMutationGuard';
 
 const mockGetDraft = jest.fn();
-const mockPlayerFindUnique = jest.fn();
+const mockPlayerFindFirst = jest.fn();
 const mockAuctionResultFindFirst = jest.fn();
 
 jest.mock('@/lib/draft', () => ({
@@ -17,7 +18,7 @@ jest.mock('@/lib/draft', () => ({
 jest.mock('@/lib/db', () => ({
   prisma: {
     player: {
-      findUnique: (...args: unknown[]) => mockPlayerFindUnique(...args),
+      findFirst: (...args: unknown[]) => mockPlayerFindFirst(...args),
     },
     auctionResult: {
       findFirst: (...args: unknown[]) => mockAuctionResultFindFirst(...args),
@@ -68,47 +69,69 @@ describe('requirePositiveInteger', () => {
   });
 });
 
+describe('requirePlayerNotWon', () => {
+  it('does not throw when no existing result is found', async () => {
+    mockAuctionResultFindFirst.mockResolvedValue(null);
+    await expect(requirePlayerNotWon(1, 10)).resolves.toBeUndefined();
+    expect(mockAuctionResultFindFirst).toHaveBeenCalledWith({
+      where: { playerId: 10, draftId: 1 },
+    });
+  });
+
+  it('throws a 409 DraftMutationError when the player already has a winning bid', async () => {
+    mockAuctionResultFindFirst.mockResolvedValue({ id: 9 });
+    await expect(requirePlayerNotWon(1, 10)).rejects.toMatchObject({
+      message: 'Player already has a winning bid',
+      status: 409,
+    });
+  });
+});
+
 describe('requireAvailablePlayer', () => {
   it('returns the player when found and unclaimed', async () => {
-    mockPlayerFindUnique.mockResolvedValue({
+    mockPlayerFindFirst.mockResolvedValue({
+      id: 10,
       name: 'Josh Allen',
       pos: 'QB',
       nflTeam: 'BUF',
       sfRank: 1,
     });
     mockAuctionResultFindFirst.mockResolvedValue(null);
-    await expect(requireAvailablePlayer(1, 'Josh Allen')).resolves.toEqual({
+    await expect(requireAvailablePlayer(1, 10)).resolves.toEqual({
+      id: 10,
       name: 'Josh Allen',
       pos: 'QB',
       nflTeam: 'BUF',
       sfRank: 1,
     });
-    expect(mockPlayerFindUnique).toHaveBeenCalledWith({
-      where: { name_draftId: { name: 'Josh Allen', draftId: 1 } },
+    expect(mockPlayerFindFirst).toHaveBeenCalledWith({
+      where: { id: 10, draftId: 1 },
+      select: { id: true, name: true, pos: true, nflTeam: true, sfRank: true },
     });
     expect(mockAuctionResultFindFirst).toHaveBeenCalledWith({
-      where: { player: 'Josh Allen', draftId: 1 },
+      where: { playerId: 10, draftId: 1 },
     });
   });
 
   it('throws a 404 DraftMutationError when the player does not exist in the draft', async () => {
-    mockPlayerFindUnique.mockResolvedValue(null);
+    mockPlayerFindFirst.mockResolvedValue(null);
     mockAuctionResultFindFirst.mockResolvedValue(null);
-    await expect(requireAvailablePlayer(1, 'Nobody')).rejects.toMatchObject({
+    await expect(requireAvailablePlayer(1, 999)).rejects.toMatchObject({
       message: 'Player not found in draft',
       status: 404,
     });
   });
 
   it('throws a 409 DraftMutationError when the player already has a winning bid', async () => {
-    mockPlayerFindUnique.mockResolvedValue({
+    mockPlayerFindFirst.mockResolvedValue({
+      id: 10,
       name: 'Josh Allen',
       pos: 'QB',
       nflTeam: 'BUF',
       sfRank: 1,
     });
     mockAuctionResultFindFirst.mockResolvedValue({ id: 9 });
-    await expect(requireAvailablePlayer(1, 'Josh Allen')).rejects.toMatchObject({
+    await expect(requireAvailablePlayer(1, 10)).rejects.toMatchObject({
       message: 'Player already has a winning bid',
       status: 409,
     });

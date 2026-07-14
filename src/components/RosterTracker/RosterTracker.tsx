@@ -160,7 +160,10 @@ export default function RosterTracker({ teams, tendencies, ownerHandle }: Roster
           : 'min-h-screen bg-background text-foreground'
       }
     >
-      <div className="border-b border-border bg-background px-5 py-4">
+      <div
+        data-onboarding-target="team-rosters"
+        className="border-b border-border bg-background px-5 py-4"
+      >
         <section className="rounded-lg border border-border-subtle bg-card px-4 py-3">
           <div className="font-label mb-1 text-[10px] tracking-[2.5px] text-muted-foreground uppercase">
             {totalTeams}-Team · Superflex · Manager Scouting

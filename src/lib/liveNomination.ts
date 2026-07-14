@@ -21,14 +21,15 @@ export interface LiveNomination {
  * any player missing from `posByName` are ignored.
  */
 export function resolveLiveNomination(
-  nominated: { playerName: string }[],
+  nominated: { playerId?: number | null; playerName: string }[],
   posByName: Map<string, string>,
+  posByPlayerId = new Map<number, string>(),
 ): LiveNomination | null {
   const counts = new Map<AppetitePos, number>();
   const recentName = new Map<AppetitePos, string>();
 
   for (const n of nominated) {
-    const pos = posByName.get(n.playerName);
+    const pos = resolveNominationPosition(n, posByName, posByPlayerId);
     if (!pos || !APPETITE_SET.has(pos)) continue;
     const ap = pos as AppetitePos;
     counts.set(ap, (counts.get(ap) ?? 0) + 1);
@@ -41,7 +42,7 @@ export function resolveLiveNomination(
   // Walk in recency order and only replace on a strictly higher count, so equal
   // counts resolve to the position encountered first — the most recent nomination.
   for (const n of nominated) {
-    const pos = posByName.get(n.playerName);
+    const pos = resolveNominationPosition(n, posByName, posByPlayerId);
     if (!pos || !APPETITE_SET.has(pos)) continue;
     const ap = pos as AppetitePos;
     const c = counts.get(ap) ?? 0;
@@ -52,4 +53,13 @@ export function resolveLiveNomination(
   }
 
   return best ? { position: best, name: recentName.get(best)! } : null;
+}
+
+function resolveNominationPosition(
+  nomination: { playerId?: number | null; playerName: string },
+  posByName: Map<string, string>,
+  posByPlayerId: Map<number, string>,
+): string | undefined {
+  if (typeof nomination.playerId === 'number') return posByPlayerId.get(nomination.playerId);
+  return posByName.get(nomination.playerName);
 }

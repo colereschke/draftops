@@ -26,6 +26,7 @@ export default async function DraftHomePage({ params }: { params: Promise<{ draf
       where: { draftId },
       select: {
         id: true,
+        playerId: true,
         player: true,
         position: true,
         price: true,
@@ -40,7 +41,7 @@ export default async function DraftHomePage({ params }: { params: Promise<{ draf
     }),
     prisma.nominatedPlayer.findMany({
       where: { draftId },
-      select: { playerName: true },
+      select: { playerId: true },
     }),
     prisma.player.findMany({ where: { draftId }, orderBy: { sfRank: 'asc' } }),
     prisma.draftPlayerValue.findMany({
@@ -63,6 +64,7 @@ export default async function DraftHomePage({ params }: { params: Promise<{ draf
 
   const claimedBids: ClaimedBid[] = rawBids.map((r) => ({
     id: r.id,
+    playerId: r.playerId,
     player: r.player,
     position: r.position,
     price: r.price,
@@ -90,7 +92,7 @@ export default async function DraftHomePage({ params }: { params: Promise<{ draf
       players={players}
       claimedBids={claimedBids}
       teams={teams as LeagueTeam[]}
-      nominatedPlayers={nominatedEntries.map((e) => e.playerName)}
+      nominatedPlayers={nominatedEntries.flatMap((e) => (e.playerId === null ? [] : [e.playerId]))}
       draftId={draftId}
       ownerHandle={draft.ownerTeam?.handle ?? null}
       ownerBudget={draft.ownerTeam?.budget ?? 1000}

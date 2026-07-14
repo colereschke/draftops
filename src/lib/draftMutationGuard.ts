@@ -27,7 +27,15 @@ export function requirePositiveInteger(value: number, field: string): void {
   }
 }
 
+export async function requirePlayerNotWon(draftId: number, playerId: number): Promise<void> {
+  const existingResult = await prisma.auctionResult.findFirst({
+    where: { playerId, draftId },
+  });
+  if (existingResult) throw new DraftMutationError('Player already has a winning bid', 409);
+}
+
 interface AvailablePlayer {
+  id: number;
   name: string;
   pos: string;
   nflTeam: string;
@@ -36,15 +44,14 @@ interface AvailablePlayer {
 
 export async function requireAvailablePlayer(
   draftId: number,
-  playerName: string,
+  playerId: number,
 ): Promise<AvailablePlayer> {
   const [player, existingResult] = await Promise.all([
-    prisma.player.findUnique({
-      where: { name_draftId: { name: playerName, draftId } },
+    prisma.player.findFirst({
+      where: { id: playerId, draftId },
+      select: { id: true, name: true, pos: true, nflTeam: true, sfRank: true },
     }),
-    prisma.auctionResult.findFirst({
-      where: { player: playerName, draftId },
-    }),
+    prisma.auctionResult.findFirst({ where: { playerId, draftId } }),
   ]);
   if (!player) throw new DraftMutationError('Player not found in draft', 404);
   if (existingResult) throw new DraftMutationError('Player already has a winning bid', 409);

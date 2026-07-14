@@ -17,6 +17,23 @@ enum FuturePickAuctionMode {
   NONE
 }
 
+enum OnboardingPhase {
+  DRAFT_SETUP
+  FEATURE_TOUR
+  COMPLETED
+}
+
+enum OnboardingStep {
+  VALUE_SHEET_INTRO
+  BID_PRACTICE
+  BID_UNDO
+  BUDGET_PRESSURE
+  TEAM_ROSTERS
+  NOMINATE_INTRO
+  NOMINATE_PRACTICE
+  NOMINATE_UNDO
+}
+
 // A draft is the top-level container for a single auction. One owner, all data scoped here.
 model Draft {
   id          Int         @id @default(autoincrement())
@@ -35,12 +52,27 @@ model Draft {
   futurePickAuctionMode FuturePickAuctionMode @default(PACKAGES)
   players               Player[]
   playerValues          DraftPlayerValue[]
+  onboardingProgress    OnboardingProgress?
 
   teams            Team[]            @relation("DraftTeams")
   ownerTeam        Team?             @relation("DraftOwnerTeam", fields: [ownerTeamId], references: [id])
   auctionResults   AuctionResult[]
   watchlistEntries PlayerWatchlist[]
   nominatedPlayers NominatedPlayer[]
+}
+
+model OnboardingProgress {
+  id                Int            @id @default(autoincrement())
+  userId            String         @unique
+  phase             OnboardingPhase
+  step              OnboardingStep @default(VALUE_SHEET_INTRO)
+  draftId           Int?           @unique
+  subjectPlayerName String?
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+  completedAt       DateTime?
+
+  draft Draft? @relation(fields: [draftId], references: [id], onDelete: SetNull)
 }
 
 model Team {
@@ -61,6 +93,8 @@ model Team {
 model AuctionResult {
   id        Int      @id @default(autoincrement())
   player    String
+  playerId  Int?
+  playerRow Player?  @relation(fields: [playerId], references: [id], onDelete: SetNull)
   position  String
   nflTeam   String
   price     Int
@@ -72,27 +106,35 @@ model AuctionResult {
   draft     Draft    @relation(fields: [draftId], references: [id])
   createdAt DateTime @default(now())
 
-  @@unique([player, draftId])
+  @@index([playerId])
 }
 
 model PlayerWatchlist {
   id         Int      @id @default(autoincrement())
   playerName String
+  playerId   Int?
+  player     Player?  @relation(fields: [playerId], references: [id], onDelete: SetNull)
   draftId    Int
   draft      Draft    @relation(fields: [draftId], references: [id])
   createdAt  DateTime @default(now())
 
   @@unique([playerName, draftId])
+  @@unique([playerId, draftId])
+  @@index([playerId])
 }
 
 model NominatedPlayer {
   id         Int      @id @default(autoincrement())
   playerName String
+  playerId   Int?
+  player     Player?  @relation(fields: [playerId], references: [id], onDelete: SetNull)
   draftId    Int
   draft      Draft    @relation(fields: [draftId], references: [id])
   createdAt  DateTime @default(now())
 
   @@unique([playerName, draftId])
+  @@unique([playerId, draftId])
+  @@index([playerId])
 }
 
 model Player {
@@ -109,6 +151,7 @@ model Player {
   baseCeiling            Int
   baseFloor              Int
   sleeperId              String?
+  customKey              String?
   notes                  String             @default("")
   futurePickYear         Int?
   futurePickRound        Int?
@@ -117,8 +160,13 @@ model Player {
   draftId                Int
   draft                  Draft              @relation(fields: [draftId], references: [id])
   draftValues            DraftPlayerValue[]
+  auctionResults         AuctionResult[]
+  watchlistEntries       PlayerWatchlist[]
+  nominatedEntries       NominatedPlayer[]
 
-  @@unique([name, draftId])
+  @@unique([sleeperId, draftId])
+  @@unique([customKey, draftId])
+  @@index([name, draftId])
   @@index([sleeperId])
   @@index([draftId, futurePickOriginHandle])
 }
@@ -138,7 +186,7 @@ model ProjectionSource {
 }
 
 model PlayerProjection {
-  id                 Int    @id @default(autoincrement())
+  id                 Int     @id @default(autoincrement())
   sleeperId          String
   position           String
   games              Float
@@ -203,10 +251,10 @@ model SleeperPlayer {
 }
 
 model UserRankingSet {
-  id         Int      @id @default(autoincrement())
-  userId     String   @unique
+  id         Int                 @id @default(autoincrement())
+  userId     String              @unique
   fileName   String?
-  uploadedAt DateTime @default(now())
+  uploadedAt DateTime            @default(now())
   players    UserRankingPlayer[]
 }
 

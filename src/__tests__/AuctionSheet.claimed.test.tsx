@@ -8,6 +8,7 @@ import { DEFAULT_SCORING_SETTINGS } from '@/types';
 
 const MOCK_PLAYERS: Player[] = [
   {
+    id: 10,
     player: 'Josh Allen',
     team: 'BUF',
     pos: 'QB',
@@ -19,6 +20,7 @@ const MOCK_PLAYERS: Player[] = [
     notes: '',
   },
   {
+    id: 11,
     player: 'Justin Jefferson',
     team: 'MIN',
     pos: 'WR',
@@ -37,6 +39,14 @@ jest.mock('@/lib/actions', () => ({
   deleteBid: jest.fn().mockResolvedValue(undefined),
 }));
 
+jest.mock('@/components/Onboarding/OnboardingContext', () => ({
+  useOnboarding: () => ({
+    progress: null,
+    recordBidLogged: jest.fn().mockResolvedValue(undefined),
+    recordPlayerNominated: jest.fn().mockResolvedValue(undefined),
+  }),
+}));
+
 const mockTeams: LeagueTeam[] = [
   { id: 1, handle: 'coreschke', displayName: 'Cole' },
   { id: 2, handle: 'chappy72', displayName: null },
@@ -44,6 +54,7 @@ const mockTeams: LeagueTeam[] = [
 
 const mockClaim: ClaimedBid = {
   id: 1,
+  playerId: 10,
   player: 'Josh Allen',
   position: 'QB',
   price: 110,
@@ -154,7 +165,7 @@ describe('AuctionSheet with claimed bids', () => {
   });
 
   it('shows LIVE badge for a player in the nominatedPlayers prop', () => {
-    renderSheet({ nominatedPlayers: ['Josh Allen'] });
+    renderSheet({ nominatedPlayers: [10] });
 
     expect(screen.getByText('LIVE')).toBeInTheDocument();
   });
@@ -170,11 +181,23 @@ describe('AuctionSheet with claimed bids', () => {
 
   it('shows In Auction in modal for an already-nominated player', async () => {
     const user = userEvent.setup();
-    renderSheet({ nominatedPlayers: ['Josh Allen'] });
+    renderSheet({ nominatedPlayers: [10] });
 
     await user.click(screen.getAllByText('Josh Allen')[0]);
 
     expect(screen.getByText(/in auction/i)).toBeInTheDocument();
+  });
+
+  it('removes the LIVE badge after a nominated player is won', async () => {
+    const user = userEvent.setup();
+    renderSheet({ nominatedPlayers: [10] });
+
+    expect(screen.getByText('LIVE')).toBeInTheDocument();
+    await user.click(screen.getAllByText('Josh Allen')[0]);
+    await user.type(screen.getByTestId('bid-price'), '110');
+    await user.click(screen.getByTestId('bid-submit'));
+
+    await waitFor(() => expect(screen.queryByText('LIVE')).not.toBeInTheDocument());
   });
 
   it('closes modal, shows LIVE badge, and calls /api/draft/1/nominated after clicking Nom', async () => {
@@ -192,7 +215,7 @@ describe('AuctionSheet with claimed bids', () => {
       '/api/draft/1/nominated',
       expect.objectContaining({
         method: 'POST',
-        body: JSON.stringify({ playerName: 'Josh Allen' }),
+        body: JSON.stringify({ playerId: 10 }),
       }),
     );
   });

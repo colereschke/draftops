@@ -23,7 +23,10 @@ export default function BudgetPressureView({
 
   return (
     <div className="min-h-screen bg-background text-foreground">
-      <div className="border-b border-border bg-background px-5 py-4">
+      <div
+        data-onboarding-target="budget-pressure"
+        className="border-b border-border bg-background px-5 py-4"
+      >
         <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-stretch">
           <section className="rounded-lg border border-border-subtle bg-card px-4 py-3">
             <div className="font-label mb-1 text-[10px] tracking-[2.5px] text-muted-foreground uppercase">

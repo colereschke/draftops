@@ -9,8 +9,7 @@ const mockGetDraft = jest.fn();
 const mockUpsert = jest.fn();
 const mockDelete = jest.fn();
 const mockFindMany = jest.fn();
-const mockPlayerFindUnique = jest.fn();
-const mockAuctionResultFindFirst = jest.fn();
+const mockPlayerFindFirst = jest.fn();
 
 jest.mock('@/auth', () => ({ auth: () => mockAuth() }));
 jest.mock('@/lib/draft', () => ({
@@ -24,10 +23,7 @@ jest.mock('@/lib/db', () => ({
       findMany: (...args: unknown[]) => mockFindMany(...args),
     },
     player: {
-      findUnique: (...args: unknown[]) => mockPlayerFindUnique(...args),
-    },
-    auctionResult: {
-      findFirst: (...args: unknown[]) => mockAuctionResultFindFirst(...args),
+      findFirst: (...args: unknown[]) => mockPlayerFindFirst(...args),
     },
   },
 }));
@@ -39,7 +35,6 @@ const MOCK_DRAFT = {
   ownerId: '123456789',
   ownerTeamId: 7,
   ownerTeam: null,
-  status: 'ACTIVE',
 };
 const MOCK_PARAMS = { params: Promise.resolve({ draftId: '1' }) };
 
@@ -55,54 +50,46 @@ beforeEach(() => {
   jest.clearAllMocks();
   mockAuth.mockResolvedValue(MOCK_SESSION);
   mockGetDraft.mockResolvedValue(MOCK_DRAFT);
-  mockUpsert.mockResolvedValue({ playerName: 'Josh Allen', draftId: 1 });
-  mockPlayerFindUnique.mockResolvedValue({
-    name: 'Josh Allen',
-    pos: 'QB',
-    nflTeam: 'BUF',
-    sfRank: 1,
-  });
-  mockAuctionResultFindFirst.mockResolvedValue(null);
+  mockPlayerFindFirst.mockResolvedValue({ id: 10, name: 'Josh Allen' });
+  mockUpsert.mockResolvedValue({ playerId: 10, playerName: 'Josh Allen', draftId: 1 });
 });
 
 describe('POST /api/draft/[draftId]/watchlist', () => {
   it('returns 401 without session', async () => {
     mockAuth.mockResolvedValue(null);
-    const res = await POST(makeRequest({ playerName: 'Josh Allen' }), MOCK_PARAMS);
+    const res = await POST(makeRequest({ playerId: 10 }), MOCK_PARAMS);
     expect(res.status).toBe(401);
   });
 
   it('returns 404 when no draft found', async () => {
     mockGetDraft.mockResolvedValue(null);
-    const res = await POST(makeRequest({ playerName: 'Josh Allen' }), MOCK_PARAMS);
+    const res = await POST(makeRequest({ playerId: 10 }), MOCK_PARAMS);
     expect(res.status).toBe(404);
   });
 
-  it('returns 400 without playerName', async () => {
+  it('returns 400 without playerId', async () => {
     const res = await POST(makeRequest({}), MOCK_PARAMS);
     expect(res.status).toBe(400);
+    await expect(res.json()).resolves.toEqual({ error: 'playerId required' });
   });
 
-  it('returns 404 when the player is not in the draft pool', async () => {
-    mockPlayerFindUnique.mockResolvedValue(null);
-    const res = await POST(makeRequest({ playerName: 'Nobody' }), MOCK_PARAMS);
+  it('returns 404 when playerId is outside the draft', async () => {
+    mockPlayerFindFirst.mockResolvedValue(null);
+    const res = await POST(makeRequest({ playerId: 10 }), MOCK_PARAMS);
     expect(res.status).toBe(404);
-    expect(mockUpsert).not.toHaveBeenCalled();
+    await expect(res.json()).resolves.toEqual({ error: 'Player not found' });
   });
 
-  it('returns 409 when the player already has a winning bid', async () => {
-    mockAuctionResultFindFirst.mockResolvedValue({ id: 9 });
-    const res = await POST(makeRequest({ playerName: 'Josh Allen' }), MOCK_PARAMS);
-    expect(res.status).toBe(409);
-    expect(mockUpsert).not.toHaveBeenCalled();
-  });
-
-  it('upserts watchlist entry scoped to draftId', async () => {
-    await POST(makeRequest({ playerName: 'Josh Allen' }), MOCK_PARAMS);
+  it('upserts watchlist entry scoped to playerId and draftId', async () => {
+    await POST(makeRequest({ playerId: 10 }), MOCK_PARAMS);
+    expect(mockPlayerFindFirst).toHaveBeenCalledWith({
+      where: { id: 10, draftId: 1 },
+      select: { id: true, name: true },
+    });
     expect(mockUpsert).toHaveBeenCalledWith({
-      where: { playerName_draftId: { playerName: 'Josh Allen', draftId: 1 } },
-      create: { playerName: 'Josh Allen', draftId: 1 },
-      update: {},
+      where: { playerId_draftId: { playerId: 10, draftId: 1 } },
+      create: { playerId: 10, playerName: 'Josh Allen', draftId: 1 },
+      update: { playerName: 'Josh Allen' },
     });
   });
 });
@@ -110,13 +97,21 @@ describe('POST /api/draft/[draftId]/watchlist', () => {
 describe('DELETE /api/draft/[draftId]/watchlist', () => {
   it('returns 401 without session', async () => {
     mockAuth.mockResolvedValue(null);
-    const res = await DELETE(makeRequest({ playerName: 'Josh Allen' }, 'DELETE'), MOCK_PARAMS);
+    const res = await DELETE(makeRequest({ playerId: 10 }, 'DELETE'), MOCK_PARAMS);
     expect(res.status).toBe(401);
   });
 
   it('returns 404 when no draft found', async () => {
     mockGetDraft.mockResolvedValue(null);
-    const res = await DELETE(makeRequest({ playerName: 'Josh Allen' }, 'DELETE'), MOCK_PARAMS);
+    const res = await DELETE(makeRequest({ playerId: 10 }, 'DELETE'), MOCK_PARAMS);
     expect(res.status).toBe(404);
+  });
+
+  it('deletes watchlist entry scoped to playerId and draftId', async () => {
+    const res = await DELETE(makeRequest({ playerId: 10 }, 'DELETE'), MOCK_PARAMS);
+    expect(res.status).toBe(200);
+    expect(mockDelete).toHaveBeenCalledWith({
+      where: { playerId_draftId: { playerId: 10, draftId: 1 } },
+    });
   });
 });

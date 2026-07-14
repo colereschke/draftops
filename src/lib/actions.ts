@@ -4,7 +4,12 @@ import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { auth } from '@/auth';
 import { prisma } from '@/lib/db';
-import { getDraft } from '@/lib/draft';
+import {
+  requireActiveDraft,
+  requirePositiveInteger,
+  requireAvailablePlayer,
+  isDuplicateAuctionResultError,
+} from '@/lib/draftMutationGuard';
 import {
   excludeStaticFuturePickRows,
   generateFuturePickAssets,
@@ -27,33 +32,40 @@ export async function logBid(data: {
   const session = await auth();
   if (!session) throw new Error('Unauthorized');
 
-  const draft = await getDraft(session.user.id, data.draftId);
-  if (!draft) throw new Error('No draft found');
+  const draft = await requireActiveDraft(session.user.id, data.draftId);
+  requirePositiveInteger(data.price, 'price');
 
-  const team = await prisma.team.findFirst({ where: { id: data.teamId, draftId: draft.id } });
+  const [team, player] = await Promise.all([
+    prisma.team.findFirst({ where: { id: data.teamId, draftId: draft.id } }),
+    requireAvailablePlayer(draft.id, data.playerId),
+  ]);
   if (!team) throw new Error('Team not found in draft');
 
-  const player = await prisma.player.findFirst({
-    where: { id: data.playerId, draftId: draft.id },
-    select: { id: true, name: true, pos: true, nflTeam: true, sfRank: true },
+  await prisma.$transaction(async (tx) => {
+    try {
+      await tx.auctionResult.create({
+        data: {
+          player: player.name,
+          playerId: player.id,
+          position: player.pos,
+          nflTeam: player.nflTeam,
+          price: data.price,
+          sfRank: player.sfRank,
+          teamId: data.teamId,
+          draftId: draft.id,
+        },
+      });
+    } catch (e) {
+      if (isDuplicateAuctionResultError(e)) {
+        throw new Error('Player already has a winning bid');
+      }
+      throw e;
+    }
+    await tx.nominatedPlayer.deleteMany({
+      where: { playerId: player.id, draftId: draft.id },
+    });
   });
-  if (!player) throw new Error('Player not found in draft');
 
-  await prisma.auctionResult.create({
-    data: {
-      player: player.name,
-      playerId: player.id,
-      position: player.pos,
-      nflTeam: player.nflTeam,
-      price: data.price,
-      sfRank: player.sfRank,
-      teamId: data.teamId,
-      draftId: draft.id,
-    },
-  });
-  await prisma.nominatedPlayer.deleteMany({
-    where: { playerId: player.id, draftId: draft.id },
-  });
   revalidatePath(`/draft/${data.draftId}`);
 }
 
@@ -66,8 +78,8 @@ export async function updateBid(data: {
   const session = await auth();
   if (!session) throw new Error('Unauthorized');
 
-  const draft = await getDraft(session.user.id, data.draftId);
-  if (!draft) throw new Error('No draft found');
+  const draft = await requireActiveDraft(session.user.id, data.draftId);
+  requirePositiveInteger(data.price, 'price');
 
   const team = await prisma.team.findFirst({ where: { id: data.teamId, draftId: draft.id } });
   if (!team) throw new Error('Team not found in draft');
@@ -84,8 +96,7 @@ export async function deleteBid(data: { id: number; draftId: number }): Promise<
   const session = await auth();
   if (!session) throw new Error('Unauthorized');
 
-  const draft = await getDraft(session.user.id, data.draftId);
-  if (!draft) throw new Error('No draft found');
+  const draft = await requireActiveDraft(session.user.id, data.draftId);
 
   const deleteResult = await prisma.auctionResult.deleteMany({
     where: { id: data.id, draftId: draft.id },

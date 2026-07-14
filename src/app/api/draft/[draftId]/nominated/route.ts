@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/auth';
 import { prisma } from '@/lib/db';
 import { getDraft } from '@/lib/draft';
+import { DraftMutationError, requireAvailablePlayer } from '@/lib/draftMutationGuard';
 
 export async function POST(
   request: NextRequest,
@@ -18,6 +19,16 @@ export async function POST(
   if (!body.playerName) {
     return NextResponse.json({ error: 'playerName required' }, { status: 400 });
   }
+
+  try {
+    await requireAvailablePlayer(draft.id, body.playerName);
+  } catch (e) {
+    if (e instanceof DraftMutationError) {
+      return NextResponse.json({ error: e.message }, { status: e.status });
+    }
+    throw e;
+  }
+
   const entry = await prisma.nominatedPlayer.upsert({
     where: { playerName_draftId: { playerName: body.playerName, draftId: draft.id } },
     create: { playerName: body.playerName, draftId: draft.id },

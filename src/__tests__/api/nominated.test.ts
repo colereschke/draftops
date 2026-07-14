@@ -8,6 +8,8 @@ const mockAuth = jest.fn();
 const mockGetDraft = jest.fn();
 const mockUpsert = jest.fn();
 const mockDelete = jest.fn();
+const mockPlayerFindUnique = jest.fn();
+const mockAuctionResultFindFirst = jest.fn();
 
 jest.mock('@/auth', () => ({ auth: () => mockAuth() }));
 jest.mock('@/lib/draft', () => ({
@@ -19,6 +21,12 @@ jest.mock('@/lib/db', () => ({
       upsert: (...args: unknown[]) => mockUpsert(...args),
       delete: (...args: unknown[]) => mockDelete(...args),
     },
+    player: {
+      findUnique: (...args: unknown[]) => mockPlayerFindUnique(...args),
+    },
+    auctionResult: {
+      findFirst: (...args: unknown[]) => mockAuctionResultFindFirst(...args),
+    },
   },
 }));
 
@@ -29,6 +37,7 @@ const MOCK_DRAFT = {
   ownerId: '123456789',
   ownerTeamId: 7,
   ownerTeam: null,
+  status: 'ACTIVE',
 };
 const MOCK_PARAMS = { params: Promise.resolve({ draftId: '1' }) };
 
@@ -45,6 +54,13 @@ beforeEach(() => {
   mockAuth.mockResolvedValue(MOCK_SESSION);
   mockGetDraft.mockResolvedValue(MOCK_DRAFT);
   mockUpsert.mockResolvedValue({ playerName: 'Josh Allen', draftId: 1 });
+  mockPlayerFindUnique.mockResolvedValue({
+    name: 'Josh Allen',
+    pos: 'QB',
+    nflTeam: 'BUF',
+    sfRank: 1,
+  });
+  mockAuctionResultFindFirst.mockResolvedValue(null);
 });
 
 describe('POST /api/draft/[draftId]/nominated', () => {
@@ -58,6 +74,25 @@ describe('POST /api/draft/[draftId]/nominated', () => {
     mockGetDraft.mockResolvedValue(null);
     const res = await POST(makeRequest({ playerName: 'Josh Allen' }), MOCK_PARAMS);
     expect(res.status).toBe(404);
+  });
+
+  it('returns 400 without playerName', async () => {
+    const res = await POST(makeRequest({}), MOCK_PARAMS);
+    expect(res.status).toBe(400);
+  });
+
+  it('returns 404 when the player is not in the draft pool', async () => {
+    mockPlayerFindUnique.mockResolvedValue(null);
+    const res = await POST(makeRequest({ playerName: 'Nobody' }), MOCK_PARAMS);
+    expect(res.status).toBe(404);
+    expect(mockUpsert).not.toHaveBeenCalled();
+  });
+
+  it('returns 409 when the player already has a winning bid', async () => {
+    mockAuctionResultFindFirst.mockResolvedValue({ id: 9 });
+    const res = await POST(makeRequest({ playerName: 'Josh Allen' }), MOCK_PARAMS);
+    expect(res.status).toBe(409);
+    expect(mockUpsert).not.toHaveBeenCalled();
   });
 
   it('upserts nominated entry scoped to draftId', async () => {

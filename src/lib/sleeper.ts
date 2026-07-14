@@ -20,13 +20,20 @@ export interface SleeperRoster {
 }
 
 export interface SleeperImportResult {
+  leagueId: string;
   leagueName: string;
   teamCount: number;
   rosterSize: number;
   startingLineup: StartingSlot[];
   scoringSettings: ScoringSettings;
-  teams: Array<{ handle: string; displayName: string }>;
+  teams: SleeperImportTeam[];
   ownerIndex: number | null;
+}
+
+export interface SleeperImportTeam {
+  handle: string;
+  displayName: string;
+  sleeperRosterId: number;
 }
 
 const SLEEPER_BASE = 'https://api.sleeper.app/v1';
@@ -63,6 +70,7 @@ export function mapSleeperLeague(
   users: SleeperUser[],
   rosters: SleeperRoster[],
   ownerUsername?: string,
+  leagueId = '',
 ): SleeperImportResult {
   const s = league.scoring_settings;
   const rec = s.rec ?? 0;
@@ -97,11 +105,16 @@ export function mapSleeperLeague(
   const teams = orderedRosters.map((roster) => {
     const owner = roster.owner_id ? usersById.get(roster.owner_id) : undefined;
     if (!owner) {
-      return { handle: `roster-${roster.roster_id}`, displayName: `Roster ${roster.roster_id}` };
+      return {
+        handle: `roster-${roster.roster_id}`,
+        displayName: `Roster ${roster.roster_id}`,
+        sleeperRosterId: roster.roster_id,
+      };
     }
     return {
       handle: owner.display_name,
       displayName: owner.metadata?.team_name || owner.display_name,
+      sleeperRosterId: roster.roster_id,
     };
   });
 
@@ -120,6 +133,7 @@ export function mapSleeperLeague(
   }
 
   return {
+    leagueId,
     leagueName: league.name ?? '',
     teamCount: teams.length,
     rosterSize: league.roster_positions.length,

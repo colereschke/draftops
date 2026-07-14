@@ -20,7 +20,7 @@ export async function importFromSleeper(
       fetchSleeperLeagueUsers(leagueId),
       fetchSleeperLeagueRosters(leagueId),
     ]);
-    const data = mapSleeperLeague(league, users, rosters, ownerUsername);
+    const data = mapSleeperLeague(league, users, rosters, ownerUsername, leagueId);
     return { ok: true, data };
   } catch (err) {
     const message = err instanceof Error ? err.message : '';

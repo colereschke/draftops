@@ -150,6 +150,7 @@ describe('createDraft', () => {
         startingLineup: VALID_INPUT.startingLineup,
         scoringSettings: VALID_INPUT.scoringSettings,
         targetRoster: VALID_INPUT.targetRoster,
+        sleeperLeagueId: undefined,
       },
     });
   });
@@ -158,8 +159,36 @@ describe('createDraft', () => {
     await createDraft(VALID_INPUT);
     expect(mockTxTeamCreate).toHaveBeenCalledTimes(2);
     expect(mockTxTeamCreate).toHaveBeenCalledWith({
-      data: { handle: 'coreschke', displayName: 'Cole', budget: 1000, draftId: 5 },
+      data: {
+        handle: 'coreschke',
+        displayName: 'Cole',
+        budget: 1000,
+        draftId: 5,
+        sleeperRosterId: undefined,
+      },
     });
+  });
+
+  it('persists Sleeper league and roster IDs for imported drafts', async () => {
+    await createDraft({
+      ...VALID_INPUT,
+      sleeperLeagueId: '1360707683916734464',
+      teams: [
+        { ...VALID_INPUT.teams[0], sleeperRosterId: 1 },
+        { ...VALID_INPUT.teams[1], sleeperRosterId: 2 },
+      ],
+    });
+
+    expect(mockTxDraftCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ sleeperLeagueId: '1360707683916734464' }),
+      }),
+    );
+    expect(mockTxTeamCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ sleeperRosterId: 1 }),
+      }),
+    );
   });
 
   it('sets ownerTeamId to the "mine" team', async () => {

@@ -96,7 +96,7 @@ describe('AuctionHeader — TE caption', () => {
     expect(screen.queryByText(/1st Down/)).not.toBeInTheDocument();
   });
 
-  it('shows only the 1st down clause when only the TE first-down bonus differs', () => {
+  it('omits the TE first-down clause when only the all-position receiving first-down bonus differs', () => {
     render(
       <AuctionHeader
         ownerBudget={1000}
@@ -106,6 +106,22 @@ describe('AuctionHeader — TE caption', () => {
         grandTotal={1000}
         totalPlayerCount={267}
         scoringSettings={{ ...DEFAULT_SCORING_SETTINGS, recFD: 0.25 }}
+      />,
+    );
+    expect(screen.queryByText(/TE PPR/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/1st Down/)).not.toBeInTheDocument();
+  });
+
+  it('shows only the 1st down clause when only the TE first-down bonus differs', () => {
+    render(
+      <AuctionHeader
+        ownerBudget={1000}
+        mySpent={0}
+        remaining={1000}
+        posStats={POS_STATS}
+        grandTotal={1000}
+        totalPlayerCount={267}
+        scoringSettings={{ ...DEFAULT_SCORING_SETTINGS, teFDBonus: 0.25 }}
       />,
     );
     expect(screen.queryByText(/TE PPR/)).not.toBeInTheDocument();
@@ -121,7 +137,7 @@ describe('AuctionHeader — TE caption', () => {
         posStats={POS_STATS}
         grandTotal={1000}
         totalPlayerCount={267}
-        scoringSettings={{ ...DEFAULT_SCORING_SETTINGS, pprTE: 2, recFD: 0.25 }}
+        scoringSettings={{ ...DEFAULT_SCORING_SETTINGS, pprTE: 2, teFDBonus: 0.25 }}
       />,
     );
     expect(screen.getByText(/TE PPR\+1 \/ 1st Down\+0\.25/)).toBeInTheDocument();

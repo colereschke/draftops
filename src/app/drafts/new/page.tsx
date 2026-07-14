@@ -189,6 +189,33 @@ export default function NewDraftPage() {
     e.preventDefault();
     setError(null);
 
+    const requiredNumericFields = [
+      { label: 'Team count', value: teamCountField.value },
+      { label: 'Budget per team', value: budgetField.value },
+      { label: 'Roster size', value: rosterSizeField.value },
+      { label: 'Target roster QB', value: targetRosterFields.QB.value },
+      { label: 'Target roster RB', value: targetRosterFields.RB.value },
+      { label: 'Target roster WR', value: targetRosterFields.WR.value },
+      { label: 'Target roster TE', value: targetRosterFields.TE.value },
+      { label: 'Passing yards per point', value: passYdsPerPointField.value },
+      { label: 'Passing TD', value: passTDField.value },
+      { label: 'Interception', value: passIntField.value },
+      { label: 'Rush attempt bonus', value: rushAttField.value },
+      { label: 'Rush first-down bonus', value: rushFDField.value },
+      { label: 'RB PPR', value: pprRBField.value },
+      { label: 'WR PPR', value: pprWRField.value },
+      { label: 'TE PPR', value: pprTEField.value },
+      { label: 'Receiving first-down bonus', value: recFDField.value },
+      { label: 'RB receiving first-down bonus', value: rbFDBonusField.value },
+      { label: 'WR receiving first-down bonus', value: wrFDBonusField.value },
+      { label: 'TE receiving first-down bonus', value: teFDBonusField.value },
+    ];
+    const blankNumericField = requiredNumericFields.find((field) => field.value.trim() === '');
+    if (blankNumericField) {
+      setError(`${blankNumericField.label} is required.`);
+      return;
+    }
+
     const handles = teams.map((t) => t.handle.trim());
     if (!name.trim()) {
       setError('Draft name is required.');

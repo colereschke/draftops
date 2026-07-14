@@ -171,6 +171,19 @@ describe('NewDraftPage — roster settings and lineup', () => {
     expect(input.value).toBe('6');
   });
 
+  it('blocks submit when a required numeric field is blank', () => {
+    render(<NewDraftPage />);
+    fireEvent.change(screen.getByTestId('draft-name-input'), {
+      target: { value: 'Test Draft' },
+    });
+    fireEvent.change(screen.getByTestId('budget-input'), { target: { value: '' } });
+
+    fireEvent.submit(screen.getByTestId('new-draft-form'));
+
+    expect(screen.getByText(/Budget per team is required/i)).toBeInTheDocument();
+    expect(createDraft).not.toHaveBeenCalled();
+  });
+
   it('resizes the team roster table when team count changes', () => {
     render(<NewDraftPage />);
     const input = screen.getByTestId<HTMLInputElement>('team-count-input');

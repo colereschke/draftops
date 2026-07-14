@@ -3,7 +3,7 @@ import { POS_COLORS } from '@/lib/posColors';
 
 function teCaptionClause(scoringSettings: ScoringSettings): string {
   const pprDelta = scoringSettings.pprTE - scoringSettings.pprWR;
-  const fdDelta = scoringSettings.recFD + scoringSettings.teFDBonus;
+  const fdDelta = scoringSettings.teFDBonus - scoringSettings.wrFDBonus;
   const parts: string[] = [];
   if (pprDelta !== 0) parts.push(`PPR${pprDelta > 0 ? '+' : ''}${pprDelta}`);
   if (fdDelta !== 0) parts.push(`1st Down${fdDelta > 0 ? '+' : ''}${fdDelta}`);

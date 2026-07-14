@@ -4,6 +4,7 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import AuctionSheet from '@/components/AuctionSheet/AuctionSheet';
 import type { Player, ClaimedBid, LeagueTeam } from '@/types';
+import { DEFAULT_SCORING_SETTINGS } from '@/types';
 
 const MOCK_PLAYERS: Player[] = [
   {
@@ -68,6 +69,7 @@ function renderSheet(overrides: Partial<React.ComponentProps<typeof AuctionSheet
       draftId={1}
       ownerHandle="coreschke"
       ownerBudget={1000}
+      scoringSettings={{ ...DEFAULT_SCORING_SETTINGS }}
       {...overrides}
     />,
   );
@@ -269,5 +271,51 @@ describe('AuctionSheet with claimed bids', () => {
     expect(screen.getByTestId('bid-price-context-dynasty')).toHaveTextContent('$120');
     expect(screen.getByTestId('bid-price-context-projection')).toHaveTextContent('$180');
     expect(screen.getByTestId('bid-price-context-active')).toHaveTextContent('$120');
+  });
+
+  it('defaults to sorting by target value (budget) descending, interleaving pick assets by value instead of sinking them to the bottom', () => {
+    const { container } = renderSheet({
+      players: [
+        MOCK_PLAYERS[0], // Josh Allen — sfRank 1, budget 120
+        MOCK_PLAYERS[1], // Justin Jefferson — sfRank 5, budget 95
+        {
+          player: "coreschke's 2027 package",
+          team: 'coreschke',
+          pos: 'PKG',
+          age: null,
+          sfRank: 900, // deliberately far behind on sfRank...
+          budget: 109, // ...but worth more than Jefferson on target value
+          ceiling: 131,
+          floor: 75,
+          notes: '',
+          futurePickYear: 2027,
+          futurePickOriginHandle: 'coreschke',
+          futurePickAssetKind: 'package',
+        },
+      ],
+    });
+
+    const rows = container.querySelectorAll('[data-testid^="player-row-"]');
+    const order = Array.from(rows).map((row) => row.getAttribute('data-testid'));
+    // Row testids are keyed by sfRank (player-row-<sfRank>), not by sort order, so this
+    // asserts the actual DOM order under the new budget-descending default: Allen (120),
+    // the package (109), then Jefferson (95) — the package sits between the two players
+    // by value instead of trailing behind both of them the way sfRank-ascending would put it.
+    expect(order).toEqual(['player-row-1', 'player-row-900', 'player-row-5']);
+  });
+
+  it('breaks a tie in the sorted column using SF rank ascending', () => {
+    const { container } = renderSheet({
+      players: [
+        { ...MOCK_PLAYERS[0], sfRank: 5, budget: 100 }, // tied on budget, worse rank
+        { ...MOCK_PLAYERS[1], sfRank: 2, budget: 100 }, // tied on budget, better rank
+      ],
+    });
+
+    const rows = container.querySelectorAll('[data-testid^="player-row-"]');
+    const order = Array.from(rows).map((row) => row.getAttribute('data-testid'));
+    // Both players tie at budget 100 (the default sort column) — SF rank breaks the
+    // tie ascending, so the better-ranked player (rank 2) is shown first.
+    expect(order).toEqual(['player-row-2', 'player-row-5']);
   });
 });

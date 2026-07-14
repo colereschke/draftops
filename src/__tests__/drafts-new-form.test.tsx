@@ -76,12 +76,13 @@ describe('NewDraftPage — roster settings and lineup', () => {
     expect(screen.getByTestId<HTMLSelectElement>('lineup-slot-9').value).toBe('SUPER_FLEX');
   });
 
-  it('adds a FLEX slot when Add slot is clicked', () => {
+  it('adds a FLEX slot when Add slot is clicked, sorted into the FLEX group', () => {
     render(<NewDraftPage />);
     fireEvent.click(screen.getByTestId('add-lineup-slot'));
     const slots = screen.getAllByTestId(/^lineup-slot-\d+$/);
     expect(slots).toHaveLength(11);
-    expect(screen.getByTestId<HTMLSelectElement>('lineup-slot-10').value).toBe('FLEX');
+    expect(screen.getByTestId<HTMLSelectElement>('lineup-slot-9').value).toBe('FLEX');
+    expect(screen.getByTestId<HTMLSelectElement>('lineup-slot-10').value).toBe('SUPER_FLEX');
   });
 
   it('removes the correct slot when × is clicked', () => {
@@ -94,10 +95,104 @@ describe('NewDraftPage — roster settings and lineup', () => {
     expect(screen.getByTestId<HTMLSelectElement>('lineup-slot-0').value).toBe('RB');
   });
 
-  it('changes slot type when a different option is selected', () => {
+  it('changes slot type and re-sorts the lineup into canonical order', () => {
     render(<NewDraftPage />);
     fireEvent.change(screen.getByTestId('lineup-slot-0'), { target: { value: 'SUPER_FLEX' } });
-    expect(screen.getByTestId<HTMLSelectElement>('lineup-slot-0').value).toBe('SUPER_FLEX');
+    const slots = screen.getAllByTestId<HTMLSelectElement>(/^lineup-slot-\d+$/);
+    expect(slots.map((s) => s.value)).toEqual([
+      'RB',
+      'RB',
+      'WR',
+      'WR',
+      'TE',
+      'FLEX',
+      'FLEX',
+      'FLEX',
+      'SUPER_FLEX',
+      'SUPER_FLEX',
+    ]);
+  });
+
+  it('groups a newly-added slot with same-position slots once its type is chosen', () => {
+    render(<NewDraftPage />);
+    fireEvent.click(screen.getByTestId('add-lineup-slot')); // appends FLEX, sorts to index 9
+    fireEvent.change(screen.getByTestId('lineup-slot-9'), { target: { value: 'RB' } });
+    const slots = screen.getAllByTestId<HTMLSelectElement>(/^lineup-slot-\d+$/);
+    // Default lineup's RBs are at indices 1-2; the newly-added RB should land at index 3,
+    // immediately after them — not at the end.
+    expect(slots.map((s) => s.value)).toEqual([
+      'QB',
+      'RB',
+      'RB',
+      'RB',
+      'WR',
+      'WR',
+      'TE',
+      'FLEX',
+      'FLEX',
+      'FLEX',
+      'SUPER_FLEX',
+    ]);
+  });
+
+  it('allows clearing the roster size field to empty while retyping', () => {
+    render(<NewDraftPage />);
+    const input = screen.getByTestId<HTMLInputElement>('roster-size-input');
+    fireEvent.change(input, { target: { value: '' } });
+    expect(input.value).toBe('');
+    fireEvent.change(input, { target: { value: '25' } });
+    expect(input.value).toBe('25');
+  });
+
+  it('allows clearing the team count field to empty while retyping', () => {
+    render(<NewDraftPage />);
+    const input = screen.getByTestId<HTMLInputElement>('team-count-input');
+    fireEvent.change(input, { target: { value: '' } });
+    expect(input.value).toBe('');
+    fireEvent.change(input, { target: { value: '8' } });
+    expect(input.value).toBe('8');
+  });
+
+  it('allows clearing the budget field to empty while retyping', () => {
+    render(<NewDraftPage />);
+    const input = screen.getByTestId<HTMLInputElement>('budget-input');
+    fireEvent.change(input, { target: { value: '' } });
+    expect(input.value).toBe('');
+    fireEvent.change(input, { target: { value: '500' } });
+    expect(input.value).toBe('500');
+  });
+
+  it('allows clearing a target roster field to empty while retyping', () => {
+    render(<NewDraftPage />);
+    const input = screen.getByTestId<HTMLInputElement>('target-roster-QB');
+    fireEvent.change(input, { target: { value: '' } });
+    expect(input.value).toBe('');
+    fireEvent.change(input, { target: { value: '6' } });
+    expect(input.value).toBe('6');
+  });
+
+  it('blocks submit when a required numeric field is blank', () => {
+    render(<NewDraftPage />);
+    fireEvent.change(screen.getByTestId('draft-name-input'), {
+      target: { value: 'Test Draft' },
+    });
+    fireEvent.change(screen.getByTestId('budget-input'), { target: { value: '' } });
+
+    fireEvent.submit(screen.getByTestId('new-draft-form'));
+
+    expect(screen.getByText(/Budget per team is required/i)).toBeInTheDocument();
+    expect(createDraft).not.toHaveBeenCalled();
+  });
+
+  it('resizes the team roster table when team count changes', () => {
+    render(<NewDraftPage />);
+    const input = screen.getByTestId<HTMLInputElement>('team-count-input');
+    fireEvent.change(input, { target: { value: '14' } });
+    // Team handle inputs render as plain text inputs inside the roster table;
+    // there are 14 team rows once team count is 14, plus the fixed-count
+    // Yds/point etc. number inputs elsewhere — assert via the roster-size
+    // default-value pattern already used above instead of counting all inputs.
+    expect(screen.getAllByDisplayValue(/^team-\d+$/)).toHaveLength(14);
   });
 });
 
@@ -119,6 +214,24 @@ describe('NewDraftPage — scoring settings', () => {
     expect(screen.getByTestId<HTMLInputElement>('scoring-pprRB').value).toBe('1');
     expect(screen.getByTestId<HTMLInputElement>('scoring-pprWR').value).toBe('1');
     expect(screen.getByTestId<HTMLInputElement>('scoring-pprTE').value).toBe('1');
+  });
+
+  it('allows clearing a scoring field to empty while retyping', () => {
+    render(<NewDraftPage />);
+    const input = screen.getByTestId<HTMLInputElement>('scoring-passYdsPerPoint');
+    fireEvent.change(input, { target: { value: '' } });
+    expect(input.value).toBe('');
+    fireEvent.change(input, { target: { value: '20' } });
+    expect(input.value).toBe('20');
+  });
+
+  it('allows a decimal scoring field to be edited without snapping back', () => {
+    render(<NewDraftPage />);
+    const input = screen.getByTestId<HTMLInputElement>('scoring-pprTE');
+    fireEvent.change(input, { target: { value: '' } });
+    expect(input.value).toBe('');
+    fireEvent.change(input, { target: { value: '1.5' } });
+    expect(input.value).toBe('1.5');
   });
 });
 

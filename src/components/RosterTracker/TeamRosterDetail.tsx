@@ -35,7 +35,7 @@ export default function TeamRosterDetail({ results }: TeamRosterDetailProps) {
               >
                 {group.pos}
               </span>
-              <span className="font-mono text-[11px] text-muted-foreground tabular-nums">
+              <span className="min-w-[80px] text-right font-mono text-[11px] text-muted-foreground tabular-nums">
                 ${subtotal}
                 {deltaTotal !== 0 && (
                   <span style={{ color: deltaTotal > 0 ? 'var(--age-old)' : 'var(--age-young)' }}>

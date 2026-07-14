@@ -7,7 +7,12 @@ import { getDraft } from '@/lib/draft';
 import { mapPlayersWithDraftValues } from '@/lib/playerValueMapping';
 import { filterFuturePickAssetsForMode, fromPrismaFuturePickMode } from '@/lib/futurePickAssets';
 import { applyDynamicPickValues } from '@/lib/dynamicPickValues';
-import { DEFAULT_STARTING_LINEUP, type StartingSlot } from '@/types';
+import {
+  DEFAULT_STARTING_LINEUP,
+  DEFAULT_SCORING_SETTINGS,
+  type StartingSlot,
+  type ScoringSettings,
+} from '@/types';
 
 export default async function DraftHomePage({ params }: { params: Promise<{ draftId: string }> }) {
   const draftId = parseInt((await params).draftId, 10);
@@ -89,6 +94,7 @@ export default async function DraftHomePage({ params }: { params: Promise<{ draf
       draftId={draftId}
       ownerHandle={draft.ownerTeam?.handle ?? null}
       ownerBudget={draft.ownerTeam?.budget ?? 1000}
+      scoringSettings={(draft.scoringSettings ?? DEFAULT_SCORING_SETTINGS) as ScoringSettings}
     />
   );
 }

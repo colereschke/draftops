@@ -4,6 +4,7 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import AuctionSheet from '@/components/AuctionSheet/AuctionSheet';
 import type { Player, ClaimedBid, LeagueTeam } from '@/types';
+import { DEFAULT_SCORING_SETTINGS } from '@/types';
 
 const MOCK_PLAYERS: Player[] = [
   {
@@ -68,6 +69,7 @@ function renderSheet(overrides: Partial<React.ComponentProps<typeof AuctionSheet
       draftId={1}
       ownerHandle="coreschke"
       ownerBudget={1000}
+      scoringSettings={{ ...DEFAULT_SCORING_SETTINGS }}
       {...overrides}
     />,
   );

@@ -2,7 +2,7 @@
 'use client';
 
 import { useState, useMemo, useOptimistic, useTransition } from 'react';
-import type { Player, Position, ClaimedBid, LeagueTeam } from '@/types';
+import type { Player, Position, ClaimedBid, LeagueTeam, ScoringSettings } from '@/types';
 import { logBid, updateBid, deleteBid } from '@/lib/actions';
 import BidModal from '@/components/BidModal';
 import AuctionHeader from './AuctionHeader';
@@ -22,6 +22,7 @@ interface AuctionSheetProps {
   draftId: number;
   ownerHandle: string | null;
   ownerBudget: number;
+  scoringSettings: ScoringSettings;
 }
 
 export default function AuctionSheet({
@@ -32,6 +33,7 @@ export default function AuctionSheet({
   draftId,
   ownerHandle,
   ownerBudget,
+  scoringSettings,
 }: AuctionSheetProps) {
   const [posFilter, setPosFilter] = useState<PositionFilter>('ALL');
   const [search, setSearch] = useState<string>('');
@@ -243,6 +245,7 @@ export default function AuctionSheet({
         posStats={posStats}
         grandTotal={grandTotal}
         totalPlayerCount={totalPlayerCount}
+        scoringSettings={scoringSettings}
       />
       <FilterControls
         posFilter={posFilter}

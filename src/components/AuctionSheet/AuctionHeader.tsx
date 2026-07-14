@@ -1,4 +1,14 @@
+import type { ScoringSettings } from '@/types';
 import { POS_COLORS } from '@/lib/posColors';
+
+function teCaptionClause(scoringSettings: ScoringSettings): string {
+  const pprDelta = scoringSettings.pprTE - scoringSettings.pprWR;
+  const fdDelta = scoringSettings.recFD + scoringSettings.teFDBonus;
+  const parts: string[] = [];
+  if (pprDelta !== 0) parts.push(`PPR${pprDelta > 0 ? '+' : ''}${pprDelta}`);
+  if (fdDelta !== 0) parts.push(`1st Down${fdDelta > 0 ? '+' : ''}${fdDelta}`);
+  return parts.length > 0 ? ` · TE ${parts.join(' / ')}` : '';
+}
 
 interface AuctionHeaderProps {
   ownerBudget: number;
@@ -7,6 +17,7 @@ interface AuctionHeaderProps {
   posStats: Record<'QB' | 'RB' | 'WR' | 'TE', { count: number; total: number }>;
   grandTotal: number;
   totalPlayerCount: number;
+  scoringSettings: ScoringSettings;
 }
 
 const MARKET_POSITIONS = ['QB', 'RB', 'WR', 'TE'] as const;
@@ -18,6 +29,7 @@ export default function AuctionHeader({
   posStats,
   grandTotal,
   totalPlayerCount,
+  scoringSettings,
 }: AuctionHeaderProps) {
   const safeGrandTotal = grandTotal || 1;
 
@@ -32,7 +44,7 @@ export default function AuctionHeader({
             Startup Auction Value Sheet
           </h1>
           <div className="mt-1.5 text-[11px] text-secondary-fg">
-            2QB rankings scaled 5× · TE PPR+1 / 1st Down+0.25 applied · {totalPlayerCount} players +
+            2QB rankings scaled 5×{teCaptionClause(scoringSettings)} · {totalPlayerCount} players +
             pick assets
           </div>
         </section>

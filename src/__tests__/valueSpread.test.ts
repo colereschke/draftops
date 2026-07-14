@@ -1,5 +1,5 @@
 import { computeSpreads, strategyTagReason } from '@/lib/valueSpread';
-import type { Player } from '@/types';
+import type { Player, Position } from '@/types';
 
 // Minimal typed factory — only the fields computeSpreads reads matter.
 function mkPlayer(overrides: Partial<Player>): Player {
@@ -31,6 +31,27 @@ function rbSet(): Player[] {
     mkPlayer({ player: 'D', age: 29, baseBudget: 40, projectionAuctionValue: 70, vor: 30 }),
     mkPlayer({ player: 'C', age: 22, baseBudget: 20, projectionAuctionValue: 90, vor: 40 }),
   ];
+}
+
+// Build `n` same-position players (all at `age`) whose dynasty order equals their
+// projection order, then swap the projection values of the two players at dyn ranks
+// `hi` and `hi+1` (1-indexed). That produces exactly one player with spread
+// +round(100/(n-1)) and one with the negative of it; everyone else nets to 0.
+// Dial the spread magnitude via `n` to probe the age-scaled gate boundaries.
+function swapPool(pos: Position, age: number, n: number, hi: number): Player[] {
+  const base = Array.from({ length: n }, (_, i) => 100 - i * 5); // strictly descending
+  const proj = [...base];
+  [proj[hi - 1], proj[hi]] = [proj[hi], proj[hi - 1]];
+  return base.map((b, i) =>
+    mkPlayer({
+      player: `${pos}${i + 1}`,
+      pos,
+      age,
+      baseBudget: b,
+      projectionAuctionValue: proj[i],
+      vor: n - i,
+    }),
+  );
 }
 
 describe('computeSpreads', () => {
@@ -80,28 +101,26 @@ describe('computeSpreads', () => {
     expect(out.every((p) => p.strategyTag === null)).toBe(true);
   });
 
-  it('respects the gate: a 14-point spread does not tag, a supra-gate spread does', () => {
-    // 8 old-age RBs. Dyn order by baseBudget desc = P1..P8.
-    // Projection order = P1 > P3 > P4 > P2 > P5 > P6 > P7 > P8, so:
-    //   P4: dynRank 4, projRank 3 => round((4-3)/7*100) = 14  (< gate 15 => no tag)
-    //   P2: dynRank 2, projRank 4 => round((2-4)/7*100) = -29 (>= gate => FADE)
-    const players = [
-      mkPlayer({ player: 'P1', age: 29, baseBudget: 80, projectionAuctionValue: 100, vor: 40 }),
-      mkPlayer({ player: 'P2', age: 29, baseBudget: 70, projectionAuctionValue: 70, vor: 35 }),
-      mkPlayer({ player: 'P3', age: 29, baseBudget: 60, projectionAuctionValue: 90, vor: 30 }),
-      mkPlayer({ player: 'P4', age: 29, baseBudget: 50, projectionAuctionValue: 80, vor: 25 }),
-      mkPlayer({ player: 'P5', age: 29, baseBudget: 40, projectionAuctionValue: 60, vor: 20 }),
-      mkPlayer({ player: 'P6', age: 29, baseBudget: 30, projectionAuctionValue: 50, vor: 15 }),
-      mkPlayer({ player: 'P7', age: 29, baseBudget: 20, projectionAuctionValue: 40, vor: 10 }),
-      mkPlayer({ player: 'P8', age: 29, baseBudget: 10, projectionAuctionValue: 30, vor: 5 }),
-    ];
-    const out = computeSpreads(players);
-    const p4 = out.find((p) => p.player === 'P4')!;
-    expect(p4.spread).toBe(14);
-    expect(p4.strategyTag).toBeNull();
-    const p2 = out.find((p) => p.player === 'P2')!;
-    expect(p2.spread).toBe(-29);
-    expect(p2.strategyTag).toBe('FADE');
+  it('aging players use the full gate (15) and tag as OLDER (aging + old)', () => {
+    // WR age 29 = aging band. A ±14 edge does NOT clear the 15 gate...
+    const out14 = computeSpreads(swapPool('WR', 29, 8, 4));
+    expect(out14.find((p) => p.spread === 14)!.strategyTag).toBeNull();
+    expect(out14.find((p) => p.spread === -14)!.strategyTag).toBeNull();
+    // ...but a ±17 edge does, and aging counts as OLDER (WIN-NOW / FADE).
+    const out17 = computeSpreads(swapPool('WR', 29, 7, 4));
+    expect(out17.find((p) => p.spread === 17)!.strategyTag).toBe('WIN-NOW');
+    expect(out17.find((p) => p.spread === -17)!.strategyTag).toBe('FADE');
+  });
+
+  it('old players use the reduced gate (10) — catches modest edges like Mike Evans', () => {
+    // WR age 33 = old band. A ±14 edge tags (14 >= 10)...
+    const out14 = computeSpreads(swapPool('WR', 33, 8, 4));
+    expect(out14.find((p) => p.spread === 14)!.strategyTag).toBe('WIN-NOW');
+    expect(out14.find((p) => p.spread === -14)!.strategyTag).toBe('FADE');
+    // ...but a ±8 edge still does not (8 < 10) — the gate drops, it doesn't vanish.
+    const out8 = computeSpreads(swapPool('WR', 33, 13, 6));
+    expect(out8.find((p) => p.spread === 8)!.strategyTag).toBeNull();
+    expect(out8.find((p) => p.spread === -8)!.strategyTag).toBeNull();
   });
 
   it('normalizes by pool size — the same rank gap yields different spreads across positions', () => {
@@ -211,11 +230,20 @@ describe('computeSpreads', () => {
     expect(out.find((p) => p.player === 'OnlyTE')!.strategyTag).toBeNull();
   });
 
-  it('exposes dynRank and projRank for the modal', () => {
+  it('exposes ranks and percentiles for the modal, and spread reconciles with them', () => {
     const out = computeSpreads(rbSet());
     const c = out.find((p) => p.player === 'C')!;
     expect(c.spreadDynRank).toBe(4);
     expect(c.spreadProjRank).toBe(1);
+    // N=4: dyn rank 4 -> 0th pct, proj rank 1 -> 100th pct.
+    expect(c.spreadDynPct).toBe(0);
+    expect(c.spreadProjPct).toBe(100);
+    // The displayed spread is always exactly projPct - dynPct (so the modal reconciles).
+    for (const p of out) {
+      if (p.spread != null) {
+        expect(p.spread).toBe((p.spreadProjPct ?? 0) - (p.spreadDynPct ?? 0));
+      }
+    }
   });
 });
 

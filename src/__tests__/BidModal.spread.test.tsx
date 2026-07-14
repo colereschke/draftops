@@ -22,6 +22,8 @@ function mkPlayer(overrides: Partial<Player>): Player {
     strategyTag: null,
     spreadDynRank: null,
     spreadProjRank: null,
+    spreadDynPct: null,
+    spreadProjPct: null,
     ...overrides,
   };
 }
@@ -31,17 +33,34 @@ function renderModal(player: Player) {
 }
 
 describe('BidModal spread block', () => {
-  it('shows the spread and ranks when present', () => {
-    renderModal(mkPlayer({ spread: 42, spreadDynRank: 24, spreadProjRank: 12 }));
+  it('shows the spread as percentiles (rank in parens) that reconcile: 91 - 76 = +15', () => {
+    renderModal(
+      mkPlayer({
+        spread: 15,
+        spreadDynRank: 28,
+        spreadProjRank: 11,
+        spreadDynPct: 76,
+        spreadProjPct: 91,
+      }),
+    );
     const block = screen.getByTestId('bid-spread');
-    expect(block).toHaveTextContent('#24');
-    expect(block).toHaveTextContent('#12');
-    expect(block).toHaveTextContent('+42');
+    expect(block).toHaveTextContent('76th');
+    expect(block).toHaveTextContent('91st');
+    expect(block).toHaveTextContent('#28');
+    expect(block).toHaveTextContent('#11');
+    expect(block).toHaveTextContent('+15');
   });
 
   it('shows the archetype label + reason when a tag fires', () => {
     renderModal(
-      mkPlayer({ spread: 42, spreadDynRank: 24, spreadProjRank: 12, strategyTag: 'WIN-NOW' }),
+      mkPlayer({
+        spread: 15,
+        spreadDynRank: 28,
+        spreadProjRank: 11,
+        spreadDynPct: 76,
+        spreadProjPct: 91,
+        strategyTag: 'WIN-NOW',
+      }),
     );
     expect(screen.getByTestId('bid-strategy-tag')).toHaveTextContent('WIN-NOW');
   });

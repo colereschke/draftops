@@ -13,7 +13,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { formatSpread, spreadColor, strategyTagReason } from '@/lib/valueSpread';
+import { formatSpread, ordinal, spreadColor, strategyTagReason } from '@/lib/valueSpread';
 
 interface BidModalProps {
   player: Player;
@@ -134,7 +134,10 @@ export default function BidModal({
             {player.spread != null && (
               <div data-testid="bid-spread" className="mt-2.5 border-t border-border-subtle pt-2">
                 <div className="font-mono text-[11px] tabular-nums text-secondary-fg">
-                  Rank: Dyn #{player.spreadDynRank} · Proj #{player.spreadProjRank} · Spread{' '}
+                  Dyn {player.spreadDynPct != null ? ordinal(player.spreadDynPct) : '—'} (#
+                  {player.spreadDynRank}) · Proj{' '}
+                  {player.spreadProjPct != null ? ordinal(player.spreadProjPct) : '—'} (#
+                  {player.spreadProjRank}) · Spread{' '}
                   <span
                     style={{
                       color: spreadColor(player.spread),
@@ -142,6 +145,9 @@ export default function BidModal({
                   >
                     {formatSpread(player.spread)}
                   </span>
+                </div>
+                <div className="mt-0.5 text-[9px] tracking-wide text-muted-foreground/70 uppercase">
+                  percentile within position (rank)
                 </div>
                 {player.strategyTag && (
                   <div data-testid="bid-strategy-tag" className="mt-2 flex items-start gap-2">

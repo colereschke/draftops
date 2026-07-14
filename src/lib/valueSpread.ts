@@ -1,6 +1,6 @@
 import type { Player, Position, StrategyTag } from '@/types';
-import { ageBand } from './ageBands';
-import { SPREAD_GATE } from './valueSpread.constants';
+import { ageBand, type AgeBand } from './ageBands';
+import { SPREAD_GATE, SPREAD_GATE_OLD } from './valueSpread.constants';
 
 const SPREAD_POSITIONS: Position[] = ['QB', 'RB', 'WR', 'TE'];
 
@@ -9,6 +9,8 @@ interface SpreadAnnotation {
   strategyTag: StrategyTag | null;
   dynRank: number;
   projRank: number;
+  dynPct: number;
+  projPct: number;
 }
 
 function dynastyValue(p: Player): number {
@@ -17,6 +19,11 @@ function dynastyValue(p: Player): number {
 
 function projectionValue(p: Player): number {
   return p.projectionAuctionValue ?? 0;
+}
+
+// Percentile within the common set: best rank (1) → 100, worst rank (n) → 0.
+function percentile(rank: number, n: number): number {
+  return n > 1 ? Math.round(((n - rank) / (n - 1)) * 100) : 0;
 }
 
 // Invariant: any player admitted to the common set (vor > 0) has already been
@@ -28,12 +35,30 @@ function isInCommonSet(p: Player, pos: Position): boolean {
   return p.pos === pos && p.vor != null && p.vor > 0;
 }
 
+// The |spread| a player must clear to earn a tag, by age band. Prime (and unknown
+// age) never tag. Older players get a lower gate: the dynasty market already
+// discounts age, so a smaller residual edge is a stronger win-now signal.
+function gateForBand(band: AgeBand | null): number | null {
+  switch (band) {
+    case 'young':
+    case 'aging':
+      return SPREAD_GATE;
+    case 'old':
+      return SPREAD_GATE_OLD;
+    default:
+      return null; // prime or unknown age → never tags
+  }
+}
+
 function tagFor(spread: number, p: Player): StrategyTag | null {
-  if (Math.abs(spread) < SPREAD_GATE) return null;
   const band = ageBand(p.age, p.pos);
+  const gate = gateForBand(band);
+  if (gate === null || Math.abs(spread) < gate) return null;
+  // band is guaranteed young/aging/old here (prime/unknown returned a null gate).
   if (band === 'young') return spread > 0 ? 'BARGAIN' : 'FUTURE';
-  if (band === 'old') return spread > 0 ? 'WIN-NOW' : 'FADE';
-  return null;
+  // aging + old both count as OLDER — the dynasty market discounts age from the
+  // aging years on, so that whole range carries the win-now / fade signal.
+  return spread > 0 ? 'WIN-NOW' : 'FADE';
 }
 
 export function computeSpreads(players: Player[]): Player[] {
@@ -56,15 +81,34 @@ export function computeSpreads(players: Player[]): Player[] {
     for (const p of common) {
       const dynRank = dynRankOf.get(p)!;
       const projRank = projRankOf.get(p)!;
-      const spread = n > 1 ? Math.round(((dynRank - projRank) / (n - 1)) * 100) : 0;
-      annotations.set(p, { spread, strategyTag: tagFor(spread, p), dynRank, projRank });
+      const dynPct = percentile(dynRank, n);
+      const projPct = percentile(projRank, n);
+      // Spread is the difference of the displayed percentiles, so the bid modal's
+      // "Dyn {dynPct} · Proj {projPct} · Spread {spread}" always reconciles exactly.
+      const spread = projPct - dynPct;
+      annotations.set(p, {
+        spread,
+        strategyTag: tagFor(spread, p),
+        dynRank,
+        projRank,
+        dynPct,
+        projPct,
+      });
     }
   }
 
   return players.map((p) => {
     const a = annotations.get(p);
     if (!a) {
-      return { ...p, spread: null, strategyTag: null, spreadDynRank: null, spreadProjRank: null };
+      return {
+        ...p,
+        spread: null,
+        strategyTag: null,
+        spreadDynRank: null,
+        spreadProjRank: null,
+        spreadDynPct: null,
+        spreadProjPct: null,
+      };
     }
     return {
       ...p,
@@ -72,6 +116,8 @@ export function computeSpreads(players: Player[]): Player[] {
       strategyTag: a.strategyTag,
       spreadDynRank: a.dynRank,
       spreadProjRank: a.projRank,
+      spreadDynPct: a.dynPct,
+      spreadProjPct: a.projPct,
     };
   });
 }
@@ -85,15 +131,31 @@ export function spreadColor(spread: number | null | undefined): string {
   return spread > 0 ? 'var(--age-young)' : 'var(--age-old)';
 }
 
+// 1 → "1st", 12 → "12th", 91 → "91st". Used to render percentiles in the bid modal.
+export function ordinal(n: number): string {
+  const rem100 = n % 100;
+  if (rem100 >= 11 && rem100 <= 13) return `${n}th`;
+  switch (n % 10) {
+    case 1:
+      return `${n}st`;
+    case 2:
+      return `${n}nd`;
+    case 3:
+      return `${n}rd`;
+    default:
+      return `${n}th`;
+  }
+}
+
 export function strategyTagReason(tag: StrategyTag): string {
   switch (tag) {
     case 'WIN-NOW':
-      return 'Projection ranks him well above the market; older — a win-now buy the market discounts.';
+      return 'Projection ranks him above the market; past his prime — a win-now buy the market discounts for age.';
     case 'BARGAIN':
       return 'Projection ranks him above the market; young and cheap — the market hasn’t caught up.';
     case 'FUTURE':
       return 'Market ranks him above his production; a young upside premium — a rebuild asset.';
     case 'FADE':
-      return 'Market ranks him above his production; older and overpriced — fade.';
+      return 'Market ranks him above his production; past his prime and overpriced — fade.';
   }
 }

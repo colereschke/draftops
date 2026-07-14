@@ -54,26 +54,41 @@ _tag_, not the number.
 
 ## The tags: age-aware 2×2
 
-A discrete archetype badge fires only when a player (a) has a Spread, (b) falls in the **young** or
-**old** per-position age band, and (c) clears the gate `|spread| ≥ THRESHOLD` (default 15 percentile
-points, tunable):
+A discrete archetype badge fires when a player (a) has a Spread, (b) falls in a **tagging** age band
+(everything except `prime`), and (c) clears the age-scaled gate.
 
-|             | underpriced (`spread > 0`) | overpriced (`spread < 0`) |
-| ----------- | -------------------------- | ------------------------- |
-| **OLDER**   | `WIN-NOW`                  | `FADE`                    |
-| **YOUNGER** | `BARGAIN`                  | `FUTURE`                  |
+**Age → lean.** `young` → YOUNGER; `aging` + `old` → OLDER; `prime` → no tag. Folding **aging** into
+OLDER (rather than reserving OLDER for the `old` band) is deliberate: the dynasty market begins
+discounting age in the aging years, so that whole range carries the win-now/fade signal. An underpriced
+29-year-old still-elite WR (aging) is a textbook WIN-NOW that the `old`-only rule would have missed.
+YOUNGER stays narrow (just `young`) because the market pays an upside _premium_ only for genuine youth.
+
+|                         | underpriced (`spread > 0`) | overpriced (`spread < 0`) |
+| ----------------------- | -------------------------- | ------------------------- |
+| **OLDER** (aging + old) | `WIN-NOW`                  | `FADE`                    |
+| **YOUNGER** (young)     | `BARGAIN`                  | `FUTURE`                  |
+
+**Age-scaled gate.** The `|spread|` needed to fire scales _down_ with age, because the market's age
+discount is already doing work — a smaller residual edge is a stronger signal on an older player:
+
+- `young` / `aging`: `|spread| ≥ SPREAD_GATE` (15)
+- `old`: `|spread| ≥ SPREAD_GATE_OLD` (10)
+
+This catches a genuinely-old modest edge (e.g. Mike Evans, ~33, +14 → WIN-NOW) while still requiring a
+clear edge from aging/young players. It does **not** tag fairly-priced old players (a spread near 0
+never fires), so WIN-NOW keeps meaning "there's an actual edge here," not just "he's old and startable."
 
 Rationale for the four quadrants:
 
-- **WIN-NOW** — older + market underrates production. The dynasty market discounts age harder than
-  current production warrants; a contender exploits it.
+- **WIN-NOW** — older (aging/old) + market underrates production. The dynasty market discounts age
+  harder than current production warrants; a contender exploits it.
 - **BARGAIN** — younger + underpriced. Produces now _and_ cheap; good for anyone, not a strategy
   play — but worth flagging because the market hasn't caught up.
 - **FUTURE** — younger + overpriced. Market pays an upside premium not yet in production; a rebuild
   asset a contender should let go.
-- **FADE** — older + overpriced. Old _and_ the market overpays relative to production; avoid.
+- **FADE** — older + overpriced. Past prime _and_ the market overpays relative to production; avoid.
 
-**Prime-age (25–27 band) and gate-failing players show the Spread number but no tag.**
+**Prime-age and gate-failing players show the Spread number but no tag.**
 
 ### No-read (number renders as "—", no tag)
 
@@ -108,10 +123,10 @@ logic, since we need per-position age bands anyway.
 | WR  | 24      | 27      | 29      | 30    |
 | TE  | 24      | 27      | 29      | 30    |
 
-**Tag age mapping:** `YOUNGER = young` band; `OLDER = old` band. The `prime` and `aging` bands
-produce **no age lean** → no tag (Spread number still shown). Tags only fire at the clear young/old
-extremes; the amber "aging" middle stays untagged. This matches the conservative OLDER thresholds
-above (QB ≥33, RB ≥28, WR/TE ≥30).
+**Tag age mapping:** `YOUNGER = young` band; `OLDER = aging + old` bands; only `prime` produces
+**no age lean** → no tag (Spread number still shown). See "The tags" section above for why aging folds
+into OLDER and for the age-scaled gate. So the OLDER-tag range begins at the aging threshold (QB ≥30,
+RB ≥26, WR/TE ≥28), while the age _coloring_ retains all four bands unchanged.
 
 **Retrofit:** `ageColor` is rewritten to consume `ageBand(age, pos?)` and map band → existing CSS
 token (`--age-young` / `--age-prime` / `--age-aging` / `--age-old`). `PlayerTable.tsx:216` passes
@@ -137,19 +152,21 @@ density.
 
 ### Bid modal — rich, at the decision point
 
-Extend the **existing "Price context" panel** (`BidModal.tsx:89`, already shows Dynasty / Projection
-/ Active). Add the Spread and, when a tag fires, the full archetype label plus a one-line
-plain-English reason:
+Extend the **existing "Price context" panel** (already shows Dynasty / Projection / Active). Add the
+Spread and, when a tag fires, the full archetype label plus a one-line plain-English reason. The two
+ranks render as **percentiles within position** (raw rank in parens) so the number reconciles on
+screen — `spread = projPct − dynPct` — instead of showing two ranks whose difference isn't the spread:
 
 ```
 Price context
-Dynasty #24 · Proj #12 · Spread +12
-[ WIN-NOW ]  Projection ranks him well above the
-market; older → a win-now buy the market discounts.
+Dyn 76th (#28) · Proj 91st (#11) · Spread +15
+percentile within position (rank)
+[ WIN-NOW ]  Projection ranks him above the market;
+past his prime — a win-now buy the market discounts for age.
 ```
 
-The full 2×2 label only appears here — the moment the user is weighing a bid — not while scanning 267
-rows.
+The full archetype label only appears here — the moment the user is weighing a bid — not while
+scanning the sheet.
 
 ## Architecture & data flow
 
@@ -191,7 +208,8 @@ reflow rule they **reflow, never collapse** behind a menu.
 
 ## Calibration constants (backend-only, tunable)
 
-- `valueSpread.constants.ts`: `SPREAD_GATE = 15` (percentile points to fire a tag).
+- `valueSpread.constants.ts`: `SPREAD_GATE = 15` / `SPREAD_GATE_OLD = 10` (age-scaled percentile
+  points to fire a tag).
 - `ageBands.constants.ts`: per-position `[youngMax, primeMax, agingMax]` cutoffs + global fallback.
 
 Same pattern as `tendencies.constants.ts` / `valueAdjustment.constants.ts` — not imported by client

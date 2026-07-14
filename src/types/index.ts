@@ -33,6 +33,8 @@ export interface Player {
   strategyTag?: StrategyTag | null;
   spreadDynRank?: number | null;
   spreadProjRank?: number | null;
+  spreadDynPct?: number | null;
+  spreadProjPct?: number | null;
   futurePickYear?: number | null;
   futurePickRound?: number | null;
   futurePickOriginHandle?: string | null;

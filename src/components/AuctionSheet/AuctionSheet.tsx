@@ -47,6 +47,7 @@ export default function AuctionSheet({
   const [modalError, setModalError] = useState<string>('');
   const [, startTransition] = useTransition();
   const [extraNominated, setExtraNominated] = useState<Array<number | string>>([]);
+  const [clearedNominations, setClearedNominations] = useState<Set<number | string>>(new Set());
 
   const [optimisticBids, dispatchOptimistic] = useOptimistic<ClaimedBid[], OptimisticAction>(
     claimedBids,
@@ -65,8 +66,13 @@ export default function AuctionSheet({
   );
 
   const nominatedSet = useMemo(
-    () => new Set([...nominatedPlayers, ...extraNominated]),
-    [nominatedPlayers, extraNominated],
+    () =>
+      new Set(
+        [...nominatedPlayers, ...extraNominated].filter(
+          (playerId) => !clearedNominations.has(playerId),
+        ),
+      ),
+    [nominatedPlayers, extraNominated, clearedNominations],
   );
 
   const futurePickYear = useMemo(
@@ -133,6 +139,10 @@ export default function AuctionSheet({
             teamId,
             draftId,
           });
+          setClearedNominations((previous) => new Set(previous).add(playerId));
+          setExtraNominated((previous) =>
+            previous.filter((nominatedId) => nominatedId !== playerId),
+          );
           await recordBidLogged(modalPlayer.player);
           setModalPlayer(null);
         } catch (e) {

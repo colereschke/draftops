@@ -188,6 +188,18 @@ describe('AuctionSheet with claimed bids', () => {
     expect(screen.getByText(/in auction/i)).toBeInTheDocument();
   });
 
+  it('removes the LIVE badge after a nominated player is won', async () => {
+    const user = userEvent.setup();
+    renderSheet({ nominatedPlayers: [10] });
+
+    expect(screen.getByText('LIVE')).toBeInTheDocument();
+    await user.click(screen.getAllByText('Josh Allen')[0]);
+    await user.type(screen.getByTestId('bid-price'), '110');
+    await user.click(screen.getByTestId('bid-submit'));
+
+    await waitFor(() => expect(screen.queryByText('LIVE')).not.toBeInTheDocument());
+  });
+
   it('closes modal, shows LIVE badge, and calls /api/draft/1/nominated after clicking Nom', async () => {
     const user = userEvent.setup();
     renderSheet();

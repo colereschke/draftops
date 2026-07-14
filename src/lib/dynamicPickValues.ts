@@ -32,6 +32,11 @@ interface OriginRoster {
 
 const MIN_BIDS = 1;
 const MAX_TOTAL_ADJUSTMENT = 0.15;
+const MARKET_CENTER_MIN_ORIGINS = 4;
+const SURPLUS_ADJUSTMENT_WEIGHT = 0.46;
+const LINEUP_STRENGTH_WEIGHT = 0.05;
+const VOR_STRENGTH_WEIGHT = 0.05;
+const REBUILD_SIGNAL_WEIGHT = 0.08;
 
 export function applyDynamicPickValues({
   players,
@@ -39,6 +44,7 @@ export function applyDynamicPickValues({
   startingLineup,
 }: ApplyDynamicPickValuesInput): Player[] {
   const signalsByOrigin = computeOriginSignals(players, bids, startingLineup);
+  const marketSurplusBaseline = computeMarketSurplusBaseline(signalsByOrigin);
 
   return players.map((player) => {
     if (!player.futurePickOriginHandle) return player;
@@ -50,11 +56,12 @@ export function applyDynamicPickValues({
       return withDynamicValue(player, baseline, baseline);
     }
 
+    const relativeSurplusRate = signals.surplusRate - marketSurplusBaseline;
     const adjustment = clamp(
-      -signals.surplusRate * 0.25 -
-        normalizeStrength(signals.lineupPoints, 120, 750) * 0.05 -
-        normalizeStrength(signals.vor, 0, 180) * 0.05 +
-        rebuildSignal(signals) * 0.08,
+      -relativeSurplusRate * SURPLUS_ADJUSTMENT_WEIGHT -
+        normalizeStrength(signals.lineupPoints, 120, 750) * LINEUP_STRENGTH_WEIGHT -
+        normalizeStrength(signals.vor, 0, 180) * VOR_STRENGTH_WEIGHT +
+        rebuildSignal(signals) * REBUILD_SIGNAL_WEIGHT,
       -MAX_TOTAL_ADJUSTMENT,
       MAX_TOTAL_ADJUSTMENT,
     );
@@ -113,6 +120,25 @@ function computeOriginSignals(
   }
 
   return signalsByOrigin;
+}
+
+function computeMarketSurplusBaseline(signalsByOrigin: Map<string, OriginSignals>): number {
+  const eligibleSurplusRates = [...signalsByOrigin.values()]
+    .filter((signals) => signals.playerCount >= MIN_BIDS && signals.spend > 0)
+    .map((signals) => signals.surplusRate)
+    .sort((a, b) => a - b);
+
+  if (eligibleSurplusRates.length < MARKET_CENTER_MIN_ORIGINS) return 0;
+
+  return median(eligibleSurplusRates);
+}
+
+function median(sortedValues: number[]): number {
+  const midpoint = Math.floor(sortedValues.length / 2);
+
+  if (sortedValues.length % 2 === 1) return sortedValues[midpoint] ?? 0;
+
+  return ((sortedValues[midpoint - 1] ?? 0) + (sortedValues[midpoint] ?? 0)) / 2;
 }
 
 function getOrCreateRoster(

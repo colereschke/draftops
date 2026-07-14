@@ -222,4 +222,119 @@ describe('applyDynamicPickValues', () => {
       adjusted.find((player) => player.player === "origin's 2027 package")!.budget,
     ).toBeLessThan(109);
   });
+
+  it('meaningfully raises an origin package when the team exhausts budget at a large overpay', () => {
+    const players = [
+      p({
+        player: 'Patrick Mahomes',
+        pos: 'QB',
+        budget: 100,
+        projectedPoints: 330,
+        vor: 90,
+        age: 30,
+      }),
+      p({ player: 'Spencer Rattler', pos: 'QB', budget: 5, projectedPoints: 0, vor: 0, age: 25 }),
+      p({ player: 'Marcus Mariota', pos: 'QB', budget: 5, projectedPoints: 0, vor: 0, age: 32 }),
+      p({
+        player: 'Jonathan Taylor',
+        pos: 'RB',
+        budget: 120,
+        projectedPoints: 230,
+        vor: 55,
+        age: 27,
+      }),
+      p({ player: 'Malik Davis', pos: 'RB', budget: 5, projectedPoints: 0, vor: 0, age: 27 }),
+      p({ player: 'Brashard Smith', pos: 'RB', budget: 5, projectedPoints: 0, vor: 0, age: 23 }),
+      p({
+        player: 'George Pickens',
+        budget: 125,
+        projectedPoints: 220,
+        vor: 50,
+        age: 25,
+      }),
+      p({ player: 'Stefon Diggs', budget: 20, projectedPoints: 90, vor: 5, age: 32 }),
+      p({
+        player: 'Trey McBride',
+        pos: 'TE',
+        budget: 195,
+        projectedPoints: 240,
+        vor: 70,
+        age: 26,
+      }),
+      p({ player: 'Dalton Schultz', pos: 'TE', budget: 6, projectedPoints: 0, vor: 0, age: 30 }),
+      p({ player: 'Michael Mayer', pos: 'TE', budget: 6, projectedPoints: 0, vor: 0, age: 25 }),
+      p({ player: 'Ben Sinnott', pos: 'TE', budget: 6, projectedPoints: 0, vor: 0, age: 24 }),
+      p({
+        player: "overpay-team's 2027 package",
+        pos: 'PKG',
+        team: 'overpay-team',
+        budget: 109,
+        ceiling: 131,
+        floor: 75,
+        futurePickOriginHandle: 'overpay-team',
+        futurePickAssetKind: 'package',
+        futurePickYear: 2027,
+      }),
+    ];
+
+    const adjusted = applyDynamicPickValues({
+      players,
+      bids: [
+        bid('Patrick Mahomes', 'overpay-team', 200),
+        bid('Spencer Rattler', 'overpay-team', 1),
+        bid('Marcus Mariota', 'overpay-team', 1),
+        bid('Jonathan Taylor', 'overpay-team', 200),
+        bid('Malik Davis', 'overpay-team', 1),
+        bid('Brashard Smith', 'overpay-team', 1),
+        bid('George Pickens', 'overpay-team', 250),
+        bid('Stefon Diggs', 'overpay-team', 18),
+        bid('Trey McBride', 'overpay-team', 325),
+        bid('Dalton Schultz', 'overpay-team', 1),
+        bid('Michael Mayer', 'overpay-team', 1),
+        bid('Ben Sinnott', 'overpay-team', 1),
+      ],
+      startingLineup: lineup,
+    });
+
+    expect(adjusted.find((player) => player.player === "overpay-team's 2027 package")!.budget).toBe(
+      119,
+    );
+  });
+
+  it('centers common overpay once enough origin teams have market data', () => {
+    const origins = ['alpha', 'bravo', 'charlie', 'delta'];
+    const players = origins.flatMap((origin, index) => [
+      p({
+        player: `${origin} QB`,
+        pos: 'QB',
+        budget: 600,
+        projectedPoints: 800 - index,
+        vor: 200 - index,
+        age: 25,
+      }),
+      p({
+        player: `${origin} 2027 package`,
+        pos: 'PKG',
+        team: origin,
+        budget: 109,
+        ceiling: 131,
+        floor: 75,
+        futurePickOriginHandle: origin,
+        futurePickAssetKind: 'package' as const,
+        futurePickYear: 2027,
+      }),
+    ]);
+
+    const adjusted = applyDynamicPickValues({
+      players,
+      bids: origins.map((origin) => bid(`${origin} QB`, origin, 1000)),
+      startingLineup: lineup,
+    });
+
+    for (const origin of origins) {
+      expect(adjusted.find((player) => player.player === `${origin} 2027 package`)!.budget).toBe(
+        98,
+      );
+    }
+  });
 });

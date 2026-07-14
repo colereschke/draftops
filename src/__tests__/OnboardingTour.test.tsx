@@ -159,6 +159,15 @@ describe('OnboardingTour', () => {
     expect(screen.getByTestId('onboarding-tour')).toHaveTextContent('Log a practice bid');
   });
 
+  it('explains how to log a bid and nominate a player during practice steps', () => {
+    expect(TOUR_STEPS.BID_PRACTICE.copy(null)).toBe(
+      'Click any available player to open the bid form. Choose the winning manager, enter the price, then select Log Bid.',
+    );
+    expect(TOUR_STEPS.NOMINATE_PRACTICE.copy(null)).toBe(
+      'Click Nom beside a suggested player to mark them live for the room.',
+    );
+  });
+
   it('keeps the nomination step active when data resolves after the normal missing-target timeout', async () => {
     jest.useFakeTimers();
     mockPathname = '/draft/5/nominate';

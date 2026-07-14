@@ -16,7 +16,8 @@ export const TOUR_STEPS: Record<OnboardingStep, TourStep> = {
     route: (draftId) => `/draft/${draftId}`,
     target: 'bid-practice',
     title: 'Log a practice bid',
-    copy: () => 'Try logging a bid to see budgets and rosters update together.',
+    copy: () =>
+      'Click any available player to open the bid form. Choose the winning manager, enter the price, then select Log Bid.',
     nextStep: 'BUDGET_PRESSURE',
     nextRoute: (draftId) => `/draft/${draftId}/budget`,
     waitsForAction: true,
@@ -65,7 +66,7 @@ export const TOUR_STEPS: Record<OnboardingStep, TourStep> = {
     route: (draftId) => `/draft/${draftId}/nominate`,
     target: 'nominate-practice',
     title: 'Try a nomination',
-    copy: () => 'Nominate a player to mark them live for the room.',
+    copy: () => 'Click Nom beside a suggested player to mark them live for the room.',
     nextStep: null,
     nextRoute: null,
     waitsForAction: true,

@@ -123,8 +123,12 @@ export default function NewDraftPage() {
 
   const SLOT_OPTIONS: StartingSlot[] = ['QB', 'RB', 'WR', 'TE', 'FLEX', 'SUPER_FLEX'];
 
+  function sortSlots(slots: StartingSlot[]): StartingSlot[] {
+    return [...slots].sort((a, b) => SLOT_OPTIONS.indexOf(a) - SLOT_OPTIONS.indexOf(b));
+  }
+
   function addSlot() {
-    setStartingLineup((prev) => [...prev, 'FLEX']);
+    setStartingLineup((prev) => sortSlots([...prev, 'FLEX']));
   }
 
   function removeSlot(index: number) {
@@ -132,7 +136,7 @@ export default function NewDraftPage() {
   }
 
   function updateSlot(index: number, slot: StartingSlot) {
-    setStartingLineup((prev) => prev.map((s, i) => (i === index ? slot : s)));
+    setStartingLineup((prev) => sortSlots(prev.map((s, i) => (i === index ? slot : s))));
   }
 
   function handleImport() {

@@ -76,12 +76,13 @@ describe('NewDraftPage — roster settings and lineup', () => {
     expect(screen.getByTestId<HTMLSelectElement>('lineup-slot-9').value).toBe('SUPER_FLEX');
   });
 
-  it('adds a FLEX slot when Add slot is clicked', () => {
+  it('adds a FLEX slot when Add slot is clicked, sorted into the FLEX group', () => {
     render(<NewDraftPage />);
     fireEvent.click(screen.getByTestId('add-lineup-slot'));
     const slots = screen.getAllByTestId(/^lineup-slot-\d+$/);
     expect(slots).toHaveLength(11);
-    expect(screen.getByTestId<HTMLSelectElement>('lineup-slot-10').value).toBe('FLEX');
+    expect(screen.getByTestId<HTMLSelectElement>('lineup-slot-9').value).toBe('FLEX');
+    expect(screen.getByTestId<HTMLSelectElement>('lineup-slot-10').value).toBe('SUPER_FLEX');
   });
 
   it('removes the correct slot when × is clicked', () => {
@@ -94,10 +95,44 @@ describe('NewDraftPage — roster settings and lineup', () => {
     expect(screen.getByTestId<HTMLSelectElement>('lineup-slot-0').value).toBe('RB');
   });
 
-  it('changes slot type when a different option is selected', () => {
+  it('changes slot type and re-sorts the lineup into canonical order', () => {
     render(<NewDraftPage />);
     fireEvent.change(screen.getByTestId('lineup-slot-0'), { target: { value: 'SUPER_FLEX' } });
-    expect(screen.getByTestId<HTMLSelectElement>('lineup-slot-0').value).toBe('SUPER_FLEX');
+    const slots = screen.getAllByTestId<HTMLSelectElement>(/^lineup-slot-\d+$/);
+    expect(slots.map((s) => s.value)).toEqual([
+      'RB',
+      'RB',
+      'WR',
+      'WR',
+      'TE',
+      'FLEX',
+      'FLEX',
+      'FLEX',
+      'SUPER_FLEX',
+      'SUPER_FLEX',
+    ]);
+  });
+
+  it('groups a newly-added slot with same-position slots once its type is chosen', () => {
+    render(<NewDraftPage />);
+    fireEvent.click(screen.getByTestId('add-lineup-slot')); // appends FLEX, sorts to index 9
+    fireEvent.change(screen.getByTestId('lineup-slot-9'), { target: { value: 'RB' } });
+    const slots = screen.getAllByTestId<HTMLSelectElement>(/^lineup-slot-\d+$/);
+    // Default lineup's RBs are at indices 1-2; the newly-added RB should land at index 3,
+    // immediately after them — not at the end.
+    expect(slots.map((s) => s.value)).toEqual([
+      'QB',
+      'RB',
+      'RB',
+      'RB',
+      'WR',
+      'WR',
+      'TE',
+      'FLEX',
+      'FLEX',
+      'FLEX',
+      'SUPER_FLEX',
+    ]);
   });
 
   it('allows clearing the roster size field to empty while retyping', () => {

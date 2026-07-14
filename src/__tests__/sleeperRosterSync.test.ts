@@ -98,4 +98,32 @@ describe('reconcileSleeperRosters', () => {
     expect(preview.actionable).toEqual([]);
     expect(preview.unresolved).toEqual([{ sleeperId: 'unlinked', sleeperRosterId: 9 }]);
   });
+
+  it('leaves roster players unresolved when multiple stored players share a Sleeper ID', () => {
+    const preview = reconcileSleeperRosters({
+      ...input,
+      rosters: [{ roster_id: 9, owner_id: 'u1', players: ['known'] }],
+      players: [
+        {
+          id: 3,
+          sleeperId: 'known',
+          name: 'First Player',
+          pos: 'WR',
+          nflTeam: 'ATL',
+          budget: 42,
+        },
+        {
+          id: 4,
+          sleeperId: 'known',
+          name: 'Second Player',
+          pos: 'WR',
+          nflTeam: 'ATL',
+          budget: 41,
+        },
+      ],
+    });
+
+    expect(preview.actionable).toEqual([]);
+    expect(preview.unresolved).toEqual([{ sleeperId: 'known', sleeperRosterId: 9 }]);
+  });
 });

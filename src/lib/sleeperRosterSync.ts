@@ -68,11 +68,19 @@ export function reconcileSleeperRosters(input: ReconcileSleeperRostersInput): Sl
     teamsByRosterId.set(team.sleeperRosterId, team);
   }
 
-  const playersBySleeperId = new Map(
-    input.players.flatMap((player) =>
-      player.sleeperId ? [[player.sleeperId, player] as const] : [],
-    ),
-  );
+  const playersBySleeperId = new Map<string, SleeperRosterSyncPlayer>();
+  const duplicateSleeperIds = new Set<string>();
+
+  for (const player of input.players) {
+    if (player.sleeperId === null) continue;
+
+    if (playersBySleeperId.has(player.sleeperId)) {
+      duplicateSleeperIds.add(player.sleeperId);
+      continue;
+    }
+
+    playersBySleeperId.set(player.sleeperId, player);
+  }
   const actionable: SleeperRosterActionableRow[] = [];
   const unresolved: SleeperRosterUnresolvedRow[] = [];
   const unmappedRosterIds: number[] = [];
@@ -88,6 +96,11 @@ export function reconcileSleeperRosters(input: ReconcileSleeperRostersInput): Sl
     if (duplicateMappedRosterIds.has(roster.roster_id)) continue;
 
     for (const sleeperId of roster.players ?? []) {
+      if (duplicateSleeperIds.has(sleeperId)) {
+        unresolved.push({ sleeperId, sleeperRosterId: roster.roster_id });
+        continue;
+      }
+
       const player = playersBySleeperId.get(sleeperId);
       if (!player) {
         unresolved.push({ sleeperId, sleeperRosterId: roster.roster_id });

@@ -13,6 +13,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { strategyTagReason } from '@/lib/valueSpread';
+
+function formatSpread(spread: number): string {
+  return spread > 0 ? `+${spread}` : String(spread);
+}
 
 interface BidModalProps {
   player: Player;
@@ -129,6 +134,39 @@ export default function BidModal({
                 </div>
               </div>
             </div>
+
+            {player.spread != null && (
+              <div data-testid="bid-spread" className="mt-2.5 border-t border-border-subtle pt-2">
+                <div className="font-mono text-[11px] tabular-nums text-secondary-fg">
+                  Rank: Dyn #{player.spreadDynRank} · Proj #{player.spreadProjRank} · Spread{' '}
+                  <span
+                    style={{
+                      color:
+                        player.spread > 0
+                          ? 'var(--age-young)'
+                          : player.spread < 0
+                            ? 'var(--age-old)'
+                            : 'var(--text-muted)',
+                    }}
+                  >
+                    {formatSpread(player.spread)}
+                  </span>
+                </div>
+                {player.strategyTag && (
+                  <div data-testid="bid-strategy-tag" className="mt-2 flex items-start gap-2">
+                    <span
+                      className="font-label rounded px-1.5 py-0.5 text-[9px] font-bold tracking-wide uppercase"
+                      style={{ background: 'var(--pos-pick)', color: 'var(--bg-base)' }}
+                    >
+                      {player.strategyTag}
+                    </span>
+                    <span className="text-[11px] leading-tight text-muted-foreground">
+                      {strategyTagReason(player.strategyTag)}
+                    </span>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         )}
 

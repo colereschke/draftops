@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo } from 'react';
-import type { Position } from '@/types';
+import type { Player, Position } from '@/types';
 import type { ScoredPlayer } from '@/lib/nominationScoring';
 import { POS_COLORS } from '@/lib/posColors';
 import { cn } from '@/lib/utils';
@@ -26,8 +26,8 @@ interface NominationTableProps {
   posFilter: 'ALL' | Position;
   onPosFilterChange: (pos: 'ALL' | Position) => void;
   hasAuctionData: boolean;
-  onWatch: (playerName: string) => void;
-  onNominate: (playerName: string) => void;
+  onWatch: (player: Player) => void;
+  onNominate: (player: Player) => void;
 }
 
 export default function NominationTable({
@@ -174,7 +174,7 @@ export default function NominationTable({
                   <Button
                     variant="outline"
                     size="xs"
-                    onClick={() => onWatch(player.player)}
+                    onClick={() => onWatch(player)}
                     className="font-label tracking-wide hover:border-[var(--pos-rb)]"
                     style={{ color: 'var(--pos-rb)' }}
                   >
@@ -185,7 +185,7 @@ export default function NominationTable({
                   <Button
                     variant="outline"
                     size="xs"
-                    onClick={() => onNominate(player.player)}
+                    onClick={() => onNominate(player)}
                     data-testid={`nominate-player-${player.player}`}
                     data-onboarding-target="nominate-practice"
                     className="font-label tracking-wide hover:border-[var(--pos-pick)]"

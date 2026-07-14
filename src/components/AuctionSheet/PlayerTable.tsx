@@ -20,8 +20,8 @@ interface PlayerTableProps {
   players: Player[];
   showNotes: boolean;
   hasClaims: boolean;
-  claimMap: Map<string, ClaimedBid>;
-  nominatedSet: Set<string>;
+  claimMap: Map<number | string, ClaimedBid>;
+  nominatedSet: Set<number | string>;
   sortBy: SortKey;
   sortDir: 'asc' | 'desc';
   onboardingSubjectPlayerName?: string | null;
@@ -115,8 +115,9 @@ export default function PlayerTable({
             const c = POS_COLORS[p.pos];
             const isRookie = p.notes.toLowerCase().includes('rookie');
             const isPkg = p.pos === 'PKG';
-            const isNominated = nominatedSet.has(p.player);
-            const claim = claimMap.get(p.player);
+            const key = p.id ?? p.player;
+            const isNominated = nominatedSet.has(key);
+            const claim = claimMap.get(key);
             const isOnboardingUndoTarget =
               claim !== undefined && onboardingSubjectPlayerName === p.player;
             return (

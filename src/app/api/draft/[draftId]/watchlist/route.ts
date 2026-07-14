@@ -14,16 +14,22 @@ export async function POST(
   const draft = await getDraft(session.user.id, draftId);
   if (!draft) return NextResponse.json({ error: 'No draft found' }, { status: 404 });
 
-  const body = (await request.json()) as { playerName?: string };
-  if (!body.playerName) {
-    return NextResponse.json({ error: 'playerName required' }, { status: 400 });
+  const body = (await request.json()) as { playerId?: number };
+  if (typeof body.playerId !== 'number') {
+    return NextResponse.json({ error: 'playerId required' }, { status: 400 });
   }
-  const entry = await prisma.playerWatchlist.upsert({
-    where: { playerName_draftId: { playerName: body.playerName, draftId: draft.id } },
-    create: { playerName: body.playerName, draftId: draft.id },
-    update: {},
+  const player = await prisma.player.findFirst({
+    where: { id: body.playerId, draftId: draft.id },
+    select: { id: true, name: true },
   });
-  return NextResponse.json({ playerName: entry.playerName });
+  if (!player) return NextResponse.json({ error: 'Player not found' }, { status: 404 });
+
+  const entry = await prisma.playerWatchlist.upsert({
+    where: { playerId_draftId: { playerId: player.id, draftId: draft.id } },
+    create: { playerId: player.id, playerName: player.name, draftId: draft.id },
+    update: { playerName: player.name },
+  });
+  return NextResponse.json({ playerId: entry.playerId, playerName: entry.playerName });
 }
 
 export async function DELETE(
@@ -37,13 +43,13 @@ export async function DELETE(
   const draft = await getDraft(session.user.id, draftId);
   if (!draft) return NextResponse.json({ error: 'No draft found' }, { status: 404 });
 
-  const body = (await request.json()) as { playerName?: string };
-  if (!body.playerName) {
-    return NextResponse.json({ error: 'playerName required' }, { status: 400 });
+  const body = (await request.json()) as { playerId?: number };
+  if (typeof body.playerId !== 'number') {
+    return NextResponse.json({ error: 'playerId required' }, { status: 400 });
   }
   try {
     await prisma.playerWatchlist.delete({
-      where: { playerName_draftId: { playerName: body.playerName, draftId: draft.id } },
+      where: { playerId_draftId: { playerId: body.playerId, draftId: draft.id } },
     });
   } catch (e) {
     if ((e as { code?: string }).code !== 'P2025') {

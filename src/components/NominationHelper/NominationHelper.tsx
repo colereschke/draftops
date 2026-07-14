@@ -11,8 +11,8 @@ import NominationTable from './NominationTable';
 interface NomData {
   teamStats: TeamStats[];
   auctionResults: AuctionResultEntry[];
-  watchlist: string[];
-  nominated: string[];
+  watchlist: number[];
+  nominated: number[];
   ownerHandle: string | null;
   targetRoster: Partial<Record<Position, number>>;
 }
@@ -56,7 +56,15 @@ export default function NominationHelper({ draftId, players }: NominationHelperP
     return () => clearInterval(interval);
   }, [router, draftId]);
 
-  const wonNames = useMemo(() => new Set(data?.auctionResults.map((r) => r.player) ?? []), [data]);
+  const wonIds = useMemo(
+    () =>
+      new Set(
+        data?.auctionResults.flatMap((result) =>
+          typeof result.playerId === 'number' ? [result.playerId] : [],
+        ) ?? [],
+      ),
+    [data],
+  );
 
   const scored = useMemo<ScoredPlayer[]>(() => {
     if (!data) return [];
@@ -72,13 +80,15 @@ export default function NominationHelper({ draftId, players }: NominationHelperP
     );
   }, [data, players]);
 
-  const addToWatchlist = async (playerName: string) => {
+  const addToWatchlist = async (player: Player) => {
+    const playerId = player.id;
+    if (playerId === undefined) return;
     const snapshot = data;
-    setData((prev) => (prev ? { ...prev, watchlist: [...prev.watchlist, playerName] } : prev));
+    setData((prev) => (prev ? { ...prev, watchlist: [...prev.watchlist, playerId] } : prev));
     const res = await fetch(`/api/draft/${draftId}/watchlist`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ playerName }),
+      body: JSON.stringify({ playerId }),
     });
     if (!res.ok) {
       if (res.status === 401) {
@@ -89,15 +99,15 @@ export default function NominationHelper({ draftId, players }: NominationHelperP
     }
   };
 
-  const removeFromWatchlist = async (playerName: string) => {
+  const removeFromWatchlist = async (playerId: number) => {
     const snapshot = data;
     setData((prev) =>
-      prev ? { ...prev, watchlist: prev.watchlist.filter((n) => n !== playerName) } : prev,
+      prev ? { ...prev, watchlist: prev.watchlist.filter((id) => id !== playerId) } : prev,
     );
     const res = await fetch(`/api/draft/${draftId}/watchlist`, {
       method: 'DELETE',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ playerName }),
+      body: JSON.stringify({ playerId }),
     });
     if (!res.ok) {
       if (res.status === 401) {
@@ -108,15 +118,17 @@ export default function NominationHelper({ draftId, players }: NominationHelperP
     }
   };
 
-  const nominatePlayer = async (playerName: string) => {
+  const nominatePlayer = async (player: Player) => {
+    const playerId = player.id;
+    if (playerId === undefined) return;
     const snapshot = data;
-    setData((prev) => (prev ? { ...prev, nominated: [...prev.nominated, playerName] } : prev));
+    setData((prev) => (prev ? { ...prev, nominated: [...prev.nominated, playerId] } : prev));
     let res: Response;
     try {
       res = await fetch(`/api/draft/${draftId}/nominated`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ playerName }),
+        body: JSON.stringify({ playerId }),
       });
     } catch {
       setData(snapshot);
@@ -130,18 +142,18 @@ export default function NominationHelper({ draftId, players }: NominationHelperP
       setData(snapshot);
       return;
     }
-    await recordPlayerNominated(playerName);
+    await recordPlayerNominated(player.player);
   };
 
-  const unNominatePlayer = async (playerName: string) => {
+  const unNominatePlayer = async (playerId: number) => {
     const snapshot = data;
     setData((prev) =>
-      prev ? { ...prev, nominated: prev.nominated.filter((n) => n !== playerName) } : prev,
+      prev ? { ...prev, nominated: prev.nominated.filter((id) => id !== playerId) } : prev,
     );
     const res = await fetch(`/api/draft/${draftId}/nominated`, {
       method: 'DELETE',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ playerName }),
+      body: JSON.stringify({ playerId }),
     });
     if (!res.ok) {
       if (res.status === 401) {
@@ -181,10 +193,14 @@ export default function NominationHelper({ draftId, players }: NominationHelperP
         players={players}
         nominated={data.nominated}
         watchlist={data.watchlist}
-        wonNames={wonNames}
+        wonIds={wonIds}
         onAddToWatchlist={addToWatchlist}
-        onRemoveFromWatchlist={removeFromWatchlist}
-        onUnNominate={unNominatePlayer}
+        onRemoveFromWatchlist={(playerId) => {
+          if (typeof playerId === 'number') void removeFromWatchlist(playerId);
+        }}
+        onUnNominate={(playerId) => {
+          if (typeof playerId === 'number') void unNominatePlayer(playerId);
+        }}
         onboardingSubjectPlayerName={progress?.subjectPlayerName ?? null}
       />
 

@@ -11,6 +11,8 @@ import {
   generateFuturePickAssets,
   getNextFuturePickYear,
 } from '../src/lib/futurePickAssets';
+import { getCustomPlayerKey } from '../src/lib/playerIdentity';
+import { getEtrSleeperMatches } from '../src/lib/projectionIdentity';
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 const adapter = new PrismaPg(pool);
@@ -22,6 +24,7 @@ const prisma = new PrismaClient({ adapter });
 // duplicates existing ones. Safe to re-run whenever src/data/players.ts
 // gains new players (rookies, new pick-year packages, etc).
 async function main() {
+  const etrMatches = getEtrSleeperMatches();
   const drafts = await prisma.draft.findMany({
     select: { id: true, createdAt: true, teams: { select: { handle: true, displayName: true } } },
   });
@@ -30,16 +33,32 @@ async function main() {
   for (const draft of drafts) {
     const existing = await prisma.player.findMany({
       where: { draftId: draft.id },
-      select: { name: true },
+      select: { name: true, sleeperId: true, customKey: true },
     });
     const existingNames = new Set(existing.map((p) => p.name));
+    const existingSleeperIds = new Set(
+      existing.flatMap((player) => (player.sleeperId === null ? [] : [player.sleeperId])),
+    );
+    const existingCustomKeys = new Set(
+      existing.flatMap((player) => (player.customKey === null ? [] : [player.customKey])),
+    );
     const futurePickAssets = generateFuturePickAssets({
       teams: draft.teams,
       year: getNextFuturePickYear(draft.createdAt),
       startingRank: 900,
     });
     const seedPlayers = [...excludeStaticFuturePickRows(BASE_PLAYERS), ...futurePickAssets];
-    const missing = seedPlayers.filter((p) => !existingNames.has(p.player));
+    const missing = seedPlayers
+      .map((player, index) => {
+        const sleeperId = player.sleeperId ?? etrMatches.get(player.player) ?? null;
+        const customKey = getCustomPlayerKey(player, index);
+        return { player, index, sleeperId, customKey };
+      })
+      .filter(({ player, sleeperId, customKey }) => {
+        if (sleeperId) return !existingSleeperIds.has(sleeperId);
+        if (customKey) return !existingCustomKeys.has(customKey);
+        return !existingNames.has(player.player);
+      });
 
     if (missing.length === 0) {
       console.log(`  Draft ${draft.id}: up to date (${existing.length} players).`);
@@ -47,7 +66,7 @@ async function main() {
     }
 
     await prisma.player.createMany({
-      data: missing.map((p) => ({
+      data: missing.map(({ player: p, sleeperId, customKey }) => ({
         name: p.player,
         nflTeam: p.team,
         pos: p.pos,
@@ -59,7 +78,8 @@ async function main() {
         baseBudget: p.budget,
         baseCeiling: p.ceiling,
         baseFloor: p.floor,
-        sleeperId: null,
+        sleeperId,
+        customKey,
         notes: p.notes,
         futurePickYear: p.futurePickYear ?? null,
         futurePickRound: p.futurePickRound ?? null,

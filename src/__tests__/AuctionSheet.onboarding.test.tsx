@@ -25,6 +25,7 @@ const mockLogBid = jest.mocked(logBid);
 
 const PLAYERS: Player[] = [
   {
+    id: 10,
     player: 'Josh Allen',
     team: 'BUF',
     pos: 'QB',
@@ -92,6 +93,7 @@ describe('AuctionSheet onboarding bid events', () => {
   it('anchors bid undo to the matching claimed player', () => {
     const claim: ClaimedBid = {
       id: 1,
+      playerId: 10,
       player: 'Josh Allen',
       position: 'QB',
       price: 110,
@@ -104,7 +106,7 @@ describe('AuctionSheet onboarding bid events', () => {
         players={PLAYERS}
         showNotes={false}
         hasClaims
-        claimMap={new Map([[claim.player, claim]])}
+        claimMap={new Map([[10, claim]])}
         nominatedSet={new Set()}
         onboardingSubjectPlayerName="Josh Allen"
         sortBy="sfRank"

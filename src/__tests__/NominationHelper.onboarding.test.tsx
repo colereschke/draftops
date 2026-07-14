@@ -18,6 +18,7 @@ const mockRecordPlayerNominated = jest.fn<Promise<void>, [string]>().mockResolve
 
 const PLAYERS: Player[] = [
   {
+    id: 10,
     player: 'Josh Allen',
     team: 'BUF',
     pos: 'QB',
@@ -29,6 +30,7 @@ const PLAYERS: Player[] = [
     notes: '',
   },
   {
+    id: 11,
     player: 'Justin Jefferson',
     team: 'MIN',
     pos: 'WR',
@@ -45,6 +47,7 @@ const NOMINATION_DATA = {
   teamStats: [
     {
       id: 1,
+      playerId: 11,
       handle: 'other-manager',
       displayName: 'Other Manager',
       budget: 1000,
@@ -130,9 +133,9 @@ describe('NominationHelper onboarding nomination events', () => {
     render(
       <WatchlistSidebar
         players={PLAYERS}
-        nominated={['Josh Allen']}
+        nominated={[10]}
         watchlist={[]}
-        wonNames={new Set()}
+        wonIds={new Set()}
         onAddToWatchlist={jest.fn()}
         onRemoveFromWatchlist={jest.fn()}
         onUnNominate={jest.fn()}

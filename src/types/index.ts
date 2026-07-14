@@ -11,6 +11,7 @@ export interface FuturePickMetadata {
 }
 
 export interface Player {
+  id?: number;
   player: string;
   team: string;
   pos: Position;
@@ -21,6 +22,7 @@ export interface Player {
   floor: number;
   notes: string;
   sleeperId?: string | null;
+  customKey?: string | null;
   baseBudget?: number;
   baseCeiling?: number;
   baseFloor?: number;
@@ -57,6 +59,7 @@ export interface TeamStats {
 
 export interface AuctionResultEntry {
   id: number;
+  playerId?: number | null;
   player: string;
   position: string;
   nflTeam: string;
@@ -69,6 +72,7 @@ export interface AuctionResultEntry {
 
 export interface RosterEntry {
   id: number;
+  playerId?: number | null;
   player: string;
   position: string;
   nflTeam: string;
@@ -85,6 +89,7 @@ export interface TeamWithRoster extends TeamStats {
 
 export interface ClaimedBid {
   id: number;
+  playerId?: number | null;
   player: string;
   position: string;
   price: number;

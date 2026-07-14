@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { advanceOnboardingStep, completeOnboarding } from '@/lib/onboarding-actions';
 import { OnboardingProvider, useOnboarding } from '@/components/Onboarding/OnboardingContext';
 import OnboardingTour from '@/components/Onboarding/OnboardingTour';
+import NominationHelper from '@/components/NominationHelper/NominationHelper';
 import { TOUR_STEPS } from '@/components/Onboarding/tourSteps';
 import type { TourProgress } from '@/components/Onboarding/types';
 
@@ -28,6 +29,29 @@ const FEATURE_TOUR_PROGRESS: TourProgress = {
   step: 'VALUE_SHEET_INTRO',
   subjectPlayerName: null,
 };
+
+const NOMINATION_DATA = {
+  teamStats: [],
+  auctionResults: [],
+  watchlist: [],
+  nominated: [],
+  ownerHandle: null,
+  targetRoster: { QB: 4, RB: 9, WR: 11, TE: 3 },
+};
+
+const NOMINATION_PLAYERS = [
+  {
+    player: 'Josh Allen',
+    team: 'BUF',
+    pos: 'QB' as const,
+    age: 28,
+    sfRank: 1,
+    budget: 120,
+    ceiling: 138,
+    floor: 104,
+    notes: '',
+  },
+];
 
 beforeEach(() => {
   jest.clearAllMocks();
@@ -57,14 +81,13 @@ describe('OnboardingTour', () => {
     });
   });
 
-  it('navigates to the current step route before checking for its anchor', async () => {
+  it('hides the popover without interrupting manual navigation away from the current step', () => {
     mockPathname = '/draft/5/budget';
 
     render(<OnboardingTour progress={FEATURE_TOUR_PROGRESS} />);
 
-    await waitFor(() => {
-      expect(mockPush).toHaveBeenCalledWith('/draft/5');
-    });
+    expect(screen.queryByTestId('onboarding-tour')).not.toBeInTheDocument();
+    expect(mockPush).not.toHaveBeenCalled();
     expect(mockAdvanceOnboardingStep).not.toHaveBeenCalled();
   });
 
@@ -123,14 +146,61 @@ describe('OnboardingTour', () => {
       </>,
     );
 
-    await waitFor(() => {
-      expect(mockAdvanceOnboardingStep).toHaveBeenCalledWith({
-        draftId: 5,
-        step: 'BID_PRACTICE',
-      });
-    });
+    await waitFor(
+      () => {
+        expect(mockAdvanceOnboardingStep).toHaveBeenCalledWith({
+          draftId: 5,
+          step: 'BID_PRACTICE',
+        });
+      },
+      { timeout: 2_000 },
+    );
     expect(mockPush).toHaveBeenCalledWith('/draft/5');
     expect(screen.getByTestId('onboarding-tour')).toHaveTextContent('Log a practice bid');
+  });
+
+  it('waits for nomination anchors while nomination data is loading', async () => {
+    mockPathname = '/draft/5/nominate';
+    let resolveNominationData: ((value: Response) => void) | undefined;
+    global.fetch = jest.fn(
+      () =>
+        new Promise<Response>((resolve) => {
+          resolveNominationData = resolve;
+        }),
+    );
+    const progress: TourProgress = { ...FEATURE_TOUR_PROGRESS, step: 'NOMINATE_INTRO' };
+
+    render(
+      <OnboardingProvider progress={progress}>
+        <NominationHelper draftId={5} players={NOMINATION_PLAYERS} />
+      </OnboardingProvider>,
+    );
+
+    expect(screen.getByTestId('onboarding-tour')).toHaveTextContent('Nomination helper');
+    expect(mockAdvanceOnboardingStep).not.toHaveBeenCalled();
+
+    resolveNominationData?.({
+      ok: true,
+      status: 200,
+      json: async () => NOMINATION_DATA,
+    } as Response);
+
+    await screen.findByTestId('nomination-helper-layout');
+    expect(screen.getByTestId('onboarding-tour')).toHaveTextContent('Nomination helper');
+    expect(mockAdvanceOnboardingStep).not.toHaveBeenCalled();
+  });
+
+  it('shows compact progress for the current tour step', () => {
+    const valueSheet = TOUR_STEPS.VALUE_SHEET_INTRO;
+
+    render(
+      <>
+        <div data-onboarding-target={valueSheet.target} />
+        <OnboardingTour progress={FEATURE_TOUR_PROGRESS} />
+      </>,
+    );
+
+    expect(screen.getByTestId('onboarding-progress')).toHaveTextContent('1 of 8');
   });
 
   it('shows a persistence error instead of repeatedly bypassing a missing anchor', async () => {
@@ -138,7 +208,7 @@ describe('OnboardingTour', () => {
 
     render(<OnboardingTour progress={FEATURE_TOUR_PROGRESS} />);
 
-    expect(await screen.findByRole('alert')).toHaveTextContent(
+    expect(await screen.findByTestId('onboarding-error', {}, { timeout: 2_000 })).toHaveTextContent(
       'Unable to save tour progress. You can keep using DraftOps or skip the tour.',
     );
     expect(mockAdvanceOnboardingStep).toHaveBeenCalledTimes(1);

@@ -70,8 +70,8 @@ describe('AuctionSheet onboarding bid events', () => {
     renderSheet();
 
     await user.click(screen.getByTestId('player-row-1'));
-    await user.type(screen.getByLabelText('Price'), '110');
-    await user.click(screen.getByRole('button', { name: /log bid/i }));
+    await user.type(screen.getByTestId('bid-price'), '110');
+    await user.click(screen.getByTestId('bid-submit'));
 
     await waitFor(() => expect(mockRecordBidLogged).toHaveBeenCalledWith('Josh Allen'));
   });
@@ -82,12 +82,10 @@ describe('AuctionSheet onboarding bid events', () => {
     renderSheet();
 
     await user.click(screen.getByTestId('player-row-1'));
-    await user.type(screen.getByLabelText('Price'), '110');
-    await user.click(screen.getByRole('button', { name: /log bid/i }));
+    await user.type(screen.getByTestId('bid-price'), '110');
+    await user.click(screen.getByTestId('bid-submit'));
 
-    await waitFor(() =>
-      expect(screen.getByText('Failed to log bid. Please try again.')).toBeVisible(),
-    );
+    await waitFor(() => expect(screen.getByTestId('bid-server-error')).toBeVisible());
     expect(mockRecordBidLogged).not.toHaveBeenCalled();
   });
 

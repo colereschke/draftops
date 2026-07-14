@@ -10,6 +10,7 @@ import type { TourProgress } from './types';
 const PERSISTENCE_ERROR =
   'Unable to save tour progress. You can keep using DraftOps or skip the tour.';
 const VIEWPORT_MARGIN = 16;
+const ANCHOR_READY_TIMEOUT_MS = 1_000;
 
 interface OnboardingTourProps {
   progress: TourProgress | null;
@@ -112,17 +113,13 @@ export default function OnboardingTour({
     if (!progress) return;
     const step = TOUR_STEPS[progress.step];
     if (pathname !== step.route(progress.draftId)) {
-      router.push(step.route(progress.draftId));
       return;
     }
-    const anchor = document.querySelector<HTMLElement>(`[data-onboarding-target="${step.target}"]`);
+    let anchor: HTMLElement | null = null;
+    let updatePosition: (() => void) | null = null;
 
-    if (!anchor) {
-      const timeout = window.setTimeout(() => void bypassMissingTarget(), 0);
-      return () => window.clearTimeout(timeout);
-    }
-
-    const updatePosition = () => {
+    const positionForAnchor = () => {
+      if (!anchor) return;
       const anchorRect = anchor.getBoundingClientRect();
       const popoverRect = popoverRef.current?.getBoundingClientRect();
       const width = popoverRect?.width ?? 320;
@@ -137,31 +134,65 @@ export default function OnboardingTour({
       });
     };
 
-    if (!previousFocusRef.current && document.activeElement instanceof HTMLElement) {
-      previousFocusRef.current = document.activeElement;
+    const connectAnchor = () => {
+      anchor = document.querySelector<HTMLElement>(`[data-onboarding-target="${step.target}"]`);
+      if (!anchor) return false;
+      updatePosition = positionForAnchor;
+      if (!previousFocusRef.current && document.activeElement instanceof HTMLElement) {
+        previousFocusRef.current = document.activeElement;
+      }
+      updatePosition();
+      popoverRef.current?.focus();
+      window.addEventListener('resize', updatePosition);
+      window.addEventListener('scroll', updatePosition, true);
+      return true;
+    };
+
+    if (connectAnchor()) {
+      return () => {
+        if (updatePosition) {
+          window.removeEventListener('resize', updatePosition);
+          window.removeEventListener('scroll', updatePosition, true);
+        }
+      };
     }
-    updatePosition();
-    popoverRef.current?.focus();
-    window.addEventListener('resize', updatePosition);
-    window.addEventListener('scroll', updatePosition, true);
+
+    const observer = new MutationObserver(() => {
+      if (!connectAnchor()) return;
+      observer.disconnect();
+      window.clearTimeout(timeout);
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+    const timeout = window.setTimeout(() => {
+      observer.disconnect();
+      void bypassMissingTarget();
+    }, ANCHOR_READY_TIMEOUT_MS);
     return () => {
-      window.removeEventListener('resize', updatePosition);
-      window.removeEventListener('scroll', updatePosition, true);
+      observer.disconnect();
+      window.clearTimeout(timeout);
+      if (updatePosition) {
+        window.removeEventListener('resize', updatePosition);
+        window.removeEventListener('scroll', updatePosition, true);
+      }
     };
   }, [bypassMissingTarget, pathname, progress, router]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape' && progress) {
+      if (
+        event.key === 'Escape' &&
+        progress &&
+        pathname === TOUR_STEPS[progress.step].route(progress.draftId)
+      ) {
         event.preventDefault();
         void finishTour();
       }
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [finishTour, progress]);
+  }, [finishTour, pathname, progress]);
 
-  if (!progress) return null;
+  if (!progress || pathname !== TOUR_STEPS[progress.step].route(progress.draftId)) return null;
 
   const step = TOUR_STEPS[progress.step];
   const hasNext = step.nextStep !== null && step.nextRoute !== null;
@@ -200,6 +231,12 @@ export default function OnboardingTour({
       <p style={{ color: 'var(--pos-qb)', fontFamily: 'var(--font-barlow)', margin: '0 0 0.3rem' }}>
         DraftOps tour
       </p>
+      <p
+        data-testid="onboarding-progress"
+        style={{ color: 'var(--text-secondary)', margin: '0 0 0.4rem' }}
+      >
+        {Object.keys(TOUR_STEPS).indexOf(progress.step) + 1} of {Object.keys(TOUR_STEPS).length}
+      </p>
       <h2 id="onboarding-tour-title" style={{ color: 'var(--text-primary)', margin: 0 }}>
         {step.title}
       </h2>
@@ -207,7 +244,7 @@ export default function OnboardingTour({
         {step.copy(progress.subjectPlayerName)}
       </p>
       {displayedError && (
-        <p role="alert" style={{ color: 'var(--age-old)' }}>
+        <p data-testid="onboarding-error" role="alert" style={{ color: 'var(--age-old)' }}>
           {displayedError}
         </p>
       )}

@@ -4,6 +4,7 @@ import { useState, useMemo, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import type { Player, Position, TeamStats, AuctionResultEntry } from '@/types';
 import { computeNominationScores, type ScoredPlayer } from '@/lib/nominationScoring';
+import { useOnboarding } from '@/components/Onboarding/OnboardingContext';
 import WatchlistSidebar from './WatchlistSidebar';
 import NominationTable from './NominationTable';
 
@@ -23,6 +24,7 @@ interface NominationHelperProps {
 
 export default function NominationHelper({ draftId, players }: NominationHelperProps) {
   const router = useRouter();
+  const { progress, recordPlayerNominated } = useOnboarding();
   const [data, setData] = useState<NomData | null>(null);
   const [draftError, setDraftError] = useState<string | null>(null);
   const [posFilter, setPosFilter] = useState<'ALL' | Position>('ALL');
@@ -115,7 +117,9 @@ export default function NominationHelper({ draftId, players }: NominationHelperP
         return;
       }
       setData(snapshot);
+      return;
     }
+    await recordPlayerNominated(playerName);
   };
 
   const unNominatePlayer = async (playerName: string) => {
@@ -165,6 +169,7 @@ export default function NominationHelper({ draftId, players }: NominationHelperP
         onAddToWatchlist={addToWatchlist}
         onRemoveFromWatchlist={removeFromWatchlist}
         onUnNominate={unNominatePlayer}
+        onboardingSubjectPlayerName={progress?.subjectPlayerName ?? null}
       />
 
       <div className="min-w-0 flex-1 overflow-x-auto px-5 pt-4 pb-10">

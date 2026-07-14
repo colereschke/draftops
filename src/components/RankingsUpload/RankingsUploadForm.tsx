@@ -10,6 +10,7 @@ export interface RankingSummaryView {
   totalCount: number;
   matchedCount: number;
   unmatchedCount: number;
+  etrCoverage: { covered: number; total: number };
 }
 
 interface RankingsUploadFormProps {
@@ -66,19 +67,70 @@ export default function RankingsUploadForm({ summary }: RankingsUploadFormProps)
           >
             {summary.matchedCount} matched to Sleeper · {summary.unmatchedCount} unmatched
           </p>
+          <p
+            data-testid="rankings-etr-coverage"
+            style={{
+              margin: '0.25rem 0 0',
+              fontFamily: 'var(--font-mono)',
+              color: 'var(--text-secondary)',
+              fontSize: '0.8rem',
+            }}
+          >
+            Covers {summary.etrCoverage.covered} of {summary.etrCoverage.total} ETR-ranked players
+          </p>
         </div>
       ) : (
-        <p
-          style={{
-            margin: '0 0 0.75rem',
-            color: 'var(--text-secondary)',
-            fontFamily: 'var(--font-barlow)',
-            fontSize: '0.875rem',
-          }}
-        >
-          Upload an ETR dynasty rankings export (CSV) to use your own player pool at draft creation.
-          Required columns: Player, Team, Position, Age, 2QBAuction.
-        </p>
+        <div style={{ marginBottom: '0.75rem' }}>
+          <p
+            style={{
+              margin: '0 0 0.5rem',
+              color: 'var(--text-secondary)',
+              fontFamily: 'var(--font-barlow)',
+              fontSize: '0.875rem',
+            }}
+          >
+            Upload a custom rankings CSV to use your own player pool at draft creation — works with
+            an ETR export or any spreadsheet matching the format below.
+          </p>
+          <p
+            data-testid="rankings-column-legend"
+            style={{
+              margin: '0 0 0.25rem',
+              color: 'var(--text-secondary)',
+              fontFamily: 'var(--font-mono)',
+              fontSize: '0.75rem',
+            }}
+          >
+            <strong style={{ color: 'var(--text-primary)' }}>Required:</strong> Player, Team,
+            Position (QB/RB/WR/TE/Pick), Age, 2QBAuction (dollar value)
+          </p>
+          <p
+            style={{
+              margin: 0,
+              color: 'var(--text-secondary)',
+              fontFamily: 'var(--font-mono)',
+              fontSize: '0.75rem',
+            }}
+          >
+            <strong style={{ color: 'var(--text-primary)' }}>Optional:</strong> SF/TE Prem (explicit
+            rank — used instead of deriving rank from value), Notes
+          </p>
+          <a
+            href="/rankings-template.csv"
+            download
+            data-testid="rankings-template-link"
+            style={{
+              display: 'inline-block',
+              marginTop: '0.5rem',
+              color: 'var(--pos-te)',
+              fontFamily: 'var(--font-barlow)',
+              fontSize: '0.8rem',
+              fontWeight: 700,
+            }}
+          >
+            Download template CSV
+          </a>
+        </div>
       )}
 
       <label

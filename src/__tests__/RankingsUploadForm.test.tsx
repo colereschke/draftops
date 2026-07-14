@@ -21,6 +21,20 @@ describe('RankingsUploadForm', () => {
     expect(screen.getByTestId('rankings-upload-button')).toHaveTextContent('Upload CSV');
   });
 
+  it('documents required and optional columns in the empty state', () => {
+    render(<RankingsUploadForm summary={null} />);
+    const legend = screen.getByTestId('rankings-column-legend');
+    expect(legend).toHaveTextContent('Player, Team');
+    expect(legend).toHaveTextContent('2QBAuction');
+    expect(screen.getByText(/SF\/TE Prem/)).toBeInTheDocument();
+  });
+
+  it('links to the downloadable template CSV', () => {
+    render(<RankingsUploadForm summary={null} />);
+    const link = screen.getByTestId('rankings-template-link');
+    expect(link).toHaveAttribute('href', '/rankings-template.csv');
+  });
+
   it('shows the summary card when a ranking set exists', () => {
     render(
       <RankingsUploadForm
@@ -30,11 +44,15 @@ describe('RankingsUploadForm', () => {
           totalCount: 267,
           matchedCount: 260,
           unmatchedCount: 7,
+          etrCoverage: { covered: 300, total: 327 },
         }}
       />,
     );
     expect(screen.getByTestId('rankings-summary')).toHaveTextContent('267');
     expect(screen.getByTestId('rankings-upload-button')).toHaveTextContent('Re-upload CSV');
+    expect(screen.getByTestId('rankings-etr-coverage')).toHaveTextContent(
+      'Covers 300 of 327 ETR-ranked players',
+    );
   });
 
   it('uploads the selected file and shows no errors on success', async () => {

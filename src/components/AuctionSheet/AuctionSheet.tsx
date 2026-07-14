@@ -2,13 +2,20 @@
 'use client';
 
 import { useState, useMemo, useOptimistic, useTransition } from 'react';
+import dynamic from 'next/dynamic';
 import type { Player, Position, ClaimedBid, LeagueTeam, ScoringSettings } from '@/types';
 import { logBid, updateBid, deleteBid } from '@/lib/actions';
 import BidModal from '@/components/BidModal';
 import { useOnboarding } from '@/components/Onboarding/OnboardingContext';
+import { Button } from '@/components/ui/button';
 import AuctionHeader from './AuctionHeader';
 import FilterControls, { type PositionFilter } from './FilterControls';
 import PlayerTable, { type SortKey } from './PlayerTable';
+
+const SleeperRosterSyncDialog = dynamic(
+  () => import('@/components/SleeperRosterSync/SleeperRosterSyncDialog'),
+  { ssr: false },
+);
 
 type OptimisticAction =
   | { type: 'add'; bid: ClaimedBid }
@@ -24,6 +31,7 @@ interface AuctionSheetProps {
   ownerHandle: string | null;
   ownerBudget: number;
   scoringSettings: ScoringSettings;
+  sleeperSyncConfigured?: boolean;
 }
 
 export default function AuctionSheet({
@@ -35,6 +43,7 @@ export default function AuctionSheet({
   ownerHandle,
   ownerBudget,
   scoringSettings,
+  sleeperSyncConfigured = false,
 }: AuctionSheetProps) {
   const { progress, recordBidLogged } = useOnboarding();
   const [posFilter, setPosFilter] = useState<PositionFilter>('ALL');
@@ -48,6 +57,7 @@ export default function AuctionSheet({
   const [, startTransition] = useTransition();
   const [extraNominated, setExtraNominated] = useState<Array<number | string>>([]);
   const [clearedNominations, setClearedNominations] = useState<Set<number | string>>(new Set());
+  const [showSleeperSync, setShowSleeperSync] = useState<boolean>(false);
 
   const [optimisticBids, dispatchOptimistic] = useOptimistic<ClaimedBid[], OptimisticAction>(
     claimedBids,
@@ -278,6 +288,16 @@ export default function AuctionSheet({
           resultCount={filtered.length}
           futurePickYear={futurePickYear}
         />
+        <div className="border-b border-border px-5 py-2">
+          <Button
+            data-testid="open-sleeper-sync"
+            variant="outline"
+            size="sm"
+            onClick={() => setShowSleeperSync(true)}
+          >
+            Catch up from Sleeper
+          </Button>
+        </div>
       </div>
       <div data-onboarding-target="bid-practice">
         <PlayerTable
@@ -314,6 +334,14 @@ export default function AuctionSheet({
           serverError={modalError}
           isNominated={nominatedSet.has(playerIdentityKey(modalPlayer))}
           onNominate={() => handleNominate(modalPlayer)}
+        />
+      )}
+      {showSleeperSync && (
+        <SleeperRosterSyncDialog
+          draftId={draftId}
+          teams={teams}
+          initiallyConfigured={sleeperSyncConfigured}
+          onClose={() => setShowSleeperSync(false)}
         />
       )}
     </div>

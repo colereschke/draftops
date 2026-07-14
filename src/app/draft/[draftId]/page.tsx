@@ -36,7 +36,7 @@ export default async function DraftHomePage({ params }: { params: Promise<{ draf
     }),
     prisma.team.findMany({
       where: { draftId },
-      select: { id: true, handle: true, displayName: true },
+      select: { id: true, handle: true, displayName: true, sleeperRosterId: true },
       orderBy: { handle: 'asc' },
     }),
     prisma.nominatedPlayer.findMany({
@@ -86,6 +86,11 @@ export default async function DraftHomePage({ params }: { params: Promise<{ draf
     dynamicPlayers,
     fromPrismaFuturePickMode(draft.futurePickAuctionMode),
   );
+  const sleeperRosterIds = teams.map((team) => team.sleeperRosterId);
+  const sleeperSyncConfigured =
+    Boolean(draft.sleeperLeagueId) &&
+    sleeperRosterIds.every((rosterId) => rosterId !== null) &&
+    new Set(sleeperRosterIds).size === sleeperRosterIds.length;
 
   return (
     <AuctionSheet
@@ -97,6 +102,7 @@ export default async function DraftHomePage({ params }: { params: Promise<{ draf
       ownerHandle={draft.ownerTeam?.handle ?? null}
       ownerBudget={draft.ownerTeam?.budget ?? 1000}
       scoringSettings={(draft.scoringSettings ?? DEFAULT_SCORING_SETTINGS) as ScoringSettings}
+      sleeperSyncConfigured={sleeperSyncConfigured}
     />
   );
 }

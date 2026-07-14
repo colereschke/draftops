@@ -31,7 +31,10 @@ export type SleeperRosterSyncResponse =
     };
 
 export type SleeperRosterCatchUpResponse =
-  | { ok: false; code: 'invalid_input' }
+  | {
+      ok: false;
+      code: 'invalid_input' | 'not_found' | 'configuration_required' | 'sleeper_error';
+    }
   | {
       ok: true;
       createdPlayerIds: number[];
@@ -213,23 +216,20 @@ function isValidCatchUpInput(input: {
   );
 }
 
-function isUniqueConflict(error: unknown): boolean {
-  return typeof error === 'object' && error !== null && 'code' in error && error.code === 'P2002';
-}
-
 export async function logSleeperRosterCatchUp(input: {
   draftId: number;
   entries: SleeperRosterCatchUpEntry[];
 }): Promise<SleeperRosterCatchUpResponse> {
   if (!isValidCatchUpInput(input)) return { ok: false, code: 'invalid_input' };
   const draft = await requireOwnedDraft(input.draftId);
-  if (!draft?.sleeperLeagueId) return { ok: false, code: 'invalid_input' };
+  if (!draft) return { ok: false, code: 'not_found' };
+  if (!draft.sleeperLeagueId) return { ok: false, code: 'configuration_required' };
 
   let rosters: Awaited<ReturnType<typeof fetchSleeperLeagueRosters>>;
   try {
     rosters = await fetchSleeperLeagueRosters(draft.sleeperLeagueId);
   } catch {
-    return { ok: false, code: 'invalid_input' };
+    return { ok: false, code: 'sleeper_error' };
   }
 
   const result = await prisma.$transaction(async (tx) => {
@@ -259,12 +259,20 @@ export async function logSleeperRosterCatchUp(input: {
         sleeperRosterByPlayerId.set(sleeperId, roster.roster_id);
     }
 
-    const createdPlayerIds: number[] = [];
-    const conflicts: Array<{ playerId: number; reason: 'already_logged' | 'assignment_changed' }> =
-      [];
+    const conflictByPlayerId = new Map<number, 'already_logged' | 'assignment_changed'>();
+    const candidates: Array<{
+      player: string;
+      playerId: number;
+      position: string;
+      nflTeam: string;
+      price: number;
+      sfRank: number;
+      teamId: number;
+      draftId: number;
+    }> = [];
     for (const entry of input.entries) {
       if (loggedPlayerIds.has(entry.playerId)) {
-        conflicts.push({ playerId: entry.playerId, reason: 'already_logged' });
+        conflictByPlayerId.set(entry.playerId, 'already_logged');
         continue;
       }
       const player = playerById.get(entry.playerId);
@@ -275,33 +283,48 @@ export async function logSleeperRosterCatchUp(input: {
         !team?.sleeperRosterId ||
         sleeperRosterByPlayerId.get(player.sleeperId) !== team.sleeperRosterId
       ) {
-        conflicts.push({ playerId: entry.playerId, reason: 'assignment_changed' });
+        conflictByPlayerId.set(entry.playerId, 'assignment_changed');
         continue;
       }
-      try {
-        await tx.auctionResult.create({
-          data: {
-            player: player.name,
-            playerId: player.id,
-            position: player.pos,
-            nflTeam: player.nflTeam,
-            price: entry.price,
-            sfRank: player.sfRank,
-            teamId: team.id,
-            draftId: draft.id,
-          },
-        });
-        await tx.nominatedPlayer.deleteMany({ where: { draftId: draft.id, playerId: player.id } });
-        createdPlayerIds.push(player.id);
-      } catch (error) {
-        if (isUniqueConflict(error)) {
-          conflicts.push({ playerId: entry.playerId, reason: 'already_logged' });
-          continue;
-        }
-        throw error;
+      candidates.push({
+        player: player.name,
+        playerId: player.id,
+        position: player.pos,
+        nflTeam: player.nflTeam,
+        price: entry.price,
+        sfRank: player.sfRank,
+        teamId: team.id,
+        draftId: draft.id,
+      });
+    }
+    const insertedResults = await tx.auctionResult.createManyAndReturn({
+      data: candidates,
+      skipDuplicates: true,
+      select: { playerId: true },
+    });
+    const createdPlayerIdSet = new Set(
+      insertedResults.flatMap((result) => (result.playerId === null ? [] : [result.playerId])),
+    );
+    for (const candidate of candidates) {
+      if (!createdPlayerIdSet.has(candidate.playerId)) {
+        conflictByPlayerId.set(candidate.playerId, 'already_logged');
       }
     }
-    return { ok: true as const, createdPlayerIds, conflicts };
+    await Promise.all(
+      [...createdPlayerIdSet].map((playerId) =>
+        tx.nominatedPlayer.deleteMany({ where: { draftId: draft.id, playerId } }),
+      ),
+    );
+    return {
+      ok: true as const,
+      createdPlayerIds: input.entries
+        .map((entry) => entry.playerId)
+        .filter((playerId) => createdPlayerIdSet.has(playerId)),
+      conflicts: input.entries.flatMap((entry) => {
+        const reason = conflictByPlayerId.get(entry.playerId);
+        return reason === undefined ? [] : [{ playerId: entry.playerId, reason }];
+      }),
+    };
   });
   if (result.createdPlayerIds.length > 0) revalidatePath(`/draft/${draft.id}`);
   return result;

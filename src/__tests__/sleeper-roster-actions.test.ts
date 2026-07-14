@@ -18,6 +18,7 @@ const mockTeamUpdate = jest.fn();
 const mockPlayerFindMany = jest.fn();
 const mockAuctionFindMany = jest.fn();
 const mockAuctionCreate = jest.fn();
+const mockAuctionCreateManyAndReturn = jest.fn();
 const mockNominationDeleteMany = jest.fn();
 
 jest.mock('@/auth', () => ({ auth: () => mockAuth() }));
@@ -43,6 +44,7 @@ jest.mock('@/lib/db', () => ({
     auctionResult: {
       findMany: (...args: unknown[]) => mockAuctionFindMany(...args),
       create: (...args: unknown[]) => mockAuctionCreate(...args),
+      createManyAndReturn: (...args: unknown[]) => mockAuctionCreateManyAndReturn(...args),
     },
     nominatedPlayer: { deleteMany: (...args: unknown[]) => mockNominationDeleteMany(...args) },
   },
@@ -65,7 +67,11 @@ function transactionClient() {
     team: { findMany: mockTeamFindMany, updateMany: mockTeamUpdateMany, update: mockTeamUpdate },
     draft: { update: mockDraftUpdate },
     player: { findMany: mockPlayerFindMany },
-    auctionResult: { findMany: mockAuctionFindMany, create: mockAuctionCreate },
+    auctionResult: {
+      findMany: mockAuctionFindMany,
+      create: mockAuctionCreate,
+      createManyAndReturn: mockAuctionCreateManyAndReturn,
+    },
     nominatedPlayer: { deleteMany: mockNominationDeleteMany },
   };
 }
@@ -81,6 +87,9 @@ beforeEach(() => {
   mockPlayerFindMany.mockResolvedValue([PLAYER]);
   mockAuctionFindMany.mockResolvedValue([]);
   mockAuctionCreate.mockResolvedValue({});
+  mockAuctionCreateManyAndReturn.mockImplementation((args: { data: Array<{ playerId: number }> }) =>
+    Promise.resolve(args.data.map(({ playerId }) => ({ playerId }))),
+  );
   mockTransaction.mockImplementation(
     (callback: (tx: ReturnType<typeof transactionClient>) => unknown) =>
       callback(transactionClient()),
@@ -165,6 +174,30 @@ describe('Sleeper roster actions', () => {
     expect(mockNominationDeleteMany).toHaveBeenCalledWith({ where: { draftId: 4, playerId: 3 } });
   });
 
+  it('distinguishes missing ownership, Sleeper configuration, and Sleeper failures', async () => {
+    mockAuth.mockResolvedValue(null);
+    await expect(
+      logSleeperRosterCatchUp({ draftId: 4, entries: [{ playerId: 3, teamId: 7, price: 42 }] }),
+    ).resolves.toEqual({ ok: false, code: 'not_found' });
+
+    mockAuth.mockResolvedValue({ user: { id: 'owner' } });
+    mockGetDraft.mockResolvedValue(null);
+    await expect(
+      logSleeperRosterCatchUp({ draftId: 4, entries: [{ playerId: 3, teamId: 7, price: 42 }] }),
+    ).resolves.toEqual({ ok: false, code: 'not_found' });
+
+    mockGetDraft.mockResolvedValue({ ...DRAFT, sleeperLeagueId: null });
+    await expect(
+      logSleeperRosterCatchUp({ draftId: 4, entries: [{ playerId: 3, teamId: 7, price: 42 }] }),
+    ).resolves.toEqual({ ok: false, code: 'configuration_required' });
+
+    mockGetDraft.mockResolvedValue(DRAFT);
+    mockFetchRosters.mockRejectedValue(new Error('SLEEPER_ERROR: unavailable'));
+    await expect(
+      logSleeperRosterCatchUp({ draftId: 4, entries: [{ playerId: 3, teamId: 7, price: 42 }] }),
+    ).resolves.toEqual({ ok: false, code: 'sleeper_error' });
+  });
+
   it('marks a player moved after preview as an assignment conflict', async () => {
     mockFetchRosters.mockResolvedValue([{ roster_id: 10, owner_id: 'owner', players: ['s-3'] }]);
     await expect(
@@ -196,16 +229,29 @@ describe('Sleeper roster actions', () => {
     expect(mockAuctionCreate).not.toHaveBeenCalled();
   });
 
-  it('translates a unique result conflict to already_logged', async () => {
-    const error = Object.assign(new Error('unique'), { code: 'P2002' });
-    mockAuctionCreate.mockRejectedValue(error);
+  it('keeps valid inserts when a concurrent duplicate is skipped', async () => {
+    const secondPlayer = { ...PLAYER, id: 4, sleeperId: 's-4', name: 'Lamar Jackson' };
+    mockPlayerFindMany.mockResolvedValue([PLAYER, secondPlayer]);
+    mockFetchRosters.mockResolvedValue([
+      { roster_id: 9, owner_id: 'owner', players: ['s-3', 's-4'] },
+    ]);
+    mockAuctionCreateManyAndReturn.mockResolvedValue([{ playerId: 4 }]);
+
     await expect(
-      logSleeperRosterCatchUp({ draftId: 4, entries: [{ playerId: 3, teamId: 7, price: 42 }] }),
+      logSleeperRosterCatchUp({
+        draftId: 4,
+        entries: [
+          { playerId: 3, teamId: 7, price: 42 },
+          { playerId: 4, teamId: 7, price: 38 },
+        ],
+      }),
     ).resolves.toEqual({
       ok: true,
-      createdPlayerIds: [],
+      createdPlayerIds: [4],
       conflicts: [{ playerId: 3, reason: 'already_logged' }],
     });
+    expect(mockNominationDeleteMany).toHaveBeenCalledWith({ where: { draftId: 4, playerId: 4 } });
+    expect(mockAuctionCreate).not.toHaveBeenCalled();
   });
 
   it('rejects zero-price entries without creating results', async () => {

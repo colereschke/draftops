@@ -37,8 +37,8 @@ export default function AuctionSheet({
 }: AuctionSheetProps) {
   const [posFilter, setPosFilter] = useState<PositionFilter>('ALL');
   const [search, setSearch] = useState<string>('');
-  const [sortBy, setSortBy] = useState<SortKey>('sfRank');
-  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
+  const [sortBy, setSortBy] = useState<SortKey>('budget');
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
   const [showNotes, setShowNotes] = useState<boolean>(false);
   const [availableOnly, setAvailableOnly] = useState<boolean>(false);
   const [modalPlayer, setModalPlayer] = useState<Player | null>(null);
@@ -208,7 +208,7 @@ export default function AuctionSheet({
       if (typeof bV === 'string') bV = bV.toLowerCase();
       if (aV < bV) return sortDir === 'asc' ? -1 : 1;
       if (aV > bV) return sortDir === 'asc' ? 1 : -1;
-      return 0;
+      return a.sfRank - b.sfRank;
     });
     return data;
   }, [posFilter, search, availableOnly, claimMap, sortBy, sortDir, players]);

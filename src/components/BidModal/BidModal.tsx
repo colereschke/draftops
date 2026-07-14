@@ -13,11 +13,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { strategyTagReason } from '@/lib/valueSpread';
-
-function formatSpread(spread: number): string {
-  return spread > 0 ? `+${spread}` : String(spread);
-}
+import { formatSpread, spreadColor, strategyTagReason } from '@/lib/valueSpread';
 
 interface BidModalProps {
   player: Player;
@@ -141,12 +137,7 @@ export default function BidModal({
                   Rank: Dyn #{player.spreadDynRank} · Proj #{player.spreadProjRank} · Spread{' '}
                   <span
                     style={{
-                      color:
-                        player.spread > 0
-                          ? 'var(--age-young)'
-                          : player.spread < 0
-                            ? 'var(--age-old)'
-                            : 'var(--text-muted)',
+                      color: spreadColor(player.spread),
                     }}
                   >
                     {formatSpread(player.spread)}

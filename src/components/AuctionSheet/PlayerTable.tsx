@@ -4,6 +4,7 @@ import { ArrowUp, ArrowDown, ArrowUpDown } from 'lucide-react';
 import type { Player, ClaimedBid } from '@/types';
 import { POS_COLORS } from '@/lib/posColors';
 import { ageColor } from '@/lib/ageColor';
+import { formatSpread, spreadColor } from '@/lib/valueSpread';
 import { cn } from '@/lib/utils';
 import {
   Table,
@@ -53,16 +54,6 @@ function SortIcon({ col, sortBy, sortDir }: SortIconProps) {
   ) : (
     <ArrowDown className="ml-1 inline size-3.5" style={{ color: 'var(--primary)' }} />
   );
-}
-
-function spreadColor(spread: number | null | undefined): string {
-  if (spread == null || spread === 0) return 'var(--text-muted)';
-  return spread > 0 ? 'var(--age-young)' : 'var(--age-old)';
-}
-
-function formatSpread(spread: number | null | undefined): string {
-  if (spread == null) return '—';
-  return spread > 0 ? `+${spread}` : String(spread);
 }
 
 export default function PlayerTable({
@@ -279,7 +270,7 @@ export default function PlayerTable({
                   )}
                   style={{ color: claim ? undefined : spreadColor(p.spread) }}
                 >
-                  {formatSpread(p.spread)}
+                  {p.spread == null ? '—' : formatSpread(p.spread)}
                 </TableCell>
                 {showNotes && (
                   <TableCell className="max-w-[220px] whitespace-normal text-[10px] text-muted-foreground">

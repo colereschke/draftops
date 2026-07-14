@@ -19,6 +19,11 @@ function projectionValue(p: Player): number {
   return p.projectionAuctionValue ?? 0;
 }
 
+// Invariant: any player admitted to the common set (vor > 0) has already been
+// joined against the projection pipeline output, so `projectionAuctionValue` is
+// guaranteed non-null for that player. Downstream consumers (e.g. the bid modal
+// nesting the spread display inside its projection-context panel) rely on this —
+// wherever `spread != null`, `projectionAuctionValue` is safe to assume non-null too.
 function isInCommonSet(p: Player, pos: Position): boolean {
   return p.pos === pos && p.vor != null && p.vor > 0;
 }
@@ -69,6 +74,15 @@ export function computeSpreads(players: Player[]): Player[] {
       spreadProjRank: a.projRank,
     };
   });
+}
+
+export function formatSpread(spread: number): string {
+  return spread > 0 ? `+${spread}` : String(spread);
+}
+
+export function spreadColor(spread: number | null | undefined): string {
+  if (spread == null || spread === 0) return 'var(--text-muted)';
+  return spread > 0 ? 'var(--age-young)' : 'var(--age-old)';
 }
 
 export function strategyTagReason(tag: StrategyTag): string {

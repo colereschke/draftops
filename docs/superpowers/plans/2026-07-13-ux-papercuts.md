@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Fix five independent UX papercuts: numeric inputs on `/drafts/new` that can't be cleanly edited, a starting-lineup builder that doesn't regroup slots by position, a hardcoded value-sheet caption that ignores the draft's actual scoring settings, misaligned per-position summaries on the Team Rosters page, and a value-sheet default sort that strands pick assets at the bottom.
+**Goal:** Fix five independent UX papercuts: numeric inputs on `/drafts/new` that can't be cleanly edited, a starting-lineup builder that doesn't regroup slots by position, a hardcoded value-sheet caption that ignores the draft's actual scoring settings, misaligned per-position summaries on the Team Rosters page, and a value-sheet default sort that strands pick assets at the bottom (with SF rank as a tiebreak for ties in whichever column is sorted).
 
 **Architecture:** A new shared `useNumericField` hook (`src/lib/useNumericField.ts`) replaces the `parseInt(...) || default` pattern at every numeric input on `/drafts/new` (Tasks 1-3). A pure sort function fixes lineup-slot grouping (Task 4). A new pure caption-formatting function plus prop-threading fixes the value-sheet caption (Task 5). A single Tailwind class fixes the roster-summary alignment (Task 6). Two `useState` initializer values fix the value-sheet's default sort (Task 7). No two tasks touch the same file region simultaneously except Tasks 2/3/4 (all edit `src/app/drafts/new/page.tsx`, sequenced 2 → 3 → 4) and Tasks 5/7 (both touch `src/components/AuctionSheet/AuctionSheet.tsx` and `AuctionSheet.claimed.test.tsx`, but in non-overlapping regions — sequenced 5 → 7).
 
@@ -1304,7 +1304,7 @@ git commit -m "fix: align team roster per-position summary subtotals"
 
 ---
 
-### Task 7: Default value-sheet sort by target value
+### Task 7: Default value-sheet sort by target value, with SF rank as tiebreak
 
 **Files:**
 
@@ -1316,7 +1316,9 @@ git commit -m "fix: align team roster per-position summary subtotals"
 - Consumes: nothing new.
 - Produces: nothing consumed by other tasks. Independent of Tasks 1-6 (different state, same file family as Task 5 but a different, non-overlapping section — sequenced after Task 5 since both touch `AuctionSheet.claimed.test.tsx`'s `renderSheet` helper area).
 
-- [ ] **Step 1: Write the failing test**
+This task has two parts, done together since both edit the same sort logic: (1) change the default sort column from `sfRank` to `budget` (target value) descending, so pick assets interleave by value instead of sinking to the bottom; (2) make the sort comparator fall back to `sfRank` ascending whenever the primary column ties, so e.g. two players both valued at $100 show the better-ranked one first, regardless of which column is currently sorted.
+
+- [ ] **Step 1: Write the failing tests**
 
 Add to `src/__tests__/AuctionSheet.claimed.test.tsx`, inside `describe('AuctionSheet with claimed bids', ...)`:
 
@@ -1351,14 +1353,29 @@ it('defaults to sorting by target value (budget) descending, interleaving pick a
   // by value instead of trailing behind both of them the way sfRank-ascending would put it.
   expect(order).toEqual(['player-row-1', 'player-row-900', 'player-row-5']);
 });
+
+it('breaks a tie in the sorted column using SF rank ascending', () => {
+  const { container } = renderSheet({
+    players: [
+      { ...MOCK_PLAYERS[0], sfRank: 5, budget: 100 }, // tied on budget, worse rank
+      { ...MOCK_PLAYERS[1], sfRank: 2, budget: 100 }, // tied on budget, better rank
+    ],
+  });
+
+  const rows = container.querySelectorAll('[data-testid^="player-row-"]');
+  const order = Array.from(rows).map((row) => row.getAttribute('data-testid'));
+  // Both players tie at budget 100 (the default sort column) — SF rank breaks the
+  // tie ascending, so the better-ranked player (rank 2) is shown first.
+  expect(order).toEqual(['player-row-2', 'player-row-5']);
+});
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [ ] **Step 2: Run the tests to verify they fail**
 
 Run: `pnpm test -- AuctionSheet.claimed.test.tsx`
-Expected: FAIL — current default (`sfRank` ascending) produces `['player-row-1', 'player-row-5', 'player-row-900']`, package last.
+Expected: FAIL — current default (`sfRank` ascending) produces `['player-row-1', 'player-row-5', 'player-row-900']` for the first test (package last); the second test currently produces `['player-row-5', 'player-row-2']` (tied budget values keep their original array order since the comparator returns `0` on a tie, with no SF rank fallback).
 
-- [ ] **Step 3: Change the defaults**
+- [ ] **Step 3: Change the defaults and add the SF rank tiebreak**
 
 In `src/components/AuctionSheet/AuctionSheet.tsx`, replace:
 
@@ -1374,7 +1391,25 @@ const [sortBy, setSortBy] = useState<SortKey>('budget');
 const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
 ```
 
-- [ ] **Step 4: Run the test to verify it passes**
+Then, in the same file's sort comparator, replace:
+
+```tsx
+if (aV < bV) return sortDir === 'asc' ? -1 : 1;
+if (aV > bV) return sortDir === 'asc' ? 1 : -1;
+return 0;
+```
+
+with:
+
+```tsx
+if (aV < bV) return sortDir === 'asc' ? -1 : 1;
+if (aV > bV) return sortDir === 'asc' ? 1 : -1;
+return a.sfRank - b.sfRank;
+```
+
+The tiebreak is always ascending (lower `sfRank` = better, shown first) regardless of the primary column's `sortDir` — a better-ranked player should win a tie whether the sheet is sorted ascending or descending. When `sortBy` is itself `'sfRank'`, this line never runs for genuinely tied rows (a tie on `sfRank` means `a.sfRank - b.sfRank` evaluates to `0`, a harmless no-op).
+
+- [ ] **Step 4: Run the tests to verify they pass**
 
 Run: `pnpm test -- AuctionSheet.claimed.test.tsx`
 Expected: PASS (full file — double check the pre-existing tests in this file still pass too, since several of them implicitly depend on row order or on `MOCK_PLAYERS`/fixture ordering; none of the existing assertions in this file check ordering by sfRank specifically, so none should be sort-order-sensitive, but the full-file run is the check for that)
@@ -1388,5 +1423,5 @@ Expected: no errors
 
 ```bash
 git add src/components/AuctionSheet/AuctionSheet.tsx src/__tests__/AuctionSheet.claimed.test.tsx
-git commit -m "fix: default value sheet sort to target value instead of SF rank"
+git commit -m "fix: default value sheet sort to target value, break ties with SF rank"
 ```

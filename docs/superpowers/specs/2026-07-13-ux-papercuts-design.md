@@ -100,9 +100,11 @@ For `DEFAULT_SCORING_SETTINGS` (`pprTE = pprWR = 1`, `recFD = teFDBonus = 0`), b
 
 Wrap the subtotal + delta content in a fixed-width, right-aligned container, mirroring the existing per-row treatment already used for each player's price/delta columns two lines below (`min-w-11 text-right`, lines 60-68 and 69-85). The header line packs more content (`$134 (+$12)` vs a single `$45`), so use a wider minimum: `min-w-[80px] text-right` (Tailwind arbitrary value) on the wrapping span, keeping the existing `font-mono ... tabular-nums` classes. This makes every position group's subtotal block start at the same horizontal offset regardless of digit count, consistent with how the per-player rows already behave.
 
-## 5. Default value-sheet sort
+## 5. Default value-sheet sort, with SF rank tiebreak
 
 `src/components/AuctionSheet/AuctionSheet.tsx`: the value sheet's `PlayerTable` defaults to `sortBy: 'sfRank', sortDir: 'asc'`. Sorting by `sfRank` pushes pick assets (`PICK`/`PKG` rows, which don't carry a meaningful ETR rank) to the bottom regardless of their actual value. Change the defaults to `sortBy: 'budget', sortDir: 'desc'` — `'budget'` is the `SortKey` backing the table's "Target" column (`PlayerTable.tsx:38`) — so the sheet opens sorted by target value, highest first, interleaving pick assets by value instead of stranding them at the bottom.
+
+Additionally, the sort comparator currently returns `0` on a tie in the primary column, leaving tied rows in whatever order they happened to be in beforehand. Add `sfRank` ascending as the tiebreak for any primary-column tie (not just `budget` — a sensible fallback regardless of which column is sorted), so two players tied on target value show the better-ranked one first.
 
 ## Testing
 

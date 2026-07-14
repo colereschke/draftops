@@ -128,6 +128,7 @@ export async function createDraft(data: {
     data.playerSource === 'custom' ? new Map<string, string>() : getEtrSleeperMatches();
 
   const draftId = await prisma.$transaction(async (tx) => {
+    const ownerDraftCount = await tx.draft.count({ where: { ownerId: session.user.id } });
     const draft = await tx.draft.create({
       data: {
         name: data.name.trim(),
@@ -223,6 +224,29 @@ export async function createDraft(data: {
       etrMatches,
       useBatchTransaction: false,
     });
+
+    if (ownerDraftCount === 0) {
+      const onboarding = await tx.onboardingProgress.findUnique({
+        where: { userId: session.user.id },
+      });
+      if (onboarding?.phase !== 'COMPLETED') {
+        await tx.onboardingProgress.upsert({
+          where: { userId: session.user.id },
+          create: {
+            userId: session.user.id,
+            phase: 'FEATURE_TOUR',
+            draftId: draft.id,
+            step: 'VALUE_SHEET_INTRO',
+          },
+          update: {
+            phase: 'FEATURE_TOUR',
+            draftId: draft.id,
+            step: 'VALUE_SHEET_INTRO',
+            subjectPlayerName: null,
+          },
+        });
+      }
+    }
 
     return draft.id;
   });

@@ -11,15 +11,22 @@ const mockGetEtrSleeperMatches = jest.fn();
 
 // Mock tx client
 const mockTxDraftCreate = jest.fn();
+const mockTxDraftCount = jest.fn();
 const mockTxDraftUpdate = jest.fn();
 const mockTxTeamCreate = jest.fn();
 const mockTxPlayerCreateMany = jest.fn().mockResolvedValue({ count: 270 });
 const mockTxUserRankingSetFindUnique = jest.fn();
+const mockTxOnboardingFindUnique = jest.fn();
+const mockTxOnboardingUpsert = jest.fn();
 const mockTx = {
-  draft: { create: mockTxDraftCreate, update: mockTxDraftUpdate },
+  draft: { count: mockTxDraftCount, create: mockTxDraftCreate, update: mockTxDraftUpdate },
   team: { create: mockTxTeamCreate },
   player: { createMany: mockTxPlayerCreateMany },
   userRankingSet: { findUnique: mockTxUserRankingSetFindUnique },
+  onboardingProgress: {
+    findUnique: mockTxOnboardingFindUnique,
+    upsert: mockTxOnboardingUpsert,
+  },
 };
 
 jest.mock('@/auth', () => ({ auth: () => mockAuth() }));
@@ -83,12 +90,15 @@ const VALID_INPUT = {
 beforeEach(() => {
   jest.clearAllMocks();
   mockAuth.mockResolvedValue(MOCK_SESSION);
+  mockTxDraftCount.mockResolvedValue(0);
   mockTxDraftCreate.mockResolvedValue({ id: 5, createdAt: MOCK_DRAFT_CREATED_AT });
   mockTxTeamCreate
     .mockResolvedValueOnce({ id: 10, handle: 'coreschke' })
     .mockResolvedValueOnce({ id: 11, handle: 'team2' });
   mockTxDraftUpdate.mockResolvedValue({});
   mockApplyProjectionValuesToDraft.mockResolvedValue({ projectionSourceId: 7, appliedCount: 250 });
+  mockTxOnboardingUpsert.mockResolvedValue({});
+  mockTxOnboardingFindUnique.mockResolvedValue(null);
   mockGetEtrSleeperMatches.mockReturnValue(new Map([[BASE_PLAYERS[0].player, 'sleeper-1']]));
   mockTransaction.mockImplementation((callback) => callback(mockTx));
 });
@@ -181,6 +191,27 @@ describe('createDraft', () => {
       useBatchTransaction: false,
     });
     expect(mockRedirect).toHaveBeenCalledWith('/draft/5');
+  });
+
+  it('starts the feature tour after successfully creating the owner’s first draft', async () => {
+    await createDraft(VALID_INPUT);
+
+    expect(mockTxDraftCount).toHaveBeenCalledWith({ where: { ownerId: '123456789' } });
+    expect(mockTxOnboardingUpsert).toHaveBeenCalledWith({
+      where: { userId: '123456789' },
+      create: {
+        userId: '123456789',
+        phase: 'FEATURE_TOUR',
+        draftId: 5,
+        step: 'VALUE_SHEET_INTRO',
+      },
+      update: {
+        phase: 'FEATURE_TOUR',
+        draftId: 5,
+        step: 'VALUE_SHEET_INTRO',
+        subjectPlayerName: null,
+      },
+    });
   });
 
   it('fails loudly when automatic projection application fails', async () => {

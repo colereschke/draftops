@@ -99,9 +99,14 @@ For `DEFAULT_SCORING_SETTINGS` (`pprTE = pprWR = 1`, `recFD = teFDBonus = 0`), b
 
 Wrap the subtotal + delta content in a fixed-width, right-aligned container, mirroring the existing per-row treatment already used for each player's price/delta columns two lines below (`min-w-11 text-right`, lines 60-68 and 69-85). The header line packs more content (`$134 (+$12)` vs a single `$45`), so use a wider minimum: `min-w-[80px] text-right` (Tailwind arbitrary value) on the wrapping span, keeping the existing `font-mono ... tabular-nums` classes. This makes every position group's subtotal block start at the same horizontal offset regardless of digit count, consistent with how the per-player rows already behave.
 
+## 5. Default value-sheet sort
+
+`src/components/AuctionSheet/AuctionSheet.tsx`: the value sheet's `PlayerTable` defaults to `sortBy: 'sfRank', sortDir: 'asc'`. Sorting by `sfRank` pushes pick assets (`PICK`/`PKG` rows, which don't carry a meaningful ETR rank) to the bottom regardless of their actual value. Change the defaults to `sortBy: 'budget', sortDir: 'desc'` — `'budget'` is the `SortKey` backing the table's "Target" column (`PlayerTable.tsx:38`) — so the sheet opens sorted by target value, highest first, interleaving pick assets by value instead of stranding them at the bottom.
+
 ## Testing
 
 - `useNumericField.test.ts` (new): covers empty-string intermediate state (doesn't coerce to default), partial decimal entry (`float: true`), min/max clamping on `numericValue`, and that `value` never gets forcibly overwritten mid-typing.
 - `src/__tests__/drafts-new-form.test.tsx` (existing — extend): add cases verifying a numeric field can be cleared to empty and retyped without snapping back, and that adding a slot re-sorts the lineup into canonical order (e.g. add a slot, change it to `RB` via the select, assert the resulting `startingLineup` order).
 - `src/__tests__/AuctionHeader.test.tsx` (existing — extend): parametrized cases for the TE caption — default settings (no clause), PPR-only premium, first-down-only premium, both.
 - `src/__tests__/TeamRosterDetail.test.tsx` (existing): no new behavioral test needed for a pure CSS alignment fix — covered by visual/manual check, not unit tests. Confirm the existing tests in this file still pass unchanged (the fix only adds a width class, no markup/testid changes).
+- `src/__tests__/AuctionSheet.claimed.test.tsx` (existing — extend; this is the only current `AuctionSheet` test file, its `renderSheet` helper is reused): assert the table renders sorted by `budget` descending by default, using a fixture where `sfRank` order and `budget` order diverge (a pick asset with a very high `sfRank` but mid-range `budget`) to prove the fix, not just coincidentally pass.

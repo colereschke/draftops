@@ -17,6 +17,7 @@ export interface SleeperRoster {
   roster_id: number;
   owner_id: string | null; // primary owner's user_id; null for an unowned/commissioner-held roster
   co_owners?: string[] | null; // additional user_ids sharing the roster (best-effort; absent in some responses)
+  players?: string[] | null;
 }
 
 export interface SleeperImportResult {

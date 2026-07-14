@@ -128,6 +128,7 @@ export async function createDraft(data: {
     data.playerSource === 'custom' ? new Map<string, string>() : getEtrSleeperMatches();
 
   const draftId = await prisma.$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${session.user.id}))`;
     const ownerDraftCount = await tx.draft.count({ where: { ownerId: session.user.id } });
     const draft = await tx.draft.create({
       data: {
@@ -226,25 +227,29 @@ export async function createDraft(data: {
     });
 
     if (ownerDraftCount === 0) {
-      const onboarding = await tx.onboardingProgress.findUnique({
-        where: { userId: session.user.id },
+      const transition = await tx.onboardingProgress.updateMany({
+        where: { userId: session.user.id, phase: 'DRAFT_SETUP' },
+        data: {
+          phase: 'FEATURE_TOUR',
+          draftId: draft.id,
+          step: 'VALUE_SHEET_INTRO',
+          subjectPlayerName: null,
+        },
       });
-      if (onboarding?.phase !== 'COMPLETED') {
-        await tx.onboardingProgress.upsert({
+      if (transition.count === 0) {
+        const onboarding = await tx.onboardingProgress.findUnique({
           where: { userId: session.user.id },
-          create: {
-            userId: session.user.id,
-            phase: 'FEATURE_TOUR',
-            draftId: draft.id,
-            step: 'VALUE_SHEET_INTRO',
-          },
-          update: {
-            phase: 'FEATURE_TOUR',
-            draftId: draft.id,
-            step: 'VALUE_SHEET_INTRO',
-            subjectPlayerName: null,
-          },
         });
+        if (!onboarding) {
+          await tx.onboardingProgress.create({
+            data: {
+              userId: session.user.id,
+              phase: 'FEATURE_TOUR',
+              draftId: draft.id,
+              step: 'VALUE_SHEET_INTRO',
+            },
+          });
+        }
       }
     }
 

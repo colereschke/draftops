@@ -73,8 +73,6 @@ model OnboardingProgress {
   completedAt       DateTime?
 
   draft Draft? @relation(fields: [draftId], references: [id], onDelete: SetNull)
-
-  @@index([draftId])
 }
 
 model Team {

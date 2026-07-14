@@ -32,4 +32,25 @@ describe('isFirstDraftOnboardingEligible', () => {
 
     await expect(isFirstDraftOnboardingEligible('discord-1')).resolves.toBe(false);
   });
+
+  it('does not enroll an account with existing progress and no drafts', async () => {
+    mockOnboardingFindUnique.mockResolvedValue({ id: 1 });
+    mockDraftCount.mockResolvedValue(0);
+
+    await expect(isFirstDraftOnboardingEligible('discord-1')).resolves.toBe(false);
+  });
+
+  it('scopes progress and draft lookups to the userId', async () => {
+    mockOnboardingFindUnique.mockResolvedValue(null);
+    mockDraftCount.mockResolvedValue(0);
+
+    await isFirstDraftOnboardingEligible('discord-1');
+
+    expect(mockOnboardingFindUnique).toHaveBeenCalledWith({
+      where: { userId: 'discord-1' },
+    });
+    expect(mockDraftCount).toHaveBeenCalledWith({
+      where: { ownerId: 'discord-1' },
+    });
+  });
 });

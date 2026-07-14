@@ -34,9 +34,6 @@ CREATE UNIQUE INDEX "OnboardingProgress_userId_key" ON "OnboardingProgress"("use
 -- CreateIndex
 CREATE UNIQUE INDEX "OnboardingProgress_draftId_key" ON "OnboardingProgress"("draftId");
 
--- CreateIndex
-CREATE INDEX "OnboardingProgress_draftId_idx" ON "OnboardingProgress"("draftId");
-
 -- AddForeignKey
 ALTER TABLE "OnboardingProgress"
 ADD CONSTRAINT "OnboardingProgress_draftId_fkey"

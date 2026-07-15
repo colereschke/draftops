@@ -39,9 +39,10 @@ For each **position** (QB / RB / WR / TE) independently:
    - `dynRank` — by dynasty value (`baseBudget`, falling back to `budget`)
    - `projRank` — by projected points / `projectionAuctionValue` (identical ordering, since
      projection-\$ is monotonic in VOR within a position)
-3. Normalize each rank to a percentile within the common set of size `N`:
-   `pct = (N − rank) / (N − 1) × 100` (single-element sets → both percentiles 0, spread 0).
-4. **`spread = pctProj − pctDyn`**, rounded to an integer.
+3. Normalize each rank to a percentile within the common set of size `N`, **rounded to an integer**:
+   `pct = round((N − rank) / (N − 1) × 100)` (single-element sets → both percentiles 0, spread 0).
+4. **`spread = pctProj − pctDyn`** (difference of the two rounded percentiles, so the bid modal's
+   `Dyn {pctDyn} · Proj {pctProj} · Spread {spread}` reconciles exactly on screen).
    - `spread > 0` → projection ranks him **higher** than the market → **underpriced**
    - `spread < 0` → market ranks him **higher** than production justifies → **overpriced**
 

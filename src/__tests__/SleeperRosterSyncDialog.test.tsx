@@ -85,7 +85,7 @@ describe('SleeperRosterSyncDialog', () => {
 
     await waitFor(() => expect(mockPreview).toHaveBeenCalledWith({ draftId: 4 }));
     expect(await screen.findByTestId('sleeper-sync-player-3')).toBeInTheDocument();
-    expect(screen.getByTestId('sleeper-sync-winner-3')).toHaveTextContent('Cole');
+    expect(screen.getByTestId('sleeper-sync-winner-3')).toHaveTextContent('cole');
     expect(screen.getByTestId('sleeper-sync-unresolved-sleeper-missing')).toBeInTheDocument();
 
     await user.type(screen.getByTestId('sleeper-sync-price-3'), '42');

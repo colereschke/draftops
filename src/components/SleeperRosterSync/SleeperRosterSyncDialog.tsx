@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import type { LeagueTeam } from '@/types';
+import type { LeagueTeam, Position } from '@/types';
 import type { SleeperRosterCandidate } from '@/lib/sleeper';
 import {
   logSleeperRosterCatchUp,
@@ -11,6 +11,7 @@ import {
   saveSleeperRosterMapping,
 } from '@/lib/sleeper-roster-actions';
 import type { SleeperRosterPreview } from '@/lib/sleeperRosterSync';
+import { POS_COLORS } from '@/lib/posColors';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
@@ -337,52 +338,68 @@ export default function SleeperRosterSyncDialog({
 
         {view === 'preview' && preview && (
           <div className="space-y-4">
-            {preview.actionable.map((row) => (
-              <div
-                key={row.playerId}
-                data-testid={`sleeper-sync-player-${row.playerId}`}
-                className="rounded-md border p-3"
-              >
-                <div className="flex items-center justify-between gap-3">
-                  <div>
-                    <div className="font-medium">{row.playerName}</div>
-                    <div className="text-xs text-muted-foreground">
-                      {row.position} · {row.nflTeam} · Target ${row.targetBudget}
+            {preview.actionable.map((row) => {
+              const posColor = POS_COLORS[row.position as Position] ?? POS_COLORS.PICK;
+              return (
+                <div
+                  key={row.playerId}
+                  data-testid={`sleeper-sync-player-${row.playerId}`}
+                  className="rounded-md border p-3"
+                  style={{ borderLeft: `3px solid ${posColor.accent}` }}
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <div className="font-medium">{row.playerName}</div>
+                      <div className="text-xs text-muted-foreground">
+                        {row.position} · {row.nflTeam}
+                      </div>
+                      <div className="text-xs text-muted-foreground">
+                        Target ${row.targetBudget}
+                      </div>
+                    </div>
+                    <div className="flex flex-col items-end gap-1">
+                      <div
+                        data-testid={`sleeper-sync-winner-${row.playerId}`}
+                        className="text-sm font-medium"
+                      >
+                        {row.teamHandle}
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <Label htmlFor={`sleeper-sync-price-${row.playerId}`} className="sr-only">
+                          Winning price
+                        </Label>
+                        <span className="text-xs text-muted-foreground">$</span>
+                        <Input
+                          id={`sleeper-sync-price-${row.playerId}`}
+                          data-testid={`sleeper-sync-price-${row.playerId}`}
+                          type="number"
+                          min={1}
+                          step={1}
+                          className="h-8 w-20 text-right text-sm"
+                          value={prices[row.playerId] ?? ''}
+                          onChange={(event) =>
+                            setPrices((current) => ({
+                              ...current,
+                              [row.playerId]: event.target.value,
+                            }))
+                          }
+                        />
+                      </div>
                     </div>
                   </div>
-                  <div
-                    data-testid={`sleeper-sync-winner-${row.playerId}`}
-                    className="text-right text-sm"
-                  >
-                    {row.teamDisplayName ?? row.teamHandle}
-                  </div>
+                  {conflicts.has(row.playerId) && (
+                    <p
+                      data-testid={`sleeper-sync-conflict-${row.playerId}`}
+                      className="mt-2 text-sm text-destructive"
+                    >
+                      {conflicts.get(row.playerId) === 'already_logged'
+                        ? 'Already reconciled.'
+                        : 'Winner assignment changed in Sleeper.'}
+                    </p>
+                  )}
                 </div>
-                <div className="mt-2 space-y-1">
-                  <Label htmlFor={`sleeper-sync-price-${row.playerId}`}>Winning price</Label>
-                  <Input
-                    id={`sleeper-sync-price-${row.playerId}`}
-                    data-testid={`sleeper-sync-price-${row.playerId}`}
-                    type="number"
-                    min={1}
-                    step={1}
-                    value={prices[row.playerId] ?? ''}
-                    onChange={(event) =>
-                      setPrices((current) => ({ ...current, [row.playerId]: event.target.value }))
-                    }
-                  />
-                </div>
-                {conflicts.has(row.playerId) && (
-                  <p
-                    data-testid={`sleeper-sync-conflict-${row.playerId}`}
-                    className="mt-2 text-sm text-destructive"
-                  >
-                    {conflicts.get(row.playerId) === 'already_logged'
-                      ? 'Already reconciled.'
-                      : 'Winner assignment changed in Sleeper.'}
-                  </p>
-                )}
-              </div>
-            ))}
+              );
+            })}
             {preview.unresolved.map((row) => (
               <p
                 key={`${row.sleeperRosterId}-${row.sleeperId}`}

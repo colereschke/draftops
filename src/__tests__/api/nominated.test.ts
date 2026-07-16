@@ -9,6 +9,7 @@ const mockGetDraft = jest.fn();
 const mockUpsert = jest.fn();
 const mockDelete = jest.fn();
 const mockPlayerFindFirst = jest.fn();
+const mockAuctionResultFindFirst = jest.fn();
 
 jest.mock('@/auth', () => ({ auth: () => mockAuth() }));
 jest.mock('@/lib/draft', () => ({
@@ -22,6 +23,9 @@ jest.mock('@/lib/db', () => ({
     },
     player: {
       findFirst: (...args: unknown[]) => mockPlayerFindFirst(...args),
+    },
+    auctionResult: {
+      findFirst: (...args: unknown[]) => mockAuctionResultFindFirst(...args),
     },
   },
 }));
@@ -49,6 +53,7 @@ beforeEach(() => {
   mockAuth.mockResolvedValue(MOCK_SESSION);
   mockGetDraft.mockResolvedValue(MOCK_DRAFT);
   mockPlayerFindFirst.mockResolvedValue({ id: 10, name: 'Josh Allen' });
+  mockAuctionResultFindFirst.mockResolvedValue(null);
   mockUpsert.mockResolvedValue({ playerId: 10, playerName: 'Josh Allen', draftId: 1 });
 });
 
@@ -76,6 +81,13 @@ describe('POST /api/draft/[draftId]/nominated', () => {
     const res = await POST(makeRequest({ playerId: 10 }), MOCK_PARAMS);
     expect(res.status).toBe(404);
     await expect(res.json()).resolves.toEqual({ error: 'Player not found' });
+  });
+
+  it('returns 409 when the player already has a winning bid', async () => {
+    mockAuctionResultFindFirst.mockResolvedValue({ id: 9 });
+    const res = await POST(makeRequest({ playerId: 10 }), MOCK_PARAMS);
+    expect(res.status).toBe(409);
+    expect(mockUpsert).not.toHaveBeenCalled();
   });
 
   it('upserts nominated entry scoped to playerId and draftId', async () => {

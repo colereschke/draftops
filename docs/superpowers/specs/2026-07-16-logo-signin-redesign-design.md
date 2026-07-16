@@ -12,9 +12,14 @@ scope-creeping into the rest of the app.
 ## Scope and decisions
 
 - **Icon concept**: a gavel, built from simple SVG geometry (no illustration) — a rotated
-  perpendicular head-and-handle assembly over a flat sounding block. Single-color fill in the
-  existing accent violet (`--color-primary` / `#7c6ff0`), consistent with the "one accent for
-  interactive/brand elements" rule from the roadmap #6 design system.
+  perpendicular head-and-handle assembly over a flat sounding block. Single-color fill using the
+  app's real `--primary` token (`--color-primary`, currently `#d7ded2`, a pale sage/cream).
+  **Correction from brainstorming:** every mockup during design used a placeholder violet
+  (`#7c6ff0`), based on a stale memory of an earlier accent-color decision that was apparently
+  never actually shipped — `globals.css` was checked directly during self-review and `--primary`
+  is `#d7ded2`, not violet. Confirmed with Cole to use the real token rather than either
+  introducing a new brand-only color or changing `--primary` sitewide (that's a bigger change than
+  this design's scope — see Out of scope).
 - **Wordmark**: "DraftOps" set in the existing Barlow Condensed 700 uppercase treatment already
   used in `NavBar`. No new typography introduced.
 - **Lockup**: icon left of wordmark (validated over icon-right during brainstorming — reads
@@ -48,7 +53,7 @@ height=19 rx=1.2`) and the head (`rect x=9.5 y=5 width=13 height=7 rx=2`), perpe
     tapered bar (the bug caught during brainstorming: a first attempt stacked head and handle on
     the same axis and it read as an abstract bar, not a gavel).
   - the sounding block, unrotated (`rect x=5 y=24 width=11 height=4.5 rx=1.5`).
-  - All shapes fill `#7c6ff0` (or `currentColor` if that proves more flexible during
+  - All shapes fill `var(--primary)` (or `currentColor` if that proves more flexible during
     implementation — implementer's call, not load-bearing).
 - **`LogoLockup.tsx`** — `<LogoMark size={..} />` + a `<span>` wordmark, flex row, icon-left, gap
   matching the existing `NavBar` label spacing conventions. Props: `size?`, `className?` (no
@@ -73,6 +78,17 @@ infinite`) so the loop is seamless, with a `linear-gradient` fade mask on the to
   the real server-only seed pool per existing convention).
 
 ## UI flow — sign-in page
+
+**Note on color:** the brainstorming mockups (built in a throwaway HTML visual-companion tool, not
+the app itself) used approximate, illustrative hex values for backgrounds/borders/text to validate
+layout and composition — they don't map 1:1 to this repo's tokens. The implementation must use the
+real `globals.css` custom properties throughout: `--bg-base`/`--bg-surface`/`--bg-elevated` for
+panel backgrounds, `--border-subtle`/`--border-default` for the panel divider and ticker row
+rules, `--text-primary`/`--text-secondary`/`--text-muted` for text, and `--primary` for the one
+accent (icon, eyebrow label, ticker values — see the corrected color note above). The green/red
+up/down ticker deltas reuse the app's existing positive/negative convention rather than inventing
+a new one: `spreadColor` (`src/lib/valueSpread.ts:131`) already maps positive → `var(--age-young)`
+and negative → `var(--age-old)` for this exact purpose.
 
 `src/app/sign-in/page.tsx` keeps its existing responsibilities unchanged: `auth()` check,
 `redirect('/')` if already signed in, `callbackUrl` resolution, and the `'use server'` form action
@@ -151,6 +167,8 @@ not worth a build-time codegen step to unify.
 
 ## Out of scope
 
+- Changing the shared `--primary`/`--color-primary` token itself — this design uses the app's
+  real accent as-is, however muted, rather than reintroducing a different brand color sitewide.
 - `apple-icon`/PWA manifest icons (see Scope and decisions above).
 - Live or DB-backed ticker data.
 - Any change to `src/app/page.tsx`'s redirect logic.

@@ -244,6 +244,24 @@ export default function AuctionSheet({
       });
       return data;
     }
+    if (sortBy === 'claimedPrice') {
+      data.sort((a, b) => {
+        const aV = claimMap.get(playerIdentityKey(a))?.price ?? null;
+        const bV = claimMap.get(playerIdentityKey(b))?.price ?? null;
+        // Unclaimed players have no bid price, so they sort as a group after every claimed
+        // player, ordered among themselves by target value (budget) instead of sfRank.
+        if (aV === null && bV === null) {
+          if (a.budget !== b.budget)
+            return sortDir === 'asc' ? a.budget - b.budget : b.budget - a.budget;
+          return a.sfRank - b.sfRank;
+        }
+        if (aV === null) return 1;
+        if (bV === null) return -1;
+        if (aV !== bV) return sortDir === 'asc' ? aV - bV : bV - aV;
+        return a.sfRank - b.sfRank;
+      });
+      return data;
+    }
     data.sort((a, b) => {
       let aV: string | number | null = a[sortBy] as string | number | null;
       let bV: string | number | null = b[sortBy] as string | number | null;

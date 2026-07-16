@@ -327,6 +327,47 @@ describe('AuctionSheet with claimed bids', () => {
     expect(order).toEqual(['player-row-1', 'player-row-900', 'player-row-5']);
   });
 
+  it('sorts by the Claimed column, unclaimed players last, toggling asc/desc', async () => {
+    const user = userEvent.setup();
+    const secondClaim: ClaimedBid = {
+      id: 2,
+      playerId: 11,
+      player: 'Justin Jefferson',
+      position: 'WR',
+      price: 200,
+      teamId: 2,
+      teamHandle: 'chappy72',
+    };
+    const { container } = renderSheet({
+      claimedBids: [mockClaim, secondClaim], // Allen $110, Jefferson $200
+      players: [
+        ...MOCK_PLAYERS,
+        // Two unclaimed players with different target budgets, to verify they're grouped
+        // after every claimed player but ordered among themselves by target value.
+        { ...MOCK_PLAYERS[0], id: 12, player: 'Unclaimed Cheap', sfRank: 8, budget: 50 },
+        { ...MOCK_PLAYERS[0], id: 13, player: 'Unclaimed Pricey', sfRank: 9, budget: 80 },
+      ],
+    });
+
+    await user.click(screen.getByRole('button', { name: /sort by claimed/i }));
+    await waitFor(() => {
+      const order = Array.from(container.querySelectorAll('[data-testid^="player-row-"]')).map(
+        (row) => row.getAttribute('data-testid'),
+      );
+      // Descending default: Jefferson ($200), Allen ($110), then unclaimed by budget desc.
+      expect(order).toEqual(['player-row-5', 'player-row-1', 'player-row-9', 'player-row-8']);
+    });
+
+    await user.click(screen.getByRole('button', { name: /sort by claimed/i }));
+    await waitFor(() => {
+      const order = Array.from(container.querySelectorAll('[data-testid^="player-row-"]')).map(
+        (row) => row.getAttribute('data-testid'),
+      );
+      // Ascending: Allen ($110), Jefferson ($200), then unclaimed by budget asc.
+      expect(order).toEqual(['player-row-1', 'player-row-5', 'player-row-8', 'player-row-9']);
+    });
+  });
+
   it('breaks a tie in the sorted column using SF rank ascending', () => {
     const { container } = renderSheet({
       players: [

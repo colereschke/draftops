@@ -2,6 +2,7 @@
 
 import type { Position, StrategyTag } from '@/types';
 import { POS_COLORS } from '@/lib/posColors';
+import { Button } from '@/components/ui/button';
 import { Toggle } from '@/components/ui/toggle';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { Input } from '@/components/ui/input';
@@ -34,6 +35,7 @@ interface FilterControlsProps {
   strategyFilter: StrategyFilter;
   onStrategyFilterChange: (value: StrategyFilter) => void;
   showStrategyFilter?: boolean;
+  onOpenSleeperSync?: () => void;
 }
 
 export default function FilterControls({
@@ -50,6 +52,7 @@ export default function FilterControls({
   strategyFilter,
   onStrategyFilterChange,
   showStrategyFilter = false,
+  onOpenSleeperSync,
 }: FilterControlsProps) {
   const packageLabel = futurePickYear ? `${futurePickYear} pick package` : 'pick package';
 
@@ -117,6 +120,18 @@ export default function FilterControls({
         <div className="font-mono text-[11px] text-muted-foreground tabular-nums md:ml-auto">
           {resultCount} players shown
         </div>
+
+        {onOpenSleeperSync && (
+          <Button
+            data-testid="open-sleeper-sync"
+            variant="outline"
+            size="sm"
+            className="h-8 text-[11px]"
+            onClick={onOpenSleeperSync}
+          >
+            Catch up from Sleeper
+          </Button>
+        )}
 
         {showStrategyFilter && (
           <ToggleGroup

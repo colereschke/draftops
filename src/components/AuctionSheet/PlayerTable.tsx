@@ -15,7 +15,7 @@ import {
   TableCell,
 } from '@/components/ui/table';
 
-export type SortKey = keyof Player;
+export type SortKey = keyof Player | 'claimedPrice';
 
 interface PlayerTableProps {
   players: Player[];
@@ -106,8 +106,26 @@ export default function PlayerTable({
               </TableHead>
             )}
             {hasClaims && (
-              <TableHead className="font-label border-none py-2 text-[10px] font-semibold tracking-wide text-muted-foreground uppercase">
-                Claimed
+              <TableHead
+                aria-sort={
+                  sortBy === 'claimedPrice'
+                    ? sortDir === 'asc'
+                      ? 'ascending'
+                      : 'descending'
+                    : 'none'
+                }
+                className="border-none py-2 text-left"
+              >
+                <button
+                  type="button"
+                  onClick={() => onSort('claimedPrice')}
+                  aria-label="Sort by Claimed"
+                  className="font-label cursor-pointer border-0 bg-transparent p-0 text-[10px] font-semibold tracking-wide whitespace-nowrap uppercase select-none text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                  style={{ color: sortBy === 'claimedPrice' ? 'var(--primary)' : undefined }}
+                >
+                  Claimed
+                  <SortIcon col="claimedPrice" sortBy={sortBy} sortDir={sortDir} />
+                </button>
               </TableHead>
             )}
           </TableRow>

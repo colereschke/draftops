@@ -7,7 +7,6 @@ import type { Player, Position, ClaimedBid, LeagueTeam, ScoringSettings } from '
 import { logBid, updateBid, deleteBid } from '@/lib/actions';
 import BidModal from '@/components/BidModal';
 import { useOnboarding } from '@/components/Onboarding/OnboardingContext';
-import { Button } from '@/components/ui/button';
 import AuctionHeader from './AuctionHeader';
 import FilterControls, { type PositionFilter, type StrategyFilter } from './FilterControls';
 import PlayerTable, { type SortKey } from './PlayerTable';
@@ -32,6 +31,7 @@ interface AuctionSheetProps {
   ownerBudget: number;
   scoringSettings: ScoringSettings;
   sleeperSyncConfigured?: boolean;
+  sleeperLeagueId?: string | null;
 }
 
 export default function AuctionSheet({
@@ -44,6 +44,7 @@ export default function AuctionSheet({
   ownerBudget,
   scoringSettings,
   sleeperSyncConfigured = false,
+  sleeperLeagueId = null,
 }: AuctionSheetProps) {
   const { progress, recordBidLogged } = useOnboarding();
   const [posFilter, setPosFilter] = useState<PositionFilter>('ALL');
@@ -243,6 +244,24 @@ export default function AuctionSheet({
       });
       return data;
     }
+    if (sortBy === 'claimedPrice') {
+      data.sort((a, b) => {
+        const aV = claimMap.get(playerIdentityKey(a))?.price ?? null;
+        const bV = claimMap.get(playerIdentityKey(b))?.price ?? null;
+        // Unclaimed players have no bid price, so they sort as a group after every claimed
+        // player, ordered among themselves by target value (budget) instead of sfRank.
+        if (aV === null && bV === null) {
+          if (a.budget !== b.budget)
+            return sortDir === 'asc' ? a.budget - b.budget : b.budget - a.budget;
+          return a.sfRank - b.sfRank;
+        }
+        if (aV === null) return 1;
+        if (bV === null) return -1;
+        if (aV !== bV) return sortDir === 'asc' ? aV - bV : bV - aV;
+        return a.sfRank - b.sfRank;
+      });
+      return data;
+    }
     data.sort((a, b) => {
       let aV: string | number | null = a[sortBy] as string | number | null;
       let bV: string | number | null = b[sortBy] as string | number | null;
@@ -306,17 +325,8 @@ export default function AuctionSheet({
           strategyFilter={strategyFilter}
           onStrategyFilterChange={setStrategyFilter}
           showStrategyFilter={hasStrategyTags}
+          onOpenSleeperSync={() => setShowSleeperSync(true)}
         />
-        <div className="border-b border-border px-5 py-2">
-          <Button
-            data-testid="open-sleeper-sync"
-            variant="outline"
-            size="sm"
-            onClick={() => setShowSleeperSync(true)}
-          >
-            Catch up from Sleeper
-          </Button>
-        </div>
       </div>
       <div data-onboarding-target="bid-practice">
         <PlayerTable
@@ -360,6 +370,7 @@ export default function AuctionSheet({
           draftId={draftId}
           teams={teams}
           initiallyConfigured={sleeperSyncConfigured}
+          sleeperLeagueId={sleeperLeagueId}
           onClose={() => setShowSleeperSync(false)}
         />
       )}

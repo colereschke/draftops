@@ -106,6 +106,7 @@ export default async function DraftHomePage({ params }: { params: Promise<{ draf
       ownerBudget={draft.ownerTeam?.budget ?? 1000}
       scoringSettings={(draft.scoringSettings ?? DEFAULT_SCORING_SETTINGS) as ScoringSettings}
       sleeperSyncConfigured={sleeperSyncConfigured}
+      sleeperLeagueId={draft.sleeperLeagueId}
     />
   );
 }

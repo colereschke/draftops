@@ -8,6 +8,7 @@ function renderControls(overrides: Partial<React.ComponentProps<typeof FilterCon
   const onSearchChange = jest.fn();
   const onShowNotesChange = jest.fn();
   const onAvailableOnlyChange = jest.fn();
+  const onStrategyFilterChange = jest.fn();
   render(
     <FilterControls
       posFilter="ALL"
@@ -19,6 +20,8 @@ function renderControls(overrides: Partial<React.ComponentProps<typeof FilterCon
       availableOnly={false}
       onAvailableOnlyChange={onAvailableOnlyChange}
       resultCount={267}
+      strategyFilter="ALL"
+      onStrategyFilterChange={onStrategyFilterChange}
       {...overrides}
     />,
   );
@@ -27,6 +30,7 @@ function renderControls(overrides: Partial<React.ComponentProps<typeof FilterCon
     onSearchChange,
     onShowNotesChange,
     onAvailableOnlyChange,
+    onStrategyFilterChange,
   };
 }
 

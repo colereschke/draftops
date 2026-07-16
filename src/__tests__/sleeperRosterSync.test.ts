@@ -99,6 +99,34 @@ describe('reconcileSleeperRosters', () => {
     expect(preview.unresolved).toEqual([{ sleeperId: 'unlinked', sleeperRosterId: 9 }]);
   });
 
+  it('sorts actionable rows by team, then by target price descending within a team', () => {
+    const preview = reconcileSleeperRosters({
+      ...input,
+      rosters: [
+        { roster_id: 9, owner_id: 'u1', players: ['cheap', 'known'] },
+        { roster_id: 20, owner_id: 'u2', players: ['rival-pick'] },
+      ],
+      teams: [
+        { id: 7, sleeperRosterId: 9, handle: 'cole', displayName: 'Cole' },
+        { id: 8, sleeperRosterId: 20, handle: 'rival', displayName: 'Rival' },
+      ],
+      players: [
+        { id: 3, sleeperId: 'known', name: 'A Player', pos: 'WR', nflTeam: 'ATL', budget: 42 },
+        { id: 4, sleeperId: 'cheap', name: 'B Player', pos: 'RB', nflTeam: 'ATL', budget: 10 },
+        {
+          id: 5,
+          sleeperId: 'rival-pick',
+          name: 'C Player',
+          pos: 'TE',
+          nflTeam: 'DAL',
+          budget: 15,
+        },
+      ],
+    });
+
+    expect(preview.actionable.map((row) => row.playerId)).toEqual([3, 4, 5]);
+  });
+
   it('leaves roster players unresolved when multiple stored players share a Sleeper ID', () => {
     const preview = reconcileSleeperRosters({
       ...input,

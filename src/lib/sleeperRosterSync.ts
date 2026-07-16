@@ -127,6 +127,10 @@ export function reconcileSleeperRosters(input: ReconcileSleeperRostersInput): Sl
     }
   }
 
+  // Stable sort: a comparator that returns 0 across teams preserves the roster-iteration
+  // grouping already in place, while sorting by target price within each team's block.
+  actionable.sort((a, b) => (a.teamId === b.teamId ? b.targetBudget - a.targetBudget : 0));
+
   return {
     actionable,
     unresolved,

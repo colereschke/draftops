@@ -152,6 +152,32 @@ export async function createDraft(data: {
   const draftId = await prisma.$transaction(async (tx) => {
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${session.user.id}))`;
     const ownerDraftCount = await tx.draft.count({ where: { ownerId: session.user.id } });
+    const rankingSet =
+      data.playerSource === 'custom'
+        ? await tx.userRankingSet.findUnique({
+            where: { userId: session.user.id },
+            include: { players: true },
+          })
+        : null;
+    if (data.playerSource === 'custom' && !rankingSet) {
+      throw new Error('No custom ranking set found');
+    }
+
+    const sourceBudget = rankingSet?.sourceBudget ?? DEFAULT_RANKING_SOURCE_BUDGET;
+    const basePlayers = rankingSet
+      ? rankingSet.players.map((player) => ({
+          player: player.name,
+          team: player.team,
+          pos: player.pos as Position,
+          age: player.age,
+          sfRank: player.sfRank,
+          budget: player.budget,
+          ceiling: player.ceiling,
+          floor: player.floor,
+          notes: player.notes,
+          sleeperId: player.sleeperId,
+        }))
+      : BASE_PLAYERS;
     const draft = await tx.draft.create({
       data: {
         name: data.name.trim(),
@@ -160,6 +186,7 @@ export async function createDraft(data: {
         teamCount: data.teams.length,
         rosterSize: data.rosterSize,
         budget: data.budgetPerTeam,
+        playerValueSourceBudget: sourceBudget,
         futurePickAuctionMode: toPrismaFuturePickMode(data.futurePickAuctionMode),
         startingLineup: data.startingLineup,
         scoringSettings: data.scoringSettings,
@@ -184,44 +211,21 @@ export async function createDraft(data: {
 
     await tx.draft.update({ where: { id: draft.id }, data: { ownerTeamId } });
 
-    let basePlayers = BASE_PLAYERS;
-    if (data.playerSource === 'custom') {
-      const rankingSet = await tx.userRankingSet.findUnique({
-        where: { userId: session.user.id },
-        include: { players: true },
-      });
-      if (!rankingSet) throw new Error('No custom ranking set found');
-      basePlayers = [
-        ...rankingSet.players.map((p) => ({
-          player: p.name,
-          team: p.team,
-          pos: p.pos as Position,
-          age: p.age,
-          sfRank: p.sfRank,
-          budget: p.budget,
-          ceiling: p.ceiling,
-          floor: p.floor,
-          notes: p.notes,
-          sleeperId: p.sleeperId,
-        })),
-      ];
-    }
-
-    const valued = adjustPlayerValues(basePlayers, {
-      startingLineup: data.startingLineup,
-      scoringSettings: data.scoringSettings,
-      teamCount: data.teams.length,
-      sourceBudget: DEFAULT_RANKING_SOURCE_BUDGET,
-      draftBudget: data.budgetPerTeam,
-    });
     const nextPickYear = getNextFuturePickYear(draft.createdAt);
     const futurePickAssets = generateFuturePickAssets({
       teams: coerced,
       year: nextPickYear,
       startingRank: 900,
-      baselines: inferFuturePickBaselines(valued),
+      baselines: inferFuturePickBaselines(basePlayers),
     });
-    const seededPlayers = [...excludeStaticFuturePickRows(valued), ...futurePickAssets];
+    const sourcePlayers = [...excludeStaticFuturePickRows(basePlayers), ...futurePickAssets];
+    const seededPlayers = adjustPlayerValues(sourcePlayers, {
+      startingLineup: data.startingLineup,
+      scoringSettings: data.scoringSettings,
+      teamCount: data.teams.length,
+      sourceBudget,
+      draftBudget: data.budgetPerTeam,
+    });
 
     await tx.player.createMany({
       data: seededPlayers.map((p, index) => ({

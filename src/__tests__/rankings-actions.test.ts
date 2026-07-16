@@ -100,8 +100,12 @@ describe('uploadRankingsCsv', () => {
     expect(result).toEqual({ ok: true });
     expect(mockTxUpsert).toHaveBeenCalledWith({
       where: { userId: '123456789' },
-      create: expect.objectContaining({ userId: '123456789', fileName: 'rankings.csv' }),
-      update: expect.objectContaining({ fileName: 'rankings.csv' }),
+      create: expect.objectContaining({
+        userId: '123456789',
+        fileName: 'rankings.csv',
+        sourceBudget: 1000,
+      }),
+      update: expect.objectContaining({ fileName: 'rankings.csv', sourceBudget: 1000 }),
     });
     expect(mockTxDeleteMany).toHaveBeenCalledWith({ where: { rankingSetId: 42 } });
     expect(mockTxCreateMany).toHaveBeenCalledWith({

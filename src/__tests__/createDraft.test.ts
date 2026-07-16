@@ -153,6 +153,7 @@ describe('createDraft', () => {
         teamCount: 2,
         rosterSize: 30,
         budget: 1000,
+        playerValueSourceBudget: 1000,
         futurePickAuctionMode: 'PACKAGES',
         startingLineup: VALID_INPUT.startingLineup,
         scoringSettings: VALID_INPUT.scoringSettings,
@@ -355,6 +356,23 @@ describe('createDraft', () => {
     );
   });
 
+  it('scales ETR players and generated picks into a $200 draft', async () => {
+    await createDraft({ ...VALID_INPUT, budgetPerTeam: 200 });
+    const created = mockTxPlayerCreateMany.mock.calls[0][0].data as Array<{
+      name: string;
+      pos: string;
+      budget: number;
+      baseBudget: number;
+      futurePickAssetKind?: string | null;
+    }>;
+    const firstSkillPlayer = created.find((player) => player.pos === 'QB')!;
+    const packageAsset = created.find((player) => player.futurePickAssetKind === 'package')!;
+
+    expect(firstSkillPlayer.baseBudget).toBe(BASE_PLAYERS[0].budget);
+    expect(firstSkillPlayer.budget).toBeLessThan(firstSkillPlayer.baseBudget);
+    expect(packageAsset).toMatchObject({ budget: 22, baseBudget: 109 });
+  });
+
   it('does not seed legacy static future pick rows from base data', async () => {
     await createDraft(VALID_INPUT);
 
@@ -411,11 +429,13 @@ describe('createDraft with playerSource: custom', () => {
     await expect(createDraft({ ...VALID_INPUT, playerSource: 'custom' })).rejects.toThrow(
       'No custom ranking set found',
     );
+    expect(mockTxDraftCreate).not.toHaveBeenCalled();
   });
 
   it('seeds from the custom ranking set plus generated future pick assets', async () => {
     mockTxUserRankingSetFindUnique.mockResolvedValue({
       id: 7,
+      sourceBudget: 1000,
       players: [
         {
           name: 'Custom Guy',
@@ -452,6 +472,7 @@ describe('createDraft with playerSource: custom', () => {
   it('uses explicit custom pick values as generated future pick baselines', async () => {
     mockTxUserRankingSetFindUnique.mockResolvedValue({
       id: 7,
+      sourceBudget: 1000,
       players: [
         {
           name: 'Custom Guy',
@@ -527,6 +548,47 @@ describe('createDraft with playerSource: custom', () => {
       ceiling: 104,
       floor: 78,
       baseBudget: 90,
+    });
+  });
+
+  it('uses the persisted custom ranking source budget', async () => {
+    mockTxUserRankingSetFindUnique.mockResolvedValue({
+      id: 7,
+      sourceBudget: 500,
+      players: [
+        {
+          name: 'Custom Guy',
+          team: 'BUF',
+          pos: 'QB',
+          age: 25,
+          sfRank: 1,
+          budget: 100,
+          ceiling: 115,
+          floor: 87,
+          notes: '',
+          sleeperId: 's1',
+        },
+      ],
+    });
+
+    await createDraft({
+      ...VALID_INPUT,
+      playerSource: 'custom',
+      budgetPerTeam: 1000,
+      teams: Array.from({ length: 12 }, (_, index) => ({
+        handle: `team${index + 1}`,
+        displayName: `Team ${index + 1}`,
+        isMine: index === 0,
+      })),
+    });
+    expect(mockTxDraftCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ playerValueSourceBudget: 500 }),
+      }),
+    );
+    expect(mockTxPlayerCreateMany.mock.calls[0][0].data[0]).toMatchObject({
+      budget: 200,
+      baseBudget: 100,
     });
   });
 });

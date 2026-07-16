@@ -109,6 +109,24 @@ it('applies the latest stored projection source to a draft', async () => {
       },
     }),
   );
+
+  mockPlayerFindMany.mockResolvedValue([
+    { id: 1, name: 'Josh Allen', pos: 'QB', sleeperId: '10', budget: 51 },
+  ]);
+  await applyProjectionValuesToDraft(prisma, { draftId: 5 });
+
+  expect(mockDraftPlayerValueUpsert).toHaveBeenLastCalledWith(
+    expect.objectContaining({
+      create: expect.objectContaining({
+        fallbackAuctionValue: 51,
+        activeAuctionValue: 51,
+      }),
+      update: expect.objectContaining({
+        fallbackAuctionValue: 51,
+        activeAuctionValue: 51,
+      }),
+    }),
+  );
 });
 
 it('applies values when called with a transaction client', async () => {

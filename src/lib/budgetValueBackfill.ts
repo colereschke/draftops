@@ -6,6 +6,7 @@ import {
   type ApplyProjectionValuesResult,
   type ProjectionApplyPrisma,
 } from '@/lib/projectionApplication';
+import { selectActiveDraftValues } from '@/lib/playerValueMapping';
 import { adjustPlayerValues } from '@/lib/valueAdjustment';
 import { getBudgetScale, scaleWholeDollar } from '@/lib/valuationBudget';
 
@@ -205,7 +206,7 @@ export async function runBudgetValueBackfill(
   const appliedDrafts: BudgetValueDraftPlan[] = [];
 
   for (const draftPlan of plan.drafts) {
-    await prisma.$transaction(
+    const projectionResult = await prisma.$transaction(
       async (tx) => {
         for (const update of draftPlan.playerUpdates) {
           await tx.player.update({
@@ -213,7 +214,7 @@ export async function runBudgetValueBackfill(
             data: { budget: update.budget, ceiling: update.ceiling, floor: update.floor },
           });
         }
-        await dependencies.applyProjections(tx, {
+        return dependencies.applyProjections(tx, {
           draftId: draftPlan.draftId,
           useBatchTransaction: false,
         });
@@ -222,7 +223,10 @@ export async function runBudgetValueBackfill(
     );
 
     const activeValues = await prisma.draftPlayerValue.aggregate({
-      where: { draftId: draftPlan.draftId },
+      where: {
+        draftId: draftPlan.draftId,
+        projectionSourceId: projectionResult.projectionSourceId,
+      },
       _sum: { activeAuctionValue: true },
     });
     appliedDrafts.push({
@@ -242,23 +246,51 @@ function planDraftBackfill(draft: BudgetValueBackfillDraft): BudgetValueDraftPla
     sourceBudget: draft.playerValueSourceBudget,
     draftBudget: draft.budget,
   });
-  const playerUpdates = adjusted.map((player) => ({
+  const proposedPlayerValues = adjusted.map((player) => ({
     id: requirePlayerId(player),
     budget: player.budget,
     ceiling: player.ceiling,
     floor: player.floor,
   }));
-  const budgetScale = getBudgetScale(draft.playerValueSourceBudget, draft.budget);
+  const currentPlayersById = new Map(draft.players.map((player) => [player.id, player]));
+  const playerUpdates = proposedPlayerValues.filter((proposed) => {
+    const current = currentPlayersById.get(proposed.id);
+    return (
+      current === undefined ||
+      current.budget !== proposed.budget ||
+      current.ceiling !== proposed.ceiling ||
+      current.floor !== proposed.floor
+    );
+  });
+  const proposedPlayersById = new Map(proposedPlayerValues.map((player) => [player.id, player]));
+  const activePlayerValues = selectActiveDraftValues(draft.playerValues);
 
   return {
     draftId: draft.id,
     draftName: draft.name,
     changedPlayerCount: playerUpdates.length,
     beforeFallbackTotal: sum(draft.players.map((player) => player.budget)),
-    afterFallbackTotal: sum(playerUpdates.map((player) => player.budget)),
-    beforeActiveTotal: sum(draft.playerValues.map((value) => value.activeAuctionValue)),
+    afterFallbackTotal: sum(proposedPlayerValues.map((player) => player.budget)),
+    beforeActiveTotal: sum(activePlayerValues.map((value) => value.activeAuctionValue)),
     afterActiveTotal: sum(
-      draft.playerValues.map((value) => scaleWholeDollar(value.activeAuctionValue, budgetScale)),
+      activePlayerValues.map((value) => {
+        if (value.fallbackAuctionValue <= 0) {
+          throw new Error(
+            `Draft ${draft.id}: projection value ${value.id} has a nonpositive fallback auction value`,
+          );
+        }
+        const proposedFallback = proposedPlayersById.get(value.playerId);
+        if (!proposedFallback) {
+          throw new Error(
+            `Draft ${draft.id}: projection value ${value.id} references missing player ${value.playerId}`,
+          );
+        }
+        return scaleWholeDollar(
+          value.activeAuctionValue,
+          proposedFallback.budget / value.fallbackAuctionValue,
+          0,
+        );
+      }),
     ),
     playerUpdates,
   };

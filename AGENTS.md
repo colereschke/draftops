@@ -177,8 +177,10 @@ Source value logic:
 Draft-specific fallback values:
 
 - `Draft.playerValueSourceBudget` captures the selected ranking source's economy at draft creation.
-- `createDraft` runs `adjustPlayerValues(BASE_PLAYERS, settings)` before inserting `Player` rows,
-  scaling by `Draft.budget / Draft.playerValueSourceBudget` before applying league multipliers.
+- `createDraft` builds the selected built-in or custom ranking-source pool, adds generated future
+  assets in the same source economy, then adjusts the complete pool before inserting `Player` rows.
+- Adjustment scales by `Draft.budget / Draft.playerValueSourceBudget` before applying league
+  multipliers.
 - A $1,000 source feeding a $1,000 draft is unchanged by budget scaling; $200 and $2,000 drafts use
   the same source values with `0.2` and `2` scales, respectively.
 - `valueAdjustment.ts` computes position-level scoring multipliers, lineup/scarcity multipliers,

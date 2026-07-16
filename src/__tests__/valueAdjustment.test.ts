@@ -152,7 +152,7 @@ const POOL: Player[] = [
   A('WR1', 'WR', 3, 45),
   A('TE1', 'TE', 20, 30),
   A('TE2', 'TE', 120, 8),
-  // PKG stores non-formula values on purpose — it must pass through verbatim.
+  // PKG stores non-formula values on purpose — it bypasses league multipliers.
   P({ player: 'Kicker Pkg', pos: 'PKG', sfRank: 999, budget: 109, ceiling: 131, floor: 75 }),
 ];
 
@@ -188,7 +188,7 @@ describe('adjustPlayerValues', () => {
     expect(te1.floor).toBe(Math.max(5, Math.round(te1.budget * 0.87)));
   });
 
-  it('leaves PKG/PICK verbatim even under aggressive settings', () => {
+  it('leaves PKG/PICK unchanged by league multipliers under aggressive settings', () => {
     const out = adjustPlayerValues(POOL, {
       ...DEFAULT_SETTINGS,
       startingLineup: [...DEFAULT_STARTING_LINEUP, 'TE'],

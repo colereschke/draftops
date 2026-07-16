@@ -75,6 +75,21 @@ const draft200: BudgetValueBackfillDraft = {
   ],
   playerValues: [
     {
+      id: 19,
+      draftId: 5,
+      playerId: 10,
+      projectionSourceId: 6,
+      projectedPoints: 290,
+      replacementPoints: 200,
+      vor: 90,
+      projectionAuctionValue: 95,
+      fallbackAuctionValue: 100,
+      activeAuctionValue: 300,
+      valueSource: 'projection_adjusted_market',
+      createdAt: new Date('2026-07-14T12:00:00.000Z'),
+      updatedAt: new Date('2026-07-14T12:00:00.000Z'),
+    },
+    {
       id: 20,
       draftId: 5,
       playerId: 10,
@@ -298,7 +313,7 @@ describe('planBudgetValueBackfill', () => {
     );
   });
 
-  it('is idempotent because current fallback values do not affect recomputation', () => {
+  it('reports no changes and preserves the active estimate after values are corrected', () => {
     const first = planBudgetValueBackfill([draft200]);
     const alreadyScaled = {
       ...draft200,
@@ -306,11 +321,18 @@ describe('planBudgetValueBackfill', () => {
         const update = first.drafts[0].playerUpdates.find((item) => item.id === player.id)!;
         return { ...player, ...update };
       }),
+      playerValues: draft200.playerValues.map((value) => ({
+        ...value,
+        fallbackAuctionValue: 20,
+        activeAuctionValue: 20,
+      })),
     };
+    const repeated = planBudgetValueBackfill([alreadyScaled]).drafts[0];
 
-    expect(planBudgetValueBackfill([alreadyScaled]).drafts[0].playerUpdates).toEqual(
-      first.drafts[0].playerUpdates,
-    );
+    expect(repeated.changedPlayerCount).toBe(0);
+    expect(repeated.playerUpdates).toEqual([]);
+    expect(repeated.beforeActiveTotal).toBe(20);
+    expect(repeated.afterActiveTotal).toBe(20);
   });
 
   it('rejects an invalid persisted future-pick asset kind with the player ID', () => {
@@ -321,6 +343,17 @@ describe('planBudgetValueBackfill', () => {
 
     expect(() => planBudgetValueBackfill([invalidDraft])).toThrow(
       'Invalid future pick asset kind for player 10: bundle',
+    );
+  });
+
+  it('rejects a nonpositive projection fallback instead of producing an invalid estimate', () => {
+    const invalidDraft = {
+      ...draft200,
+      playerValues: [{ ...draft200.playerValues[1], fallbackAuctionValue: 0 }],
+    };
+
+    expect(() => planBudgetValueBackfill([invalidDraft])).toThrow(
+      'Draft 5: projection value 20 has a nonpositive fallback auction value',
     );
   });
 });
@@ -401,7 +434,7 @@ describe('runBudgetValueBackfill', () => {
     expect(result.snapshotPath).toBe('/snapshots/value-backfill.json');
     expect(result.drafts[0].afterActiveTotal).toBe(24);
     expect(mockActiveValueAggregate).toHaveBeenCalledWith({
-      where: { draftId: 5 },
+      where: { draftId: 5, projectionSourceId: 7 },
       _sum: { activeAuctionValue: true },
     });
   });

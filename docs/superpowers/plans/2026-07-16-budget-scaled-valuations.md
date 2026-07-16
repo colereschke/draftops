@@ -571,6 +571,7 @@ const futurePickAssets = generateFuturePickAssets({
   teams: coerced,
   year: nextPickYear,
   startingRank: 900,
+  sourceBudget,
   baselines: inferFuturePickBaselines(basePlayers),
 });
 const sourcePlayers = [...excludeStaticFuturePickRows(basePlayers), ...futurePickAssets];
@@ -585,6 +586,9 @@ const seededPlayers = adjustPlayerValues(sourcePlayers, {
 
 Keep player persistence and `applyProjectionValuesToDraft` after this block. Do not add scaling to
 `projectionMarketValue.ts`; its existing fallback anchor is the required behavior.
+Canonical future-pick defaults are $1,000 values, so generation must denominate only those defaults
+in `sourceBudget`; inferred custom baselines already use the selected source economy and must not be
+scaled again.
 
 - [ ] **Step 6: Run the integrated valuation tests**
 
@@ -721,7 +725,7 @@ it('skips scale-one drafts', () => {
   expect(planBudgetValueBackfill([{ ...draft200, budget: 1000 }]).drafts).toHaveLength(0);
 });
 
-it('is idempotent because current fallback values do not affect recomputation', () => {
+it('reports no changes and preserves the active estimate after values are corrected', () => {
   const first = planBudgetValueBackfill([draft200]);
   const alreadyScaled = {
     ...draft200,
@@ -729,10 +733,16 @@ it('is idempotent because current fallback values do not affect recomputation', 
       const update = first.drafts[0].playerUpdates.find((item) => item.id === player.id)!;
       return { ...player, ...update };
     }),
+    playerValues: draft200.playerValues.map((value) => ({
+      ...value,
+      fallbackAuctionValue: 20,
+      activeAuctionValue: 20,
+    })),
   };
-  expect(planBudgetValueBackfill([alreadyScaled]).drafts[0].playerUpdates).toEqual(
-    first.drafts[0].playerUpdates,
-  );
+  const repeated = planBudgetValueBackfill([alreadyScaled]).drafts[0];
+  expect(repeated.changedPlayerCount).toBe(0);
+  expect(repeated.playerUpdates).toEqual([]);
+  expect(repeated.afterActiveTotal).toBe(20);
 });
 ```
 
@@ -932,10 +942,14 @@ const adjusted = adjustPlayerValues(draft.players.map(toSourcePlayer), {
 ```
 
 Use the same JSON guards/defaults as `projectionApplication.ts` for lineup and scoring. Compute
-fallback totals from `Player.budget` before and after. Compute the dry-run active total by scaling
-each existing `DraftPlayerValue.activeAuctionValue` through the same source-to-draft ratio and
-whole-dollar rounding; label it as an estimate in CLI output. After apply, replace that estimate
-with the actual committed active total produced by projection reapplication.
+fallback totals from `Player.budget` before and after, and count/update only rows whose current
+fallback fields differ from their proposed fields. Select the same current projection-source rows
+as `playerValueMapping.ts`, including its per-player null fallback behavior, so historical sources
+are not double-counted. Estimate each selected active value with its current
+`fallbackAuctionValue`-to-proposed-fallback ratio and whole-dollar rounding; this makes a corrected
+draft estimate stable on repeat runs. Label the result as an estimate in CLI output. After apply,
+replace that estimate with the committed active total for the `projectionSourceId` returned by
+projection reapplication.
 
 - [ ] **Step 5: Implement injected dry-run/apply orchestration**
 
@@ -947,7 +961,8 @@ with the actual committed active total produced by projection reapplication.
 4. Call `writeSnapshot({ createdAt, drafts: affectedDrafts }, snapshotDir)` once before mutations.
 5. For each draft plan, call one interactive `$transaction` that updates every player and then
    invokes `applyProjections(tx, { draftId, useBatchTransaction: false })`.
-6. Query the committed draft's active total for the final report.
+6. Capture the projection reapplication result and query the committed draft's active total for
+   only its returned `projectionSourceId`.
 
 Use `snapshotDir: 'valuation-backfill-snapshots'` as the option default. Do not catch database or
 filesystem errors; allow the CLI to set a non-zero exit code.
@@ -1264,7 +1279,8 @@ Create `src/__tests__/integration/budgetValueBackfill.postgres.test.ts`. The fix
 - one $200 draft with `playerValueSourceBudget: 1000` and default JSON settings;
 - one player with source values `100/115/87`, incorrect fallback `100/115/87`, and a Sleeper ID;
 - one current `ProjectionSource` and matching `PlayerProjection` row;
-- one initial `DraftPlayerValue` row anchored to `100`.
+- one historical projection source with an older `DraftPlayerValue` row;
+- one current `DraftPlayerValue` row anchored to `100`.
 
 Run apply with a temporary snapshot directory and the real projection dependency, then assert:
 
@@ -1285,7 +1301,8 @@ await expect(
 ```
 
 Run apply a second time and assert the same stored values and only one projection-value row for the
-draft/player/source key.
+draft/player/source key. Assert the backfill report totals only the current source and leaves the
+historical row stored without double-counting it.
 
 - [ ] **Step 3: Add a real rollback test**
 

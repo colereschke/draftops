@@ -216,6 +216,7 @@ export async function createDraft(data: {
       teams: coerced,
       year: nextPickYear,
       startingRank: 900,
+      sourceBudget,
       baselines: inferFuturePickBaselines(basePlayers),
     });
     const sourcePlayers = [...excludeStaticFuturePickRows(basePlayers), ...futurePickAssets];

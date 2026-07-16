@@ -586,9 +586,34 @@ describe('createDraft with playerSource: custom', () => {
         data: expect.objectContaining({ playerValueSourceBudget: 500 }),
       }),
     );
-    expect(mockTxPlayerCreateMany.mock.calls[0][0].data[0]).toMatchObject({
+    const created = mockTxPlayerCreateMany.mock.calls[0][0].data as Array<{
+      name: string;
+      budget: number;
+      ceiling: number;
+      floor: number;
+      baseBudget: number;
+      baseCeiling: number;
+      baseFloor: number;
+    }>;
+    expect(created[0]).toMatchObject({
       budget: 200,
       baseBudget: 100,
+    });
+    expect(created.find((player) => player.name === "team1's 2027 package")).toMatchObject({
+      budget: 110,
+      ceiling: 132,
+      floor: 76,
+      baseBudget: 55,
+      baseCeiling: 66,
+      baseFloor: 38,
+    });
+    expect(created.find((player) => player.name === 'team1 2027 1st')).toMatchObject({
+      budget: 76,
+      ceiling: 90,
+      floor: 52,
+      baseBudget: 38,
+      baseCeiling: 45,
+      baseFloor: 26,
     });
   });
 });

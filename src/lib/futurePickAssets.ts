@@ -1,4 +1,9 @@
 import type { FuturePickAuctionMode, Player } from '@/types';
+import {
+  DEFAULT_RANKING_SOURCE_BUDGET,
+  getBudgetScale,
+  scaleWholeDollar,
+} from '@/lib/valuationBudget';
 
 export const FUTURE_PICK_AUCTION_MODES = ['packages', 'individual', 'none'] as const;
 
@@ -29,6 +34,7 @@ interface GenerateFuturePickAssetsInput {
   teams: FuturePickTeamInput[];
   year: number;
   startingRank: number;
+  sourceBudget?: number;
   baselines?: FuturePickBaselines;
 }
 
@@ -59,17 +65,21 @@ export function generateFuturePickAssets({
   teams,
   year,
   startingRank,
+  sourceBudget = DEFAULT_RANKING_SOURCE_BUDGET,
   baselines,
 }: GenerateFuturePickAssetsInput): Player[] {
+  const defaultBaselineScale = getBudgetScale(DEFAULT_RANKING_SOURCE_BUDGET, sourceBudget);
   const roundBaselines = {
-    1: baselines?.rounds?.[1] ?? ROUND_BASELINES[1],
-    2: baselines?.rounds?.[2] ?? ROUND_BASELINES[2],
-    3: baselines?.rounds?.[3] ?? ROUND_BASELINES[3],
+    1: baselines?.rounds?.[1] ?? scaleBaseline(ROUND_BASELINES[1], defaultBaselineScale),
+    2: baselines?.rounds?.[2] ?? scaleBaseline(ROUND_BASELINES[2], defaultBaselineScale),
+    3: baselines?.rounds?.[3] ?? scaleBaseline(ROUND_BASELINES[3], defaultBaselineScale),
   } satisfies Record<1 | 2 | 3, PickBaseline>;
   const hasRoundOverrides = Object.keys(baselines?.rounds ?? {}).length > 0;
   const packageBaseline =
     baselines?.package ??
-    (hasRoundOverrides ? sumPackageBaseline(roundBaselines) : PACKAGE_BASELINE);
+    (hasRoundOverrides
+      ? sumPackageBaseline(roundBaselines)
+      : scaleBaseline(PACKAGE_BASELINE, defaultBaselineScale));
 
   return teams.flatMap((team, teamIndex) => {
     const rankBase = startingRank + teamIndex * 4;
@@ -168,6 +178,14 @@ function sumPackageBaseline(rounds: Record<1 | 2 | 3, PickBaseline>): PickBaseli
     budget,
     ceiling: Math.round(budget * 1.15),
     floor: Math.max(5, Math.round(budget * 0.87)),
+  };
+}
+
+function scaleBaseline(baseline: PickBaseline, scale: number): PickBaseline {
+  return {
+    budget: scaleWholeDollar(baseline.budget, scale),
+    ceiling: scaleWholeDollar(baseline.ceiling, scale),
+    floor: scaleWholeDollar(baseline.floor, scale),
   };
 }
 

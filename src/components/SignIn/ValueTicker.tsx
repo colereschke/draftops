@@ -33,7 +33,7 @@ interface ValueTickerProps {
 export default function ValueTicker({ className }: ValueTickerProps) {
   return (
     <div className={cn('relative overflow-hidden', className)}>
-      <div className="from-background pointer-events-none absolute inset-x-0 top-0 z-10 h-14 bg-gradient-to-b to-transparent" />
+      <div className="from-background pointer-events-none absolute inset-x-0 top-0 z-10 h-6 bg-gradient-to-b to-transparent md:h-14" />
       <div className="ticker-scroll">
         {TICKER_PLAYERS.map((p) => (
           <TickerRow key={`a-${p.name}`} {...p} />
@@ -42,7 +42,7 @@ export default function ValueTicker({ className }: ValueTickerProps) {
           <TickerRow key={`b-${p.name}`} {...p} />
         ))}
       </div>
-      <div className="from-background pointer-events-none absolute inset-x-0 bottom-0 z-10 h-14 bg-gradient-to-t to-transparent" />
+      <div className="from-background pointer-events-none absolute inset-x-0 bottom-0 z-10 h-6 bg-gradient-to-t to-transparent md:h-14" />
     </div>
   );
 }

@@ -32,7 +32,7 @@ interface ValueTickerProps {
 
 export default function ValueTicker({ className }: ValueTickerProps) {
   return (
-    <div className={cn('relative overflow-hidden', className)}>
+    <div data-testid="ticker-container" className={cn('relative overflow-hidden', className)}>
       <div className="from-background pointer-events-none absolute inset-x-0 top-0 z-10 h-6 bg-gradient-to-b to-transparent md:h-14" />
       <div className="ticker-scroll">
         {TICKER_PLAYERS.map((p) => (

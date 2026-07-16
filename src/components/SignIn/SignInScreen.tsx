@@ -40,7 +40,7 @@ export default function SignInScreen({ callbackUrl }: SignInScreenProps) {
           </button>
         </form>
       </div>
-      <ValueTicker className="h-[150px] shrink-0 md:h-full md:flex-1" />
+      <ValueTicker className="min-h-[150px] flex-1 md:h-full" />
     </div>
   );
 }

@@ -32,6 +32,16 @@ describe('SignInPage', () => {
     expect(screen.getByText('DraftOps')).toBeInTheDocument();
   });
 
+  it('lets the mobile ticker fill the remaining viewport without shrinking below 150px', async () => {
+    mockAuth.mockResolvedValue(null);
+    render(await SignInPage(DEFAULT_SEARCH_PARAMS));
+
+    const ticker = screen.getByTestId('ticker-container');
+    expect(ticker).toHaveClass('min-h-[150px]', 'flex-1');
+    expect(ticker).not.toHaveClass('h-[150px]');
+    expect(ticker).not.toHaveClass('shrink-0');
+  });
+
   it('redirects to / when already authenticated', async () => {
     mockAuth.mockResolvedValue({ user: { id: '123456789', name: 'Cole' } });
     await SignInPage(DEFAULT_SEARCH_PARAMS);

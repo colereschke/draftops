@@ -138,4 +138,9 @@ describe('NavBar', () => {
       '/rankings',
     );
   });
+
+  it('links the logo back to home', () => {
+    render(<NavBar session={null} />);
+    expect(screen.getByTestId('nav-logo-link')).toHaveAttribute('href', '/');
+  });
 });

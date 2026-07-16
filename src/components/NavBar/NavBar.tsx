@@ -1,6 +1,7 @@
 import type { Session } from 'next-auth';
 import Link from 'next/link';
 import { ChevronDownIcon, LogOutIcon, Menu } from 'lucide-react';
+import LogoLockup from '@/components/Brand/LogoLockup';
 import { signOut } from '@/auth';
 import { Button } from '@/components/ui/button';
 import {
@@ -17,9 +18,9 @@ const FEEDBACK_URL = 'https://github.com/colereschke/draftops/issues/new?templat
 export default function NavBar({ session }: { session: Session | null }) {
   return (
     <div className="bg-card gap-x-lg gap-y-xs px-lg py-sm sticky top-0 z-50 flex flex-wrap items-center justify-between">
-      <span className="font-label text-label-lg text-foreground font-bold tracking-wide uppercase">
-        DraftOps
-      </span>
+      <Link href="/" data-testid="nav-logo-link">
+        <LogoLockup />
+      </Link>
 
       {/* Desktop: full inline nav, unchanged from before the mobile pass. */}
       <div className="gap-lg hidden items-center md:flex">

@@ -122,3 +122,22 @@ body {
   -webkit-font-smoothing: antialiased;
   margin: 0;
 }
+
+@keyframes ticker-scroll {
+  from {
+    transform: translateY(0);
+  }
+  to {
+    transform: translateY(-50%);
+  }
+}
+
+.ticker-scroll {
+  animation: ticker-scroll 90s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ticker-scroll {
+    animation: none;
+  }
+}

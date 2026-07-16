@@ -1,0 +1,61 @@
+export interface TickerEntry {
+  name: string;
+  value: number;
+  delta: number;
+}
+
+// Decorative marketing data only — not real/live player values. Sized at 50
+// entries so a several-second glance at the sign-in page never sees an
+// obvious repeat of the scroll loop.
+export const TICKER_PLAYERS: TickerEntry[] = [
+  { name: "Ja'Marr Chase", value: 187, delta: 2 },
+  { name: 'Bijan Robinson', value: 174, delta: -1 },
+  { name: 'CeeDee Lamb', value: 166, delta: 4 },
+  { name: 'Justin Jefferson', value: 163, delta: 1 },
+  { name: 'Jahmyr Gibbs', value: 168, delta: 2 },
+  { name: 'Amon-Ra St. Brown', value: 158, delta: 3 },
+  { name: 'Ashton Jeanty', value: 152, delta: 8 },
+  { name: 'Malik Nabers', value: 151, delta: -3 },
+  { name: 'Brian Thomas Jr.', value: 144, delta: 6 },
+  { name: 'Saquon Barkley', value: 141, delta: 3 },
+  { name: 'Puka Nacua', value: 139, delta: -2 },
+  { name: "De'Von Achane", value: 133, delta: -2 },
+  { name: 'Christian McCaffrey', value: 128, delta: -6 },
+  { name: 'Drake London', value: 121, delta: 5 },
+  { name: 'Brock Bowers', value: 121, delta: 7 },
+  { name: 'Nico Collins', value: 119, delta: -1 },
+  { name: 'Breece Hall', value: 118, delta: -4 },
+  { name: 'Garrett Wilson', value: 114, delta: -1 },
+  { name: 'Marvin Harrison Jr.', value: 112, delta: -3 },
+  { name: 'Jonathan Taylor', value: 109, delta: 1 },
+  { name: 'Jayden Daniels', value: 105, delta: 9 },
+  { name: 'Bucky Irving', value: 102, delta: 5 },
+  { name: 'Ladd McConkey', value: 97, delta: 6 },
+  { name: 'Josh Jacobs', value: 96, delta: -1 },
+  { name: 'Trey McBride', value: 94, delta: 5 },
+  { name: 'Jaxon Smith-Njigba', value: 92, delta: 3 },
+  { name: 'Chris Olave', value: 89, delta: 2 },
+  { name: 'Sam LaPorta', value: 88, delta: -2 },
+  { name: 'Derrick Henry', value: 88, delta: -2 },
+  { name: 'Rome Odunze', value: 84, delta: 4 },
+  { name: 'Lamar Jackson', value: 82, delta: -1 },
+  { name: 'DeVonta Smith', value: 81, delta: -1 },
+  { name: 'Tee Higgins', value: 79, delta: 1 },
+  { name: 'Josh Allen', value: 78, delta: -2 },
+  { name: 'Xavier Worthy', value: 77, delta: 6 },
+  { name: 'Terry McLaurin', value: 76, delta: 3 },
+  { name: 'Caleb Williams', value: 73, delta: 4 },
+  { name: 'DK Metcalf', value: 72, delta: -2 },
+  { name: 'Zay Flowers', value: 71, delta: 1 },
+  { name: 'Patrick Mahomes', value: 71, delta: 1 },
+  { name: 'Jalen Hurts', value: 68, delta: -1 },
+  { name: 'Rashee Rice', value: 68, delta: -2 },
+  { name: 'Joe Burrow', value: 69, delta: 2 },
+  { name: 'C.J. Stroud', value: 64, delta: -1 },
+  { name: 'George Kittle', value: 66, delta: -1 },
+  { name: 'Tank Dell', value: 61, delta: -1 },
+  { name: 'Jordan Addison', value: 59, delta: -1 },
+  { name: 'Mark Andrews', value: 58, delta: -3 },
+  { name: 'Anthony Richardson', value: 51, delta: -5 },
+  { name: 'Kyler Murray', value: 47, delta: 2 },
+];

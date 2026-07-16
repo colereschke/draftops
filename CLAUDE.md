@@ -38,21 +38,24 @@ src/
 │   ├── budget/page.tsx               # /budget — buying power view (server component)
 │   ├── nominate/page.tsx             # /nominate — nomination helper (server component)
 │   ├── rankings/page.tsx             # /rankings — upload + resolve a custom ranking set (server component, profile-level, not draft-scoped)
-│   ├── sign-in/page.tsx              # /sign-in — Discord OAuth sign-in page
+│   ├── sign-in/page.tsx              # /sign-in — split-layout sign-in screen (brand panel + live value ticker), Discord OAuth
 │   ├── teams/page.tsx                # /teams — team roster tracker (server component)
 │   ├── error.tsx                     # App-level error boundary
 │   ├── globals.css                   # CSS custom properties (design tokens)
+│   ├── icon.svg                      # Static favicon (gavel mark) — Next.js App Router file convention, auto-wired
 │   ├── layout.tsx                    # Font setup + NavBar
 │   └── page.tsx                      # / — value sheet (server component)
 ├── auth.ts                           # Auth.js config: Discord provider, JWT strategy, session callback
 ├── components/
 │   ├── AuctionSheet/                 # Main player value sheet + bid logging
 │   ├── BidModal/                     # Log/edit/delete bid modal
+│   ├── Brand/                        # LogoMark (gavel icon SVG) + LogoLockup (icon+"DraftOps" wordmark), used in NavBar and /sign-in
 │   ├── BudgetPressure/               # Live threat board (ThreatBoard) — position selector + threat ranking (maxBid × revealed appetite) + 20s auto-refresh
 │   ├── NavBar/                       # Fixed header with nav links
 │   ├── NominationHelper/             # Nomination scorer + watchlist + in-auction sidebar
 │   ├── RankingsUpload/                # RankingsUploadForm (upload/re-upload + summary), ResolveUnmatchedList (cmdk search-and-pick for unmatched rows)
 │   ├── RosterTracker/                # Manager dossier grid (DossierCard) — per-team scouting cards (lean/appetite/aggression), expandable grouped roster drawer
+│   ├── SignIn/                       # SignInScreen (split desktop / stacked mobile layout) + ValueTicker (scrolling curated-data marquee) + tickerPlayers.ts (static decorative data)
 │   └── SleeperRosterSync/            # SleeperRosterSyncDialog — Sleeper league/roster mapping + catch-up batch preview, opened from AuctionSheet
 ├── data/
 │   └── players.ts                    # ~267 ETR dynasty players — server-only seed source (NOT imported by client components); exports `players` (BASE_PLAYERS) + `PKG_PLAYERS` (pick-package subset)
@@ -98,14 +101,14 @@ existing_project_docs/                # Original reference files — do not dele
 
 ## Pages & Routes
 
-| Route       | Purpose                                                                                                                                                                                           |
-| ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `/sign-in`  | Discord OAuth sign-in; redirects to `/` after auth                                                                                                                                                |
-| `/`         | Value sheet — full player list with filters, search, sort, bid logging via modal                                                                                                                  |
-| `/teams`    | Manager dossier board — per-team scouting cards reading revealed buying behavior (lean, per-position overpay/bargain appetite, aggression); expand for grouped roster with per-position subtotals |
-| `/budget`   | Live threat board — position-anchored (auto-selects the live nomination, manual override); ranks teams by max bid × revealed appetite; keeps Room Liquidity + Low Power metrics; 20s auto-refresh |
-| `/nominate` | Nomination helper — ranks available players by rival demand score; personal watchlist sidebar                                                                                                     |
-| `/rankings` | Upload/re-upload a custom rankings CSV; resolve unmatched Sleeper rows via search. Profile-level (one active set per user), not draft-scoped — linked from the NavBar profile menu                |
+| Route       | Purpose                                                                                                                                                                                                |
+| ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `/sign-in`  | Split-layout sign-in screen (`SignInScreen`) — brand panel (logo lockup, tagline, Discord button) + a decorative scrolling `ValueTicker`; stacks on mobile. Discord OAuth; redirects to `/` after auth |
+| `/`         | Value sheet — full player list with filters, search, sort, bid logging via modal                                                                                                                       |
+| `/teams`    | Manager dossier board — per-team scouting cards reading revealed buying behavior (lean, per-position overpay/bargain appetite, aggression); expand for grouped roster with per-position subtotals      |
+| `/budget`   | Live threat board — position-anchored (auto-selects the live nomination, manual override); ranks teams by max bid × revealed appetite; keeps Room Liquidity + Low Power metrics; 20s auto-refresh      |
+| `/nominate` | Nomination helper — ranks available players by rival demand score; personal watchlist sidebar                                                                                                          |
+| `/rankings` | Upload/re-upload a custom rankings CSV; resolve unmatched Sleeper rows via search. Profile-level (one active set per user), not draft-scoped — linked from the NavBar profile menu                     |
 
 All pages are server components that fetch from Prisma directly and pass data down to `'use client'` components. Every route except `/sign-in` and the Auth.js API route is protected by `middleware.ts`.
 
@@ -273,6 +276,7 @@ OWNER_DISCORD_ID=      # Your Discord user ID — seeds ownerId on the default d
 ## What's Built
 
 - **Auth** — Discord OAuth via Auth.js v5; JWT sessions; middleware protects all routes; `/sign-in` page
+- **Logo & sign-in redesign** — DraftOps' first real brand mark: `LogoMark` (`src/components/Brand/LogoMark.tsx`) is a gavel built from plain SVG geometry (a perpendicular head-and-handle assembly over a sounding block, single-color `var(--primary)` fill), paired with a "DraftOps" wordmark via `LogoLockup`. Used in the `NavBar` (wrapped in a `Link` back to `/`, replacing the old plain-text wordmark) and on a redesigned `/sign-in` (`SignInScreen`): a split brand-panel/`ValueTicker` layout on desktop (`md:` and up), reflowing to a stacked layout on mobile (ticker shrinks to a fixed-height band rather than disappearing). `ValueTicker` is a decorative, CSS-only (no client JS) scrolling marquee of a static curated `TICKER_PLAYERS` list (`src/components/SignIn/tickerPlayers.ts`, ~50 entries — not real/live data), respecting `prefers-reduced-motion`. The favicon (`src/app/icon.svg`, Next.js App Router file convention) uses the same gavel geometry with a literal hex fill (a standalone SVG has no access to CSS custom properties). Spec: `docs/superpowers/specs/2026-07-16-logo-signin-redesign-design.md`.
 - **PostgreSQL** — migrated from SQLite; Neon in prod, local WSL2 Postgres in dev; `@prisma/adapter-pg`
 - **Multi-draft schema** — `Draft` model with `ownerId` + `ownerTeamId`; all data scoped to `draftId`; expand/contract migration complete (non-nullable, composite uniques)
 - **League settings** — `Draft` stores `teamCount`, `rosterSize`, `budget`, `startingLineup Json?`, `scoringSettings Json?`, `targetRoster Json?`; form has Roster Settings, Starting Lineup builder, and Scoring sections; QB/SUPER_FLEX lineup validation (PR #20)

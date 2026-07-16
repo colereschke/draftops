@@ -5,6 +5,7 @@ const mockUpdateMany = jest.fn().mockResolvedValue({ count: 1 });
 const mockDeleteMany = jest.fn().mockResolvedValue({ count: 1 });
 const mockNomDeleteMany = jest.fn().mockResolvedValue({});
 const mockTeamFindFirst = jest.fn();
+const mockPlayerFindFirst = jest.fn();
 const mockRevalidatePath = jest.fn();
 const mockAuth = jest.fn();
 const mockGetDraft = jest.fn();
@@ -21,6 +22,9 @@ jest.mock('@/lib/db', () => ({
     },
     team: {
       findFirst: (...args: unknown[]) => mockTeamFindFirst(...args),
+    },
+    player: {
+      findFirst: (...args: unknown[]) => mockPlayerFindFirst(...args),
     },
   },
 }));
@@ -47,11 +51,8 @@ const MOCK_DRAFT = {
 };
 
 const BID_DATA = {
-  player: 'Josh Allen',
-  position: 'QB',
-  nflTeam: 'BUF',
+  playerId: 10,
   price: 120,
-  sfRank: 1,
   teamId: 3,
   draftId: 1,
 };
@@ -61,18 +62,30 @@ beforeEach(() => {
   mockAuth.mockResolvedValue(MOCK_SESSION);
   mockGetDraft.mockResolvedValue(MOCK_DRAFT);
   mockTeamFindFirst.mockResolvedValue({ id: 3 });
+  mockPlayerFindFirst.mockResolvedValue({
+    id: 10,
+    name: 'Josh Allen',
+    pos: 'QB',
+    nflTeam: 'BUF',
+    sfRank: 2,
+  });
 });
 
 describe('logBid', () => {
-  it('inserts a bid record with all fields including draftId', async () => {
+  it('inserts a bid record from a draft-scoped playerId', async () => {
     await logBid(BID_DATA);
+    expect(mockPlayerFindFirst).toHaveBeenCalledWith({
+      where: { id: 10, draftId: 1 },
+      select: { id: true, name: true, pos: true, nflTeam: true, sfRank: true },
+    });
     expect(mockCreate).toHaveBeenCalledWith({
       data: {
         player: 'Josh Allen',
+        playerId: 10,
         position: 'QB',
         nflTeam: 'BUF',
         price: 120,
-        sfRank: 1,
+        sfRank: 2,
         teamId: 3,
         draftId: 1,
       },
@@ -87,8 +100,13 @@ describe('logBid', () => {
   it('clears nomination for the player scoped to the draft', async () => {
     await logBid(BID_DATA);
     expect(mockNomDeleteMany).toHaveBeenCalledWith({
-      where: { playerName: 'Josh Allen', draftId: 1 },
+      where: { playerId: 10, draftId: 1 },
     });
+  });
+
+  it('throws when playerId does not belong to the draft', async () => {
+    mockPlayerFindFirst.mockResolvedValue(null);
+    await expect(logBid(BID_DATA)).rejects.toThrow('Player not found in draft');
   });
 
   it('throws when called without a session', async () => {

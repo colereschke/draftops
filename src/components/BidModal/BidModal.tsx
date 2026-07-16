@@ -176,6 +176,7 @@ export default function BidModal({
             Price
           </Label>
           <Input
+            data-testid="bid-price"
             id="bid-price"
             aria-label="Price"
             type="number"
@@ -221,7 +222,11 @@ export default function BidModal({
         </div>
 
         {(error || serverError) && (
-          <div className="text-body-sm" style={{ color: 'var(--age-old)' }}>
+          <div
+            data-testid="bid-server-error"
+            className="text-body-sm"
+            style={{ color: 'var(--age-old)' }}
+          >
             {error || serverError}
           </div>
         )}
@@ -257,7 +262,7 @@ export default function BidModal({
           <Button variant="outline" size="sm" onClick={onClose}>
             Cancel
           </Button>
-          <Button size="sm" onClick={handleSubmit}>
+          <Button data-testid="bid-submit" size="sm" onClick={handleSubmit}>
             {isEdit ? 'Update Bid' : 'Log Bid'}
           </Button>
         </div>

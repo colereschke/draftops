@@ -16,13 +16,11 @@ import { players as BASE_PLAYERS } from '@/data/players';
 import { adjustPlayerValues } from '@/lib/valueAdjustment';
 import { applyProjectionValuesToDraft } from '@/lib/projectionApplication';
 import { getEtrSleeperMatches } from '@/lib/projectionIdentity';
+import { getCustomPlayerKey } from '@/lib/playerIdentity';
 
 export async function logBid(data: {
-  player: string;
-  position: string;
-  nflTeam: string;
+  playerId: number;
   price: number;
-  sfRank: number | null;
   teamId: number;
   draftId: number;
 }): Promise<void> {
@@ -35,19 +33,26 @@ export async function logBid(data: {
   const team = await prisma.team.findFirst({ where: { id: data.teamId, draftId: draft.id } });
   if (!team) throw new Error('Team not found in draft');
 
+  const player = await prisma.player.findFirst({
+    where: { id: data.playerId, draftId: draft.id },
+    select: { id: true, name: true, pos: true, nflTeam: true, sfRank: true },
+  });
+  if (!player) throw new Error('Player not found in draft');
+
   await prisma.auctionResult.create({
     data: {
-      player: data.player,
-      position: data.position,
-      nflTeam: data.nflTeam,
+      player: player.name,
+      playerId: player.id,
+      position: player.pos,
+      nflTeam: player.nflTeam,
       price: data.price,
-      sfRank: data.sfRank,
+      sfRank: player.sfRank,
       teamId: data.teamId,
       draftId: draft.id,
     },
   });
   await prisma.nominatedPlayer.deleteMany({
-    where: { playerName: data.player, draftId: draft.id },
+    where: { playerId: player.id, draftId: draft.id },
   });
   revalidatePath(`/draft/${data.draftId}`);
 }
@@ -128,6 +133,8 @@ export async function createDraft(data: {
     data.playerSource === 'custom' ? new Map<string, string>() : getEtrSleeperMatches();
 
   const draftId = await prisma.$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${session.user.id}))`;
+    const ownerDraftCount = await tx.draft.count({ where: { ownerId: session.user.id } });
     const draft = await tx.draft.create({
       data: {
         name: data.name.trim(),
@@ -196,7 +203,7 @@ export async function createDraft(data: {
     const seededPlayers = [...excludeStaticFuturePickRows(valued), ...futurePickAssets];
 
     await tx.player.createMany({
-      data: seededPlayers.map((p) => ({
+      data: seededPlayers.map((p, index) => ({
         name: p.player,
         nflTeam: p.team,
         pos: p.pos,
@@ -209,6 +216,7 @@ export async function createDraft(data: {
         baseCeiling: p.baseCeiling ?? p.ceiling,
         baseFloor: p.baseFloor ?? p.floor,
         sleeperId: p.sleeperId ?? etrMatches.get(p.player) ?? null,
+        customKey: getCustomPlayerKey(p, index),
         notes: p.notes,
         futurePickYear: p.futurePickYear ?? null,
         futurePickRound: p.futurePickRound ?? null,
@@ -223,6 +231,33 @@ export async function createDraft(data: {
       etrMatches,
       useBatchTransaction: false,
     });
+
+    if (ownerDraftCount === 0) {
+      const transition = await tx.onboardingProgress.updateMany({
+        where: { userId: session.user.id, phase: 'DRAFT_SETUP' },
+        data: {
+          phase: 'FEATURE_TOUR',
+          draftId: draft.id,
+          step: 'VALUE_SHEET_INTRO',
+          subjectPlayerName: null,
+        },
+      });
+      if (transition.count === 0) {
+        const onboarding = await tx.onboardingProgress.findUnique({
+          where: { userId: session.user.id },
+        });
+        if (!onboarding) {
+          await tx.onboardingProgress.create({
+            data: {
+              userId: session.user.id,
+              phase: 'FEATURE_TOUR',
+              draftId: draft.id,
+              step: 'VALUE_SHEET_INTRO',
+            },
+          });
+        }
+      }
+    }
 
     return draft.id;
   });

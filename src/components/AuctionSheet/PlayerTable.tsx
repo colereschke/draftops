@@ -21,10 +21,11 @@ interface PlayerTableProps {
   players: Player[];
   showNotes: boolean;
   hasClaims: boolean;
-  claimMap: Map<string, ClaimedBid>;
-  nominatedSet: Set<string>;
+  claimMap: Map<number | string, ClaimedBid>;
+  nominatedSet: Set<number | string>;
   sortBy: SortKey;
   sortDir: 'asc' | 'desc';
+  onboardingSubjectPlayerName?: string | null;
   onSort: (col: SortKey) => void;
   onRowClick: (player: Player) => void;
 }
@@ -64,6 +65,7 @@ export default function PlayerTable({
   nominatedSet,
   sortBy,
   sortDir,
+  onboardingSubjectPlayerName,
   onSort,
   onRowClick,
 }: PlayerTableProps) {
@@ -115,12 +117,25 @@ export default function PlayerTable({
             const c = POS_COLORS[p.pos];
             const isRookie = p.notes.toLowerCase().includes('rookie');
             const isPkg = p.pos === 'PKG';
-            const isNominated = nominatedSet.has(p.player);
-            const claim = claimMap.get(p.player);
+            const key = p.id ?? p.player;
+            const isNominated = nominatedSet.has(key);
+            const claim = claimMap.get(key);
+            const isOnboardingUndoTarget =
+              claim !== undefined && onboardingSubjectPlayerName === p.player;
             return (
               <TableRow
                 key={p.player + i}
-                data-testid={`player-row-${p.sfRank}`}
+                data-testid={
+                  isOnboardingUndoTarget
+                    ? `onboarding-bid-undo-${p.player}`
+                    : `player-row-${p.sfRank}`
+                }
+                data-onboarding-target={isOnboardingUndoTarget ? 'bid-undo' : undefined}
+                title={
+                  isOnboardingUndoTarget
+                    ? 'Reopen this player and use Remove in the bid modal to undo this bid.'
+                    : undefined
+                }
                 tabIndex={0}
                 onClick={() => onRowClick(p)}
                 onKeyDown={(event) => {

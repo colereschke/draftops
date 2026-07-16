@@ -58,6 +58,25 @@ describe('computeNominationScores', () => {
     expect(scores).toHaveLength(0);
   });
 
+  it('only excludes the matching player ID when players share a display name', () => {
+    const won = makePlayer({ id: 10, player: 'Shared Asset' });
+    const available = makePlayer({ id: 11, player: 'Shared Asset', ceiling: 75 });
+    const result = makeResult({ playerId: 10, player: 'Shared Asset' });
+
+    const scores = computeNominationScores(
+      [won, available],
+      [makeTeamStat()],
+      [result],
+      [],
+      [],
+      'coreschke',
+      { QB: 4, RB: 9, WR: 11, TE: 3 },
+    );
+
+    expect(scores).toHaveLength(1);
+    expect(scores[0].player.id).toBe(11);
+  });
+
   it('excludes watchlisted players', () => {
     const player = makePlayer({ player: 'Want Him' });
     const scores = computeNominationScores(

@@ -7,6 +7,7 @@ interface TeamInput {
   budget: number;
   results: Array<{
     id: number;
+    playerId?: number | null;
     player: string;
     position: string;
     nflTeam: string;
@@ -32,10 +33,15 @@ export function computeTeamStats(
     const results: RosterEntry[] = [];
     const knownAges: number[] = [];
     for (const r of team.results) {
-      const target = players.find((p) => p.player === r.player);
+      const target = players.find((p) =>
+        typeof r.playerId === 'number' && p.id !== undefined
+          ? p.id === r.playerId
+          : p.player === r.player,
+      );
       const delta = target != null ? r.price - target.budget : null;
       results.push({
         id: r.id,
+        playerId: r.playerId,
         player: r.player,
         position: r.position,
         nflTeam: r.nflTeam,

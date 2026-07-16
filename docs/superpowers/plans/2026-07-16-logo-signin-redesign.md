@@ -334,7 +334,7 @@ git commit -m "feat: link NavBar logo lockup to home"
 **Interfaces:**
 
 - Consumes: `TICKER_PLAYERS`, `TickerEntry` from `src/components/SignIn/tickerPlayers.ts` (Task 1); `.ticker-scroll` CSS class (Task 1).
-- Produces: `export default function ValueTicker(props: { className?: string })` — renders the curated list twice back-to-back inside a scrolling, fade-masked container. Each row carries `data-testid="ticker-row"`.
+- Produces: `export default function ValueTicker(props: { className?: string })` — renders the curated list twice back-to-back inside a scrolling, fade-masked container. Each row carries `data-testid="ticker-row"`; each row's name span carries `data-testid="ticker-name"`.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -353,7 +353,7 @@ describe('ValueTicker', () => {
 
   it('renders the first curated player name', () => {
     render(<ValueTicker />);
-    expect(screen.getAllByText(TICKER_PLAYERS[0].name).length).toBeGreaterThan(0);
+    expect(screen.getAllByTestId('ticker-name')[0]).toHaveTextContent(TICKER_PLAYERS[0].name);
   });
 });
 ```
@@ -381,7 +381,9 @@ function TickerRow({ name, value, delta }: TickerEntry) {
       data-testid="ticker-row"
       className="border-border-subtle flex items-center gap-3 border-b px-6 py-2.5 text-sm"
     >
-      <span className="text-secondary-fg flex-1 truncate">{name}</span>
+      <span data-testid="ticker-name" className="text-secondary-fg flex-1 truncate">
+        {name}
+      </span>
       <span className="font-mono text-foreground tabular-nums">${value}</span>
       <span
         className="flex items-center gap-0.5 font-mono text-xs tabular-nums"

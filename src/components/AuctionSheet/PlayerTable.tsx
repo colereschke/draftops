@@ -4,6 +4,7 @@ import { ArrowUp, ArrowDown, ArrowUpDown } from 'lucide-react';
 import type { Player, ClaimedBid } from '@/types';
 import { POS_COLORS } from '@/lib/posColors';
 import { ageColor } from '@/lib/ageColor';
+import { formatSpread, spreadColor } from '@/lib/valueSpread';
 import { cn } from '@/lib/utils';
 import {
   Table,
@@ -38,6 +39,7 @@ const SORT_COLUMNS: Array<{ key: SortKey; label: string }> = [
   { key: 'floor', label: 'Floor' },
   { key: 'budget', label: 'Target' },
   { key: 'ceiling', label: 'Ceiling' },
+  { key: 'spread', label: 'Spread' },
 ];
 
 interface SortIconProps {
@@ -228,7 +230,7 @@ export default function PlayerTable({
                     'text-center font-mono text-[11px] tabular-nums',
                     claim && 'text-secondary-fg',
                   )}
-                  style={{ color: claim ? undefined : ageColor(p.age) }}
+                  style={{ color: claim ? undefined : ageColor(p.age, p.pos) }}
                 >
                   {p.age !== null ? p.age.toFixed(1) : '—'}
                 </TableCell>
@@ -274,6 +276,16 @@ export default function PlayerTable({
                   style={{ color: claim ? 'var(--text-muted)' : 'var(--text-secondary)' }}
                 >
                   ${p.ceiling}
+                </TableCell>
+                <TableCell
+                  data-testid={`spread-${p.sfRank}`}
+                  className={cn(
+                    'text-center font-mono text-xs tabular-nums',
+                    claim && 'text-muted-foreground',
+                  )}
+                  style={{ color: claim ? undefined : spreadColor(p.spread) }}
+                >
+                  {p.spread == null ? '—' : formatSpread(p.spread)}
                 </TableCell>
                 {showNotes && (
                   <TableCell className="max-w-[220px] whitespace-normal text-[10px] text-muted-foreground">

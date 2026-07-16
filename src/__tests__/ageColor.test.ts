@@ -24,4 +24,14 @@ describe('ageColor', () => {
     expect(ageColor(31)).toBe('var(--age-old)');
     expect(ageColor(40)).toBe('var(--age-old)');
   });
+
+  it('colors by per-position bands when a position is given', () => {
+    // 28yo RB is old (red); 28yo QB is prime.
+    expect(ageColor(28, 'RB')).toBe('var(--age-old)');
+    expect(ageColor(28, 'QB')).toBe('var(--age-prime)');
+  });
+
+  it('keeps global bands when no position is given', () => {
+    expect(ageColor(28)).toBe('var(--age-aging)');
+  });
 });

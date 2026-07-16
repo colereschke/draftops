@@ -1,4 +1,5 @@
 export type Position = 'QB' | 'RB' | 'WR' | 'TE' | 'PICK' | 'PKG';
+export type StrategyTag = 'WIN-NOW' | 'BARGAIN' | 'FUTURE' | 'FADE';
 
 export type FuturePickAuctionMode = 'packages' | 'individual' | 'none';
 export type FuturePickAssetKind = 'package' | 'pick';
@@ -30,6 +31,12 @@ export interface Player {
   projectedPoints?: number | null;
   replacementPoints?: number | null;
   vor?: number | null;
+  spread?: number | null;
+  strategyTag?: StrategyTag | null;
+  spreadDynRank?: number | null;
+  spreadProjRank?: number | null;
+  spreadDynPct?: number | null;
+  spreadProjPct?: number | null;
   futurePickYear?: number | null;
   futurePickRound?: number | null;
   futurePickOriginHandle?: string | null;

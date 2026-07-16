@@ -31,6 +31,7 @@ interface AuctionSheetProps {
   ownerBudget: number;
   scoringSettings: ScoringSettings;
   sleeperSyncConfigured?: boolean;
+  sleeperLeagueId?: string | null;
 }
 
 export default function AuctionSheet({
@@ -43,6 +44,7 @@ export default function AuctionSheet({
   ownerBudget,
   scoringSettings,
   sleeperSyncConfigured = false,
+  sleeperLeagueId = null,
 }: AuctionSheetProps) {
   const { progress, recordBidLogged } = useOnboarding();
   const [posFilter, setPosFilter] = useState<PositionFilter>('ALL');
@@ -350,6 +352,7 @@ export default function AuctionSheet({
           draftId={draftId}
           teams={teams}
           initiallyConfigured={sleeperSyncConfigured}
+          sleeperLeagueId={sleeperLeagueId}
           onClose={() => setShowSleeperSync(false)}
         />
       )}

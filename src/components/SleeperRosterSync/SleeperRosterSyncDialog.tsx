@@ -1,10 +1,12 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import type { LeagueTeam } from '@/types';
+import type { SleeperRosterCandidate } from '@/lib/sleeper';
 import {
   logSleeperRosterCatchUp,
+  previewSleeperRosterMatch,
   previewSleeperRosterSync,
   saveSleeperRosterMapping,
 } from '@/lib/sleeper-roster-actions';
@@ -18,6 +20,7 @@ interface SleeperRosterSyncDialogProps {
   draftId: number;
   teams: LeagueTeam[];
   initiallyConfigured: boolean;
+  sleeperLeagueId?: string | null;
   onClose: () => void;
 }
 
@@ -31,6 +34,8 @@ function responseMessage(code: string): string {
       return 'Add a Sleeper league ID and map each roster before continuing.';
     case 'sleeper_error':
       return 'Sleeper could not be reached. Try again in a moment.';
+    case 'invalid_league_id':
+      return 'Enter a Sleeper league ID.';
     case 'invalid_input':
       return 'Enter a whole-dollar price greater than zero.';
     case 'not_found':
@@ -44,17 +49,21 @@ export default function SleeperRosterSyncDialog({
   draftId,
   teams,
   initiallyConfigured,
+  sleeperLeagueId = null,
   onClose,
 }: SleeperRosterSyncDialogProps) {
   const router = useRouter();
   const [view, setView] = useState<SyncView>(initiallyConfigured ? 'loading' : 'configuration');
   const [preview, setPreview] = useState<SleeperRosterPreview | null>(null);
   const [error, setError] = useState<string>('');
-  const [leagueId, setLeagueId] = useState<string>('');
+  const [leagueId, setLeagueId] = useState<string>(sleeperLeagueId ?? '');
+  const [isSyncing, setIsSyncing] = useState<boolean>(false);
+  const [matchCandidates, setMatchCandidates] = useState<SleeperRosterCandidate[] | null>(null);
+  const [matchTeams, setMatchTeams] = useState<LeagueTeam[]>(teams);
   const [teamMappings, setTeamMappings] = useState<Record<number, string>>({});
   const [prices, setPrices] = useState<Record<number, string>>({});
   const [conflicts, setConflicts] = useState<Map<number, string>>(new Map());
-  const rosterIds = Array.from({ length: teams.length }, (_, index) => index + 1);
+  const autoSyncedRef = useRef(false);
 
   async function loadPreview() {
     setView('loading');
@@ -102,16 +111,72 @@ export default function SleeperRosterSyncDialog({
     void fetchInitialPreview();
   }, [draftId, initiallyConfigured]);
 
+  const syncLeague = useCallback(
+    async (idOverride?: string) => {
+      const targetLeagueId = (idOverride ?? leagueId).trim();
+      if (!targetLeagueId) {
+        setError(responseMessage('invalid_league_id'));
+        return;
+      }
+      setIsSyncing(true);
+      setError('');
+      try {
+        const response = await previewSleeperRosterMatch({ draftId, leagueId: targetLeagueId });
+        if (!response.ok) {
+          setError(responseMessage(response.code));
+          setIsSyncing(false);
+          return;
+        }
+        setMatchCandidates(response.rosters);
+        setMatchTeams(response.teams);
+        setTeamMappings((current) => {
+          const next = { ...current };
+          for (const candidate of response.rosters) {
+            if (
+              next[candidate.sleeperRosterId] === undefined &&
+              candidate.suggestedTeamId !== null
+            ) {
+              next[candidate.sleeperRosterId] = String(candidate.suggestedTeamId);
+            }
+          }
+          return next;
+        });
+        setIsSyncing(false);
+      } catch {
+        setError('Unable to sync with Sleeper. Please try again.');
+        setIsSyncing(false);
+      }
+    },
+    [draftId, leagueId],
+  );
+
+  // Auto-sync only from a league ID the draft already had saved (the `sleeperLeagueId` prop) —
+  // never from the user still typing into the league ID field, which would fire on every
+  // keystroke's first non-empty value.
+  useEffect(() => {
+    if (view !== 'configuration') return;
+    if (autoSyncedRef.current) return;
+    if (!sleeperLeagueId?.trim()) return;
+    autoSyncedRef.current = true;
+    queueMicrotask(() => void syncLeague(sleeperLeagueId));
+  }, [view, sleeperLeagueId, syncLeague]);
+
   function updateMapping(rosterId: number, teamId: string) {
     setTeamMappings((current) => ({ ...current, [rosterId]: teamId }));
   }
 
   async function saveConfiguration() {
-    const mappings = rosterIds.flatMap((sleeperRosterId) => {
-      const teamId = Number(teamMappings[sleeperRosterId]);
-      return Number.isSafeInteger(teamId) && teamId > 0 ? [{ teamId, sleeperRosterId }] : [];
+    if (!matchCandidates) {
+      setError('Sync with Sleeper before saving a mapping.');
+      return;
+    }
+    const mappings = matchCandidates.flatMap((candidate) => {
+      const teamId = Number(teamMappings[candidate.sleeperRosterId]);
+      return Number.isSafeInteger(teamId) && teamId > 0
+        ? [{ teamId, sleeperRosterId: candidate.sleeperRosterId }]
+        : [];
     });
-    if (!leagueId.trim() || mappings.length !== rosterIds.length) {
+    if (!leagueId.trim() || mappings.length !== matchCandidates.length) {
       setError('Enter a league ID and assign every Sleeper roster to one team.');
       return;
     }
@@ -194,48 +259,77 @@ export default function SleeperRosterSyncDialog({
             </p>
             <div className="space-y-1.5">
               <Label htmlFor="sleeper-sync-league-id">Sleeper league ID</Label>
-              <Input
-                id="sleeper-sync-league-id"
-                data-testid="sleeper-sync-league-id"
-                value={leagueId}
-                onChange={(event) => setLeagueId(event.target.value)}
-              />
-            </div>
-            {rosterIds.map((rosterId) => (
-              <div key={rosterId} className="space-y-1.5">
-                <Label htmlFor={`sleeper-sync-team-map-${rosterId}`}>
-                  Sleeper roster {rosterId}
-                </Label>
-                <select
-                  id={`sleeper-sync-team-map-${rosterId}`}
-                  data-testid={`sleeper-sync-team-map-${rosterId}`}
-                  className="h-8 w-full rounded-md border border-input bg-background px-2 text-sm"
-                  value={teamMappings[rosterId] ?? ''}
-                  onChange={(event) => updateMapping(rosterId, event.target.value)}
+              <div className="flex gap-2">
+                <Input
+                  id="sleeper-sync-league-id"
+                  data-testid="sleeper-sync-league-id"
+                  value={leagueId}
+                  onChange={(event) => setLeagueId(event.target.value)}
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  data-testid="sleeper-sync-sync-button"
+                  onClick={() => syncLeague()}
+                  disabled={isSyncing}
                 >
-                  <option value="">Select a draft team</option>
-                  {teams.map((team) => {
-                    const selectedElsewhere = Object.entries(teamMappings).some(
-                      ([mappedRosterId, mappedTeamId]) =>
-                        Number(mappedRosterId) !== rosterId && mappedTeamId === String(team.id),
-                    );
-                    return (
-                      <option
-                        key={team.id}
-                        value={team.id}
-                        disabled={selectedElsewhere}
-                        data-testid={`sleeper-sync-team-option-${rosterId}-${team.id}`}
-                      >
-                        {team.displayName ?? team.handle}
-                      </option>
-                    );
-                  })}
-                </select>
+                  {isSyncing ? 'Syncing…' : 'Sync league'}
+                </Button>
               </div>
-            ))}
-            <Button data-testid="sleeper-sync-save-mapping" onClick={saveConfiguration}>
-              Save mapping and preview
-            </Button>
+            </div>
+            {matchCandidates?.map((candidate) => {
+              const rosterId = candidate.sleeperRosterId;
+              const label = candidate.ownerDisplayName
+                ? candidate.ownerTeamName
+                  ? `${candidate.ownerDisplayName} (${candidate.ownerTeamName})`
+                  : candidate.ownerDisplayName
+                : `Unclaimed roster ${rosterId}`;
+              return (
+                <div key={rosterId} className="space-y-1.5">
+                  <Label htmlFor={`sleeper-sync-roster-map-${rosterId}`}>
+                    {label}
+                    {candidate.matchSource !== 'none' && (
+                      <span
+                        data-testid={`sleeper-sync-auto-matched-${rosterId}`}
+                        className="ml-2 text-xs text-muted-foreground"
+                      >
+                        Auto-matched
+                      </span>
+                    )}
+                  </Label>
+                  <select
+                    id={`sleeper-sync-roster-map-${rosterId}`}
+                    data-testid={`sleeper-sync-roster-map-${rosterId}`}
+                    className="h-8 w-full rounded-md border border-input bg-background px-2 text-sm"
+                    value={teamMappings[rosterId] ?? ''}
+                    onChange={(event) => updateMapping(rosterId, event.target.value)}
+                  >
+                    <option value="">Select a draft team</option>
+                    {matchTeams.map((team) => {
+                      const selectedElsewhere = Object.entries(teamMappings).some(
+                        ([mappedRosterId, mappedTeamId]) =>
+                          Number(mappedRosterId) !== rosterId && mappedTeamId === String(team.id),
+                      );
+                      return (
+                        <option
+                          key={team.id}
+                          value={team.id}
+                          disabled={selectedElsewhere}
+                          data-testid={`sleeper-sync-roster-option-${rosterId}-${team.id}`}
+                        >
+                          {team.displayName ?? team.handle}
+                        </option>
+                      );
+                    })}
+                  </select>
+                </div>
+              );
+            })}
+            {matchCandidates && (
+              <Button data-testid="sleeper-sync-save-mapping" onClick={saveConfiguration}>
+                Save mapping and preview
+              </Button>
+            )}
           </div>
         )}
 

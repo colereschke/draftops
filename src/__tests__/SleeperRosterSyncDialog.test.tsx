@@ -4,6 +4,7 @@ import SleeperRosterSyncDialog from '@/components/SleeperRosterSync/SleeperRoste
 import type { LeagueTeam } from '@/types';
 
 const mockPreview = jest.fn();
+const mockPreviewMatch = jest.fn();
 const mockSaveMapping = jest.fn();
 const mockLogCatchUp = jest.fn();
 const mockRefresh = jest.fn();
@@ -11,6 +12,7 @@ const mockRefresh = jest.fn();
 jest.mock('next/navigation', () => ({ useRouter: () => ({ refresh: mockRefresh }) }));
 jest.mock('@/lib/sleeper-roster-actions', () => ({
   previewSleeperRosterSync: (...args: unknown[]) => mockPreview(...args),
+  previewSleeperRosterMatch: (...args: unknown[]) => mockPreviewMatch(...args),
   saveSleeperRosterMapping: (...args: unknown[]) => mockSaveMapping(...args),
   logSleeperRosterCatchUp: (...args: unknown[]) => mockLogCatchUp(...args),
 }));
@@ -39,9 +41,32 @@ const PREVIEW = {
   diagnostics: { alreadyLoggedCount: 1, unmappedRosterIds: [], duplicateMappedRosterIds: [] },
 };
 
+const MATCH_RESPONSE = {
+  ok: true as const,
+  leagueName: 'Dynasty Warlords',
+  rosters: [
+    {
+      sleeperRosterId: 9,
+      ownerDisplayName: 'cole',
+      ownerTeamName: null,
+      suggestedTeamId: 7,
+      matchSource: 'handle' as const,
+    },
+    {
+      sleeperRosterId: 10,
+      ownerDisplayName: 'rival',
+      ownerTeamName: null,
+      suggestedTeamId: null,
+      matchSource: 'none' as const,
+    },
+  ],
+  teams: TEAMS,
+};
+
 beforeEach(() => {
   jest.clearAllMocks();
   mockPreview.mockResolvedValue({ ok: true, preview: PREVIEW });
+  mockPreviewMatch.mockResolvedValue(MATCH_RESPONSE);
   mockSaveMapping.mockResolvedValue({ ok: true, preview: PREVIEW });
   mockLogCatchUp.mockResolvedValue({ ok: true, createdPlayerIds: [3], conflicts: [] });
 });
@@ -75,33 +100,88 @@ describe('SleeperRosterSyncDialog', () => {
     expect(mockRefresh).toHaveBeenCalledTimes(1);
   });
 
-  it('shows configuration when roster mappings are not configured', () => {
+  it('shows the league ID entry with no roster rows until a sync completes', () => {
     render(
       <SleeperRosterSyncDialog
         draftId={4}
         teams={TEAMS}
         initiallyConfigured={false}
+        sleeperLeagueId={null}
         onClose={jest.fn()}
       />,
     );
 
     expect(screen.getByTestId('sleeper-sync-league-id')).toBeInTheDocument();
-    expect(screen.getByTestId('sleeper-sync-team-map-1')).toBeInTheDocument();
+    expect(screen.getByTestId('sleeper-sync-sync-button')).toBeInTheDocument();
+    expect(screen.queryByTestId('sleeper-sync-roster-map-9')).not.toBeInTheDocument();
+    expect(mockPreviewMatch).not.toHaveBeenCalled();
   });
 
-  it('disables a team already assigned to another Sleeper roster', async () => {
+  it('auto-syncs and pre-fills auto-matched rosters when the league ID is already known', async () => {
+    render(
+      <SleeperRosterSyncDialog
+        draftId={4}
+        teams={TEAMS}
+        initiallyConfigured={false}
+        sleeperLeagueId="league-1"
+        onClose={jest.fn()}
+      />,
+    );
+
+    await waitFor(() =>
+      expect(mockPreviewMatch).toHaveBeenCalledWith({ draftId: 4, leagueId: 'league-1' }),
+    );
+    expect(await screen.findByTestId('sleeper-sync-roster-map-9')).toHaveValue('7');
+    expect(screen.getByTestId('sleeper-sync-auto-matched-9')).toBeInTheDocument();
+    expect(screen.getByTestId('sleeper-sync-roster-map-10')).toHaveValue('');
+    expect(screen.queryByTestId('sleeper-sync-auto-matched-10')).not.toBeInTheDocument();
+  });
+
+  it('syncs on demand and lets the user override a suggested match before saving', async () => {
     const user = userEvent.setup();
     render(
       <SleeperRosterSyncDialog
         draftId={4}
         teams={TEAMS}
         initiallyConfigured={false}
+        sleeperLeagueId={null}
         onClose={jest.fn()}
       />,
     );
 
-    await user.selectOptions(screen.getByTestId('sleeper-sync-team-map-1'), '7');
-    expect(screen.getByTestId('sleeper-sync-team-option-2-7')).toBeDisabled();
+    await user.type(screen.getByTestId('sleeper-sync-league-id'), 'league-1');
+    await user.click(screen.getByTestId('sleeper-sync-sync-button'));
+    expect(await screen.findByTestId('sleeper-sync-roster-map-9')).toHaveValue('7');
+
+    await user.selectOptions(screen.getByTestId('sleeper-sync-roster-map-10'), '8');
+    await user.click(screen.getByTestId('sleeper-sync-save-mapping'));
+
+    await waitFor(() =>
+      expect(mockSaveMapping).toHaveBeenCalledWith({
+        draftId: 4,
+        leagueId: 'league-1',
+        mappings: [
+          { teamId: 7, sleeperRosterId: 9 },
+          { teamId: 8, sleeperRosterId: 10 },
+        ],
+      }),
+    );
+  });
+
+  it('disables a team already assigned to another Sleeper roster', async () => {
+    render(
+      <SleeperRosterSyncDialog
+        draftId={4}
+        teams={TEAMS}
+        initiallyConfigured={false}
+        sleeperLeagueId="league-1"
+        onClose={jest.fn()}
+      />,
+    );
+
+    await screen.findByTestId('sleeper-sync-roster-map-9');
+    // Roster 9 auto-matches to team 7 on load; team 7 must now be disabled on roster 10's list.
+    expect(screen.getByTestId('sleeper-sync-roster-option-10-7')).toBeDisabled();
   });
 
   it('omits blank prices and shows an inline error for invalid prices', async () => {
@@ -129,12 +209,13 @@ describe('SleeperRosterSyncDialog', () => {
         draftId={4}
         teams={TEAMS}
         initiallyConfigured={true}
+        sleeperLeagueId="league-1"
         onClose={jest.fn()}
       />,
     );
     expect(await screen.findByTestId('sleeper-sync-error')).toHaveTextContent('mapping');
     expect(screen.getByTestId('sleeper-sync-league-id')).toBeInTheDocument();
-    expect(screen.getByTestId('sleeper-sync-team-map-1')).toBeInTheDocument();
+    expect(await screen.findByTestId('sleeper-sync-roster-map-9')).toBeInTheDocument();
     expect(screen.queryByTestId('sleeper-sync-retry')).not.toBeInTheDocument();
   });
 

@@ -139,6 +139,30 @@ describe('planBudgetValueBackfill', () => {
     expect(planBudgetValueBackfill([{ ...draft200, budget: 1000 }]).drafts).toHaveLength(0);
   });
 
+  it('rejects an invalid persisted source budget with the draft ID', () => {
+    const invalidDraft = { ...draft200, playerValueSourceBudget: 0 };
+
+    expect(() => planBudgetValueBackfill([invalidDraft])).toThrow(
+      'Draft 5: source budget must be a positive safe integer',
+    );
+  });
+
+  it('rejects an invalid persisted draft budget with the draft ID', () => {
+    const invalidDraft = { ...draft200, budget: 0 };
+
+    expect(() => planBudgetValueBackfill([invalidDraft])).toThrow(
+      'Draft 5: draft budget must be a positive safe integer',
+    );
+  });
+
+  it('rejects equal invalid persisted budgets instead of skipping the draft', () => {
+    const invalidDraft = { ...draft200, budget: 0, playerValueSourceBudget: 0 };
+
+    expect(() => planBudgetValueBackfill([invalidDraft])).toThrow(
+      'Draft 5: source budget must be a positive safe integer',
+    );
+  });
+
   it('is idempotent because current fallback values do not affect recomputation', () => {
     const first = planBudgetValueBackfill([draft200]);
     const alreadyScaled = {
@@ -218,6 +242,12 @@ describe('runBudgetValueBackfill', () => {
     expect(mockPlayerUpdate.mock.invocationCallOrder[1]).toBeLessThan(
       mockApplyProjections.mock.invocationCallOrder[0],
     );
+  });
+
+  it('allows sixty seconds for each draft transaction', async () => {
+    await runBudgetValueBackfill(prisma, { apply: true }, dependencies);
+
+    expect(mockTransaction).toHaveBeenCalledWith(expect.any(Function), { timeout: 60_000 });
   });
 
   it('replaces the dry-run active estimate with the committed active total after apply', async () => {

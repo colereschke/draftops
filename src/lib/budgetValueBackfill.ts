@@ -120,6 +120,8 @@ export interface BudgetValueBackfillDependencies {
 export function planBudgetValueBackfill(
   drafts: BudgetValueBackfillDraft[],
 ): BudgetValueBackfillPlan {
+  drafts.forEach(validatePersistedDraftBudgets);
+
   return {
     drafts: drafts
       .filter((draft) => draft.budget !== draft.playerValueSourceBudget)
@@ -203,18 +205,21 @@ export async function runBudgetValueBackfill(
   const appliedDrafts: BudgetValueDraftPlan[] = [];
 
   for (const draftPlan of plan.drafts) {
-    await prisma.$transaction(async (tx) => {
-      for (const update of draftPlan.playerUpdates) {
-        await tx.player.update({
-          where: { id: update.id },
-          data: { budget: update.budget, ceiling: update.ceiling, floor: update.floor },
+    await prisma.$transaction(
+      async (tx) => {
+        for (const update of draftPlan.playerUpdates) {
+          await tx.player.update({
+            where: { id: update.id },
+            data: { budget: update.budget, ceiling: update.ceiling, floor: update.floor },
+          });
+        }
+        await dependencies.applyProjections(tx, {
+          draftId: draftPlan.draftId,
+          useBatchTransaction: false,
         });
-      }
-      await dependencies.applyProjections(tx, {
-        draftId: draftPlan.draftId,
-        useBatchTransaction: false,
-      });
-    });
+      },
+      { timeout: 60_000 },
+    );
 
     const activeValues = await prisma.draftPlayerValue.aggregate({
       where: { draftId: draftPlan.draftId },
@@ -257,6 +262,17 @@ function planDraftBackfill(draft: BudgetValueBackfillDraft): BudgetValueDraftPla
     ),
     playerUpdates,
   };
+}
+
+function validatePersistedDraftBudgets(draft: BudgetValueBackfillDraft): void {
+  try {
+    getBudgetScale(draft.playerValueSourceBudget, draft.budget);
+  } catch (error) {
+    if (error instanceof Error) {
+      throw new Error(`Draft ${draft.id}: ${error.message}`);
+    }
+    throw error;
+  }
 }
 
 function toSourcePlayer(player: BudgetValueBackfillPlayer): Player {

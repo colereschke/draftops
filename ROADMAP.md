@@ -589,6 +589,8 @@ flow.
 
 ### 9b. Catch-Up Roster Sync Flow
 
+**Status:** shipped. `Draft.sleeperLeagueId` + `Team.sleeperRosterId` persist the league/roster mapping (set at import or via a one-time manual mapping dialog); `src/lib/sleeperRosterSync.ts` reconciles current Sleeper rosters against logged `AuctionResult`s; `src/lib/sleeper-roster-actions.ts` + `SleeperRosterSyncDialog` (opened from the value sheet) drive configuration, preview, and the transactional batch write. See CLAUDE.md's What's Built for the full contract. The native-auction/polling idea below remains future work, out of scope for this flow.
+
 The primary use case: a user steps away from DraftOps during the auction and several players are won without being logged. They come back and want to catch up without manually re-entering everything.
 
 **Flow:**

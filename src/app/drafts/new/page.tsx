@@ -14,6 +14,7 @@ interface TeamRow {
   handle: string;
   displayName: string;
   isMine: boolean;
+  sleeperRosterId?: number;
 }
 
 type ImportState =
@@ -50,6 +51,7 @@ export default function NewDraftPage() {
   const [isPending, startTransition] = useTransition();
   const [isImporting, startImportTransition] = useTransition();
   const [leagueId, setLeagueId] = useState('');
+  const [importedLeagueId, setImportedLeagueId] = useState<string | null>(null);
   const [ownerUsername, setOwnerUsername] = useState('');
   const [importState, setImportState] = useState<ImportState>({ status: 'idle' });
   const [futurePickAuctionMode, setFuturePickAuctionMode] =
@@ -171,8 +173,10 @@ export default function NewDraftPage() {
           handle: t.handle,
           displayName: t.displayName,
           isMine: data.ownerIndex !== null ? i === data.ownerIndex : i === 0,
+          sleeperRosterId: t.sleeperRosterId,
         })),
       );
+      setImportedLeagueId(leagueId.trim());
       const warning =
         trimmedUsername && data.ownerIndex === null
           ? `Couldn't match '${trimmedUsername}' to a team in this league — select yours manually.`
@@ -265,6 +269,7 @@ export default function NewDraftPage() {
           } satisfies ScoringSettings,
           teams,
           playerSource,
+          sleeperLeagueId: importedLeagueId ?? undefined,
         });
       } catch (err) {
         setError((err as Error).message ?? 'Something went wrong.');
@@ -314,7 +319,15 @@ export default function NewDraftPage() {
               data-testid="sleeper-league-id"
               type="text"
               value={leagueId}
-              onChange={(e) => setLeagueId(e.target.value)}
+              onChange={(e) => {
+                const nextLeagueId = e.target.value;
+                setLeagueId(nextLeagueId);
+                if (importedLeagueId && nextLeagueId.trim() !== importedLeagueId) {
+                  setImportedLeagueId(null);
+                  setTeams((prev) => prev.map(({ sleeperRosterId: _, ...team }) => team));
+                  setImportState({ status: 'idle' });
+                }
+              }}
               placeholder="e.g. 1360707683916734464"
               style={inputStyle}
             />

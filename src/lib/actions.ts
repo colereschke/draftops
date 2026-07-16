@@ -98,6 +98,7 @@ interface TeamInput {
   handle: string;
   displayName: string;
   isMine: boolean;
+  sleeperRosterId?: number;
 }
 
 function toPrismaFuturePickMode(mode: FuturePickAuctionMode): 'PACKAGES' | 'INDIVIDUAL' | 'NONE' {
@@ -116,6 +117,7 @@ export async function createDraft(data: {
   scoringSettings: ScoringSettings;
   teams: TeamInput[];
   playerSource?: 'etr' | 'custom';
+  sleeperLeagueId?: string;
 }): Promise<void> {
   const session = await auth();
   if (!session) throw new Error('Unauthorized');
@@ -128,6 +130,7 @@ export async function createDraft(data: {
     handle: t.handle.trim(),
     displayName: t.displayName.trim() || t.handle.trim(),
     isMine: t.isMine,
+    sleeperRosterId: t.sleeperRosterId,
   }));
   const etrMatches =
     data.playerSource === 'custom' ? new Map<string, string>() : getEtrSleeperMatches();
@@ -147,6 +150,7 @@ export async function createDraft(data: {
         startingLineup: data.startingLineup,
         scoringSettings: data.scoringSettings,
         targetRoster: data.targetRoster,
+        sleeperLeagueId: data.sleeperLeagueId,
       },
     });
 
@@ -158,6 +162,7 @@ export async function createDraft(data: {
           displayName: team.displayName,
           budget: data.budgetPerTeam,
           draftId: draft.id,
+          sleeperRosterId: team.sleeperRosterId,
         },
       });
       if (team.isMine) ownerTeamId = created.id;

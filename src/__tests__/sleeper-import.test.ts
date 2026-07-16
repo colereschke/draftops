@@ -57,8 +57,15 @@ const FULL_ROSTERS: SleeperRoster[] = Array.from({ length: 12 }, (_, i) => ({
 
 describe('mapSleeperLeague — leagueName', () => {
   it('maps the league name for the draft name field', () => {
-    const result = mapSleeperLeague(FULL_LEAGUE, MOCK_USERS, FULL_ROSTERS);
+    const result = mapSleeperLeague(
+      FULL_LEAGUE,
+      MOCK_USERS,
+      FULL_ROSTERS,
+      undefined,
+      '1360707683916734464',
+    );
     expect(result.leagueName).toBe('Dynasty Warlords');
+    expect(result.leagueId).toBe('1360707683916734464');
   });
 });
 
@@ -154,6 +161,7 @@ describe('mapSleeperLeague — teams', () => {
     const result = mapSleeperLeague(FULL_LEAGUE, MOCK_USERS, FULL_ROSTERS);
     expect(result.teams[0].handle).toBe('coreschke');
     expect(result.teams[1].handle).toBe('rival');
+    expect(result.teams[0]).toMatchObject({ sleeperRosterId: 1 });
   });
 
   it('prefers metadata.team_name over display_name for displayName', () => {

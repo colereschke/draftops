@@ -50,6 +50,7 @@ model Draft {
   scoringSettings       Json?
   targetRoster          Json?
   futurePickAuctionMode FuturePickAuctionMode @default(PACKAGES)
+  sleeperLeagueId       String?
   players               Player[]
   playerValues          DraftPlayerValue[]
   onboardingProgress    OnboardingProgress?
@@ -62,32 +63,34 @@ model Draft {
 }
 
 model OnboardingProgress {
-  id                Int            @id @default(autoincrement())
-  userId            String         @unique
+  id                Int             @id @default(autoincrement())
+  userId            String          @unique
   phase             OnboardingPhase
-  step              OnboardingStep @default(VALUE_SHEET_INTRO)
-  draftId           Int?           @unique
+  step              OnboardingStep  @default(VALUE_SHEET_INTRO)
+  draftId           Int?            @unique
   subjectPlayerName String?
-  createdAt         DateTime       @default(now())
-  updatedAt         DateTime       @updatedAt
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
   completedAt       DateTime?
 
   draft Draft? @relation(fields: [draftId], references: [id], onDelete: SetNull)
 }
 
 model Team {
-  id           Int             @id @default(autoincrement())
-  handle       String
-  displayName  String?
-  budget       Int             @default(1000)
-  createdAt    DateTime        @default(now())
-  updatedAt    DateTime        @updatedAt
-  draftId      Int
-  draft        Draft           @relation("DraftTeams", fields: [draftId], references: [id])
-  results      AuctionResult[]
-  ownedByDraft Draft[]         @relation("DraftOwnerTeam")
+  id              Int             @id @default(autoincrement())
+  handle          String
+  displayName     String?
+  budget          Int             @default(1000)
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  draftId         Int
+  sleeperRosterId Int?
+  draft           Draft           @relation("DraftTeams", fields: [draftId], references: [id])
+  results         AuctionResult[]
+  ownedByDraft    Draft[]         @relation("DraftOwnerTeam")
 
   @@unique([handle, draftId])
+  @@unique([draftId, sleeperRosterId])
 }
 
 model AuctionResult {
@@ -106,6 +109,7 @@ model AuctionResult {
   draft     Draft    @relation(fields: [draftId], references: [id])
   createdAt DateTime @default(now())
 
+  @@unique([draftId, playerId])
   @@index([playerId])
 }
 

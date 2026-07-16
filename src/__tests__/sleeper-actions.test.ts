@@ -53,6 +53,7 @@ describe('importFromSleeper', () => {
     if (result.ok) {
       expect(result.data.teamCount).toBe(2);
       expect(result.data.startingLineup).toEqual(['QB', 'SUPER_FLEX']);
+      expect(result.data.leagueId).toBe('1360707683916734464');
     }
   });
 

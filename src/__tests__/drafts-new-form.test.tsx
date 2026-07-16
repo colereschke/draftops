@@ -26,6 +26,7 @@ beforeEach(() => {
 });
 
 const MOCK_IMPORT_RESULT: SleeperImportResult = {
+  leagueId: '1360707683916734464',
   leagueName: 'Dynasty Warlords',
   teamCount: 12,
   rosterSize: 30,
@@ -45,6 +46,7 @@ const MOCK_IMPORT_RESULT: SleeperImportResult = {
   teams: Array.from({ length: 12 }, (_, i) => ({
     handle: `team-${i + 1}`,
     displayName: `Team ${i + 1}`,
+    sleeperRosterId: i + 1,
   })),
   ownerIndex: 0,
 };
@@ -351,6 +353,49 @@ describe('NewDraftPage — Sleeper import banner', () => {
         'Dynasty Warlords',
       );
     });
+  });
+
+  it('submits the imported Sleeper league and roster IDs', async () => {
+    render(<NewDraftPage />);
+    fireEvent.change(screen.getByTestId('sleeper-league-id'), {
+      target: { value: '1360707683916734464' },
+    });
+    fireEvent.click(screen.getByTestId('sleeper-import-button'));
+    await waitFor(() => expect(screen.getByTestId('sleeper-import-confirm')).toBeInTheDocument());
+
+    fireEvent.submit(screen.getByTestId('new-draft-form'));
+
+    await waitFor(() =>
+      expect(createDraft).toHaveBeenCalledWith(
+        expect.objectContaining({
+          sleeperLeagueId: '1360707683916734464',
+          teams: expect.arrayContaining([expect.objectContaining({ sleeperRosterId: 1 })]),
+        }),
+      ),
+    );
+  });
+
+  it('clears imported metadata when the league ID changes', async () => {
+    render(<NewDraftPage />);
+    fireEvent.change(screen.getByTestId('sleeper-league-id'), {
+      target: { value: '1360707683916734464' },
+    });
+    fireEvent.click(screen.getByTestId('sleeper-import-button'));
+    await waitFor(() => expect(screen.getByTestId('sleeper-import-confirm')).toBeInTheDocument());
+
+    fireEvent.change(screen.getByTestId('sleeper-league-id'), {
+      target: { value: 'new-league-id' },
+    });
+    fireEvent.submit(screen.getByTestId('new-draft-form'));
+
+    await waitFor(() =>
+      expect(createDraft).toHaveBeenCalledWith(
+        expect.objectContaining({
+          sleeperLeagueId: undefined,
+          teams: expect.not.arrayContaining([expect.objectContaining({ sleeperRosterId: 1 })]),
+        }),
+      ),
+    );
   });
 
   it('accepts off-grid imported scoring values without step validation (step="any")', async () => {

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/auth';
 import { prisma } from '@/lib/db';
 import { getDraft } from '@/lib/draft';
+import { DraftMutationError, requirePlayerNotWon } from '@/lib/draftMutationGuard';
 
 export async function POST(
   request: NextRequest,
@@ -23,6 +24,15 @@ export async function POST(
     select: { id: true, name: true },
   });
   if (!player) return NextResponse.json({ error: 'Player not found' }, { status: 404 });
+
+  try {
+    await requirePlayerNotWon(draft.id, player.id);
+  } catch (e) {
+    if (e instanceof DraftMutationError) {
+      return NextResponse.json({ error: e.message }, { status: e.status });
+    }
+    throw e;
+  }
 
   const entry = await prisma.playerWatchlist.upsert({
     where: { playerId_draftId: { playerId: player.id, draftId: draft.id } },

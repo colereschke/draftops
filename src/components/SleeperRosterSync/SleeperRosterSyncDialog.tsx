@@ -158,6 +158,8 @@ export default function SleeperRosterSyncDialog({
     if (autoSyncedRef.current) return;
     if (!sleeperLeagueId?.trim()) return;
     autoSyncedRef.current = true;
+    // queueMicrotask: syncLeague sets state before its first await; calling it directly
+    // here trips react-hooks/set-state-in-effect.
     queueMicrotask(() => void syncLeague(sleeperLeagueId));
   }, [view, sleeperLeagueId, syncLeague]);
 

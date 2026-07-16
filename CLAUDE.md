@@ -296,7 +296,7 @@ Source: ETR dynasty rankings CSV (~267 players). Values scaled ×5 for $1,000 bu
 
 ## What's Next
 
-**Deploy Milestone** (Vercel + Neon) — #5a League Settings + Player Table is done (PR #20). `prisma migrate deploy` is already wired into the Vercel build command — Neon migration applies on deploy. Run `pnpm tsx prisma/seed-players.ts` against prod DB after PR #20 merges (before deploying) to backfill existing drafts. After #7 merges, also run `pnpm tsx prisma/sync-sleeper-players.ts` against prod DB (needs `data/generated/normalized_sleeper_players.csv` regenerated locally first, via the Python projection pipeline — that file is gitignored, not deployed) so `SleeperPlayer` is populated before any user uploads custom rankings.
+**Deploy Milestone** (Vercel + Neon) — done. `prisma migrate deploy` is wired into the Vercel build command — Neon migration applies on deploy. Prod `SleeperPlayer` is populated (3,035 rows, synced via `pnpm tsx prisma/sync-sleeper-players.ts` run locally against the Neon `DATABASE_URL`) — re-run that script against prod whenever `data/generated/normalized_sleeper_players.csv` is regenerated from the Python pipeline, since that file is gitignored and never deployed. `createDraft`'s default (ETR) path resolves `Player.sleeperId` via a live `SleeperPlayer` query (`src/lib/actions.ts`'s `resolveEtrSleeperMatches`), not a filesystem read — no other runtime code path may depend on `data/generated/*` files existing in the deployed app; those files are for local/CLI scripts only (`prisma/seed-players.ts`, `prisma/sync-players.ts`, `prisma/apply-projection-values.ts`).
 
 **Longer term** (see `ROADMAP.md`):
 

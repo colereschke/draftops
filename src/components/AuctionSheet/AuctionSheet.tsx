@@ -7,7 +7,6 @@ import type { Player, Position, ClaimedBid, LeagueTeam, ScoringSettings } from '
 import { logBid, updateBid, deleteBid } from '@/lib/actions';
 import BidModal from '@/components/BidModal';
 import { useOnboarding } from '@/components/Onboarding/OnboardingContext';
-import { Button } from '@/components/ui/button';
 import AuctionHeader from './AuctionHeader';
 import FilterControls, { type PositionFilter, type StrategyFilter } from './FilterControls';
 import PlayerTable, { type SortKey } from './PlayerTable';
@@ -306,17 +305,8 @@ export default function AuctionSheet({
           strategyFilter={strategyFilter}
           onStrategyFilterChange={setStrategyFilter}
           showStrategyFilter={hasStrategyTags}
+          onOpenSleeperSync={() => setShowSleeperSync(true)}
         />
-        <div className="border-b border-border px-5 py-2">
-          <Button
-            data-testid="open-sleeper-sync"
-            variant="outline"
-            size="sm"
-            onClick={() => setShowSleeperSync(true)}
-          >
-            Catch up from Sleeper
-          </Button>
-        </div>
       </div>
       <div data-onboarding-target="bid-practice">
         <PlayerTable

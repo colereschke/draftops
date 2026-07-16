@@ -5,7 +5,9 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import {
   runBudgetValueBackfill,
+  type BudgetValueBackfillDependencies,
   type BudgetValueBackfillOptions,
+  type BudgetValueBackfillPrisma,
   type BudgetValueBackfillResult,
   type BudgetValueSnapshot,
 } from '@/lib/budgetValueBackfill';
@@ -15,6 +17,20 @@ const DEFAULT_SNAPSHOT_DIR = 'valuation-backfill-snapshots';
 const USAGE =
   'Usage: pnpm db:backfill-budget-values -- ' +
   '[--apply] [--draft-id <id>] [--snapshot-dir <dir>]';
+
+interface BudgetValueBackfillPool {
+  end(): Promise<void>;
+}
+
+interface BudgetValueBackfillClient extends BudgetValueBackfillPrisma {
+  $disconnect(): Promise<void>;
+}
+
+export interface BudgetValueBackfillDatabaseFactory {
+  createPool(connectionString: string): BudgetValueBackfillPool;
+  createAdapter(pool: BudgetValueBackfillPool): unknown;
+  createClient(adapter: unknown): BudgetValueBackfillClient;
+}
 
 export function parseBudgetValueBackfillArgs(argv: string[]): BudgetValueBackfillOptions {
   const options: BudgetValueBackfillOptions = {
@@ -69,6 +85,48 @@ export async function writeBudgetValueSnapshot(
   return path;
 }
 
+async function runWithCleanup<Result>(
+  operation: () => Result | Promise<Result>,
+  cleanup: () => void | Promise<void>,
+): Promise<Result> {
+  let operationFailed = false;
+
+  try {
+    return await operation();
+  } catch (error) {
+    operationFailed = true;
+    throw error;
+  } finally {
+    try {
+      await cleanup();
+    } catch (cleanupError) {
+      if (!operationFailed) throw cleanupError;
+    }
+  }
+}
+
+export async function executeBudgetValueBackfill(
+  databaseUrl: string,
+  options: BudgetValueBackfillOptions,
+  dependencies: BudgetValueBackfillDependencies,
+  factory: BudgetValueBackfillDatabaseFactory,
+): Promise<BudgetValueBackfillResult> {
+  const pool = factory.createPool(databaseUrl);
+
+  return runWithCleanup(
+    () => {
+      const adapter = factory.createAdapter(pool);
+      const prisma = factory.createClient(adapter);
+
+      return runWithCleanup(
+        () => runBudgetValueBackfill(prisma, options, dependencies),
+        () => prisma.$disconnect(),
+      );
+    },
+    () => pool.end(),
+  );
+}
+
 async function main(): Promise<void> {
   const options = parseBudgetValueBackfillArgs(process.argv.slice(2));
   if (!process.env.DATABASE_URL) throw new Error('DATABASE_URL is not set');
@@ -78,23 +136,21 @@ async function main(): Promise<void> {
     import('@prisma/adapter-pg'),
     import('pg'),
   ]);
-  const pool = new Pool({ connectionString: process.env.DATABASE_URL });
-  const adapter = new PrismaPg(pool);
-  const prisma = new PrismaClient({ adapter });
-
-  try {
-    const result = await runBudgetValueBackfill(prisma, options, {
+  const result = await executeBudgetValueBackfill(
+    process.env.DATABASE_URL,
+    options,
+    {
       writeSnapshot: writeBudgetValueSnapshot,
       applyProjections: applyProjectionValuesToDraft,
-    });
-    console.log(JSON.stringify(toOperatorSummary(result), null, 2));
-  } finally {
-    try {
-      await prisma.$disconnect();
-    } finally {
-      await pool.end();
-    }
-  }
+    },
+    {
+      createPool: (connectionString) => new Pool({ connectionString }),
+      createAdapter: (pool) => new PrismaPg(pool as InstanceType<typeof Pool>),
+      createClient: (adapter) =>
+        new PrismaClient({ adapter: adapter as InstanceType<typeof PrismaPg> }),
+    },
+  );
+  console.log(JSON.stringify(toOperatorSummary(result), null, 2));
 }
 
 export function toOperatorSummary(result: BudgetValueBackfillResult) {

@@ -10,8 +10,10 @@ import {
 } from '@/lib/budgetValueBackfill';
 import { DEFAULT_SCORING_SETTINGS, DEFAULT_STARTING_LINEUP } from '@/types';
 import {
+  executeBudgetValueBackfill,
   parseBudgetValueBackfillArgs,
   toOperatorSummary,
+  type BudgetValueBackfillDatabaseFactory,
   writeBudgetValueSnapshot,
 } from '../../prisma/backfill-budget-scaled-values';
 
@@ -132,12 +134,81 @@ describe('budget value backfill CLI', () => {
     });
   });
 
-  it.each<string[]>([['--draft-id'], ['--draft-id', '0'], ['--draft-id', '1.5'], ['--unknown']])(
-    'rejects malformed arguments: %s',
-    (...args) => {
-      expect(() => parseBudgetValueBackfillArgs(args)).toThrow('Usage:');
-    },
-  );
+  it.each<string[]>([
+    ['--draft-id'],
+    ['--draft-id', '0'],
+    ['--draft-id', '1.5'],
+    ['--draft-id', String(Number.MAX_SAFE_INTEGER + 1)],
+    ['--snapshot-dir'],
+    ['--snapshot-dir', '--apply'],
+    ['--unknown'],
+  ])('rejects malformed arguments: %s', (...args) => {
+    expect(() => parseBudgetValueBackfillArgs(args)).toThrow('Usage:');
+  });
+
+  it('closes the pool when client construction fails without replacing the original error', async () => {
+    const constructorError = new Error('client construction failed');
+    const poolCleanupError = new Error('pool cleanup failed');
+    const end = jest.fn().mockRejectedValue(poolCleanupError);
+    const factory: BudgetValueBackfillDatabaseFactory = {
+      createPool: jest.fn().mockReturnValue({ end }),
+      createAdapter: jest.fn().mockReturnValue({}),
+      createClient: jest.fn(() => {
+        throw constructorError;
+      }),
+    };
+
+    await expect(
+      executeBudgetValueBackfill('postgres://test', { apply: false }, dependencies, factory),
+    ).rejects.toBe(constructorError);
+    expect(end).toHaveBeenCalledTimes(1);
+  });
+
+  it('preserves a service error while attempting client and pool cleanup', async () => {
+    const serviceError = new Error('service failed');
+    const disconnect = jest.fn().mockRejectedValue(new Error('disconnect failed'));
+    const end = jest.fn().mockRejectedValue(new Error('pool cleanup failed'));
+    const client = {
+      draft: { findMany: jest.fn().mockRejectedValue(serviceError) },
+      draftPlayerValue: { aggregate: jest.fn() },
+      $transaction: jest.fn(),
+      $disconnect: disconnect,
+    } as unknown as ReturnType<BudgetValueBackfillDatabaseFactory['createClient']>;
+    const factory: BudgetValueBackfillDatabaseFactory = {
+      createPool: jest.fn().mockReturnValue({ end }),
+      createAdapter: jest.fn().mockReturnValue({}),
+      createClient: jest.fn().mockReturnValue(client),
+    };
+
+    await expect(
+      executeBudgetValueBackfill('postgres://test', { apply: false }, dependencies, factory),
+    ).rejects.toBe(serviceError);
+    expect(disconnect).toHaveBeenCalledTimes(1);
+    expect(end).toHaveBeenCalledTimes(1);
+  });
+
+  it('reports a cleanup-only failure after the service succeeds and still closes the pool', async () => {
+    const cleanupError = new Error('disconnect failed');
+    const disconnect = jest.fn().mockRejectedValue(cleanupError);
+    const end = jest.fn().mockResolvedValue(undefined);
+    const client = {
+      draft: { findMany: jest.fn().mockResolvedValue([]) },
+      draftPlayerValue: { aggregate: jest.fn() },
+      $transaction: jest.fn(),
+      $disconnect: disconnect,
+    } as unknown as ReturnType<BudgetValueBackfillDatabaseFactory['createClient']>;
+    const factory: BudgetValueBackfillDatabaseFactory = {
+      createPool: jest.fn().mockReturnValue({ end }),
+      createAdapter: jest.fn().mockReturnValue({}),
+      createClient: jest.fn().mockReturnValue(client),
+    };
+
+    await expect(
+      executeBudgetValueBackfill('postgres://test', { apply: false }, dependencies, factory),
+    ).rejects.toBe(cleanupError);
+    expect(disconnect).toHaveBeenCalledTimes(1);
+    expect(end).toHaveBeenCalledTimes(1);
+  });
 
   it('writes a parseable timestamped JSON snapshot', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'draftops-values-'));

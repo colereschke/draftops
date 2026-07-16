@@ -15,8 +15,8 @@ import type { FuturePickAuctionMode, Position, StartingSlot, ScoringSettings } f
 import { players as BASE_PLAYERS } from '@/data/players';
 import { adjustPlayerValues } from '@/lib/valueAdjustment';
 import { applyProjectionValuesToDraft } from '@/lib/projectionApplication';
-import { getEtrSleeperMatches } from '@/lib/projectionIdentity';
 import { getCustomPlayerKey } from '@/lib/playerIdentity';
+import { buildSleeperPlayerIndex, matchToSleeperIndexed } from '@/lib/sleeperMatch';
 
 export async function logBid(data: {
   playerId: number;
@@ -107,6 +107,19 @@ function toPrismaFuturePickMode(mode: FuturePickAuctionMode): 'PACKAGES' | 'INDI
   return 'PACKAGES';
 }
 
+async function resolveEtrSleeperMatches(): Promise<Map<string, string>> {
+  const sleeperPlayers = await prisma.sleeperPlayer.findMany({
+    select: { id: true, name: true, normalizedName: true, team: true, pos: true },
+  });
+  const index = buildSleeperPlayerIndex(sleeperPlayers);
+  const matches = new Map<string, string>();
+  for (const p of BASE_PLAYERS) {
+    const outcome = matchToSleeperIndexed({ name: p.player, team: p.team, pos: p.pos }, index);
+    if (outcome.status === 'matched') matches.set(p.player, outcome.sleeperId);
+  }
+  return matches;
+}
+
 export async function createDraft(data: {
   name: string;
   budgetPerTeam: number;
@@ -133,7 +146,7 @@ export async function createDraft(data: {
     sleeperRosterId: t.sleeperRosterId,
   }));
   const etrMatches =
-    data.playerSource === 'custom' ? new Map<string, string>() : getEtrSleeperMatches();
+    data.playerSource === 'custom' ? new Map<string, string>() : await resolveEtrSleeperMatches();
 
   const draftId = await prisma.$transaction(async (tx) => {
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${session.user.id}))`;

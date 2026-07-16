@@ -1,13 +1,14 @@
 import { createDraft } from '@/lib/actions';
 import type { StartingSlot } from '@/types';
 import { players as BASE_PLAYERS } from '@/data/players';
+import { normalizeName } from '@/lib/sleeperNormalize';
 
 const mockAuth = jest.fn();
 const mockTransaction = jest.fn();
 const mockRevalidatePath = jest.fn();
 const mockRedirect = jest.fn();
 const mockApplyProjectionValuesToDraft = jest.fn();
-const mockGetEtrSleeperMatches = jest.fn();
+const mockSleeperPlayerFindMany = jest.fn();
 
 // Mock tx client
 const mockTxDraftCreate = jest.fn();
@@ -41,13 +42,11 @@ jest.mock('next/cache', () => ({
 jest.mock('@/lib/db', () => ({
   prisma: {
     $transaction: (...args: unknown[]) => mockTransaction(...args),
+    sleeperPlayer: { findMany: (...args: unknown[]) => mockSleeperPlayerFindMany(...args) },
   },
 }));
 jest.mock('@/lib/projectionApplication', () => ({
   applyProjectionValuesToDraft: (...args: unknown[]) => mockApplyProjectionValuesToDraft(...args),
-}));
-jest.mock('@/lib/projectionIdentity', () => ({
-  getEtrSleeperMatches: (...args: unknown[]) => mockGetEtrSleeperMatches(...args),
 }));
 
 const MOCK_SESSION = { user: { id: '123456789', name: 'Cole' } };
@@ -105,7 +104,15 @@ beforeEach(() => {
   mockTxOnboardingCreate.mockResolvedValue({});
   mockTxOnboardingFindUnique.mockResolvedValue(null);
   mockTxOnboardingUpdateMany.mockResolvedValue({ count: 0 });
-  mockGetEtrSleeperMatches.mockReturnValue(new Map([[BASE_PLAYERS[0].player, 'sleeper-1']]));
+  mockSleeperPlayerFindMany.mockResolvedValue([
+    {
+      id: 'sleeper-1',
+      name: BASE_PLAYERS[0].player,
+      normalizedName: normalizeName(BASE_PLAYERS[0].player),
+      team: BASE_PLAYERS[0].team,
+      pos: BASE_PLAYERS[0].pos,
+    },
+  ]);
   mockTransaction.mockImplementation((callback) => callback(mockTx));
 });
 

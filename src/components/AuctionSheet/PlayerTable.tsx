@@ -27,7 +27,7 @@ interface PlayerTableProps {
   sortDir: 'asc' | 'desc';
   onboardingSubjectPlayerName?: string | null;
   onSort: (col: SortKey) => void;
-  onRowClick: (player: Player) => void;
+  onRowClick?: (player: Player) => void;
 }
 
 const SORT_COLUMNS: Array<{ key: SortKey; label: string }> = [
@@ -140,6 +140,14 @@ export default function PlayerTable({
             const claim = claimMap.get(key);
             const isOnboardingUndoTarget =
               claim !== undefined && onboardingSubjectPlayerName === p.player;
+            const playerNameStyle = {
+              fontWeight: isPkg ? 700 : 600,
+              color: claim
+                ? 'var(--text-secondary)'
+                : isPkg
+                  ? 'var(--pos-pkg)'
+                  : 'var(--text-primary)',
+            };
             return (
               <TableRow
                 key={p.player + i}
@@ -154,16 +162,22 @@ export default function PlayerTable({
                     ? 'Reopen this player and use Remove in the bid modal to undo this bid.'
                     : undefined
                 }
-                tabIndex={0}
-                onClick={() => onRowClick(p)}
-                onKeyDown={(event) => {
-                  if (event.key === 'Enter' || event.key === ' ') {
-                    event.preventDefault();
-                    onRowClick(p);
-                  }
-                }}
+                tabIndex={onRowClick ? 0 : undefined}
+                onClick={onRowClick ? () => onRowClick(p) : undefined}
+                onKeyDown={
+                  onRowClick
+                    ? (event) => {
+                        if (event.key === 'Enter' || event.key === ' ') {
+                          event.preventDefault();
+                          onRowClick(p);
+                        }
+                      }
+                    : undefined
+                }
                 className={cn(
-                  'border-b-border-subtle cursor-pointer focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none hover:bg-card',
+                  'border-b-border-subtle hover:bg-card',
+                  onRowClick &&
+                    'cursor-pointer focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none',
                   claim && 'bg-background',
                   !claim && isNominated && 'bg-[color-mix(in_srgb,var(--pos-pick)_9%,transparent)]',
                   !claim && !isNominated && i % 2 !== 0 && 'bg-card/45',
@@ -182,25 +196,24 @@ export default function PlayerTable({
                 </TableCell>
                 <TableCell className="text-left">
                   <div className="flex items-center gap-1.5">
-                    <button
-                      type="button"
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        onRowClick(p);
-                      }}
-                      aria-label={`Open bid modal for ${p.player}`}
-                      className="cursor-pointer rounded-sm border-0 bg-transparent p-0 text-left text-[13px] focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-                      style={{
-                        fontWeight: isPkg ? 700 : 600,
-                        color: claim
-                          ? 'var(--text-secondary)'
-                          : isPkg
-                            ? 'var(--pos-pkg)'
-                            : 'var(--text-primary)',
-                      }}
-                    >
-                      {p.player}
-                    </button>
+                    {onRowClick ? (
+                      <button
+                        type="button"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          onRowClick(p);
+                        }}
+                        aria-label={`Open bid modal for ${p.player}`}
+                        className="cursor-pointer rounded-sm border-0 bg-transparent p-0 text-left text-[13px] focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                        style={playerNameStyle}
+                      >
+                        {p.player}
+                      </button>
+                    ) : (
+                      <span className="text-[13px]" style={playerNameStyle}>
+                        {p.player}
+                      </span>
+                    )}
                     {isRookie && (
                       <span
                         className="rounded-[3px] px-1 py-px text-[8px] font-bold tracking-wide uppercase"

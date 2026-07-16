@@ -4,6 +4,7 @@ import type { OnboardingStep } from '@prisma/client';
 import { revalidatePath } from 'next/cache';
 import { auth } from '@/auth';
 import { prisma } from '@/lib/db';
+import { DraftMutationFailure, withActiveOwnedDraftMutation } from '@/lib/draftMutation';
 
 export interface AdvanceOnboardingInput {
   draftId: number;
@@ -27,18 +28,26 @@ export async function advanceOnboardingStep(input: AdvanceOnboardingInput): Prom
   const session = await auth();
   if (!session) throw new Error('Unauthorized');
 
-  const result = await prisma.onboardingProgress.updateMany({
-    where: {
-      userId: session.user.id,
-      phase: 'FEATURE_TOUR',
-      draftId: input.draftId,
+  const result = await withActiveOwnedDraftMutation(
+    session.user.id,
+    input.draftId,
+    async (tx, draft) => {
+      const update = await tx.onboardingProgress.updateMany({
+        where: {
+          userId: session.user.id,
+          phase: 'FEATURE_TOUR',
+          draftId: draft.id,
+        },
+        data: {
+          step: input.step,
+          subjectPlayerName: input.subjectPlayerName,
+        },
+      });
+      if (update.count === 0) throw new Error('Onboarding not found');
+      return null;
     },
-    data: {
-      step: input.step,
-      subjectPlayerName: input.subjectPlayerName,
-    },
-  });
-  if (result.count === 0) throw new Error('Onboarding not found');
+  );
+  if (!result.ok) throw new DraftMutationFailure(result.code);
 
   revalidatePath(`/draft/${input.draftId}`);
 }

@@ -1,7 +1,42 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/auth';
-import { prisma } from '@/lib/db';
-import { getDraft } from '@/lib/draft';
+import {
+  DraftMutationFailure,
+  isPositiveSafeInteger,
+  withActiveOwnedDraftMutation,
+  type DraftMutationCode,
+} from '@/lib/draftMutation';
+
+interface PlayerMutationBody {
+  playerId?: unknown;
+}
+
+function failureResponse(code: DraftMutationCode): NextResponse {
+  const status =
+    code === 'INVALID_INPUT'
+      ? 400
+      : code === 'NOT_FOUND' || code === 'PLAYER_NOT_FOUND'
+        ? 404
+        : code === 'DRAFT_COMPLETE' || code === 'PLAYER_ALREADY_CLAIMED'
+          ? 409
+          : 500;
+  return NextResponse.json({ ok: false, code }, { status });
+}
+
+async function mutationInput(
+  request: NextRequest,
+  params: Promise<{ draftId: string }>,
+): Promise<{ draftId: number; playerId: number } | null> {
+  const draftId = Number((await params).draftId);
+  let body: PlayerMutationBody;
+  try {
+    body = (await request.json()) as PlayerMutationBody;
+  } catch {
+    return null;
+  }
+  if (!isPositiveSafeInteger(draftId) || !isPositiveSafeInteger(body.playerId)) return null;
+  return { draftId, playerId: body.playerId };
+}
 
 export async function POST(
   request: NextRequest,
@@ -10,26 +45,38 @@ export async function POST(
   const session = await auth();
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const draftId = parseInt((await params).draftId, 10);
-  const draft = await getDraft(session.user.id, draftId);
-  if (!draft) return NextResponse.json({ error: 'No draft found' }, { status: 404 });
+  const input = await mutationInput(request, params);
+  if (!input) return failureResponse('INVALID_INPUT');
 
-  const body = (await request.json()) as { playerId?: number };
-  if (typeof body.playerId !== 'number') {
-    return NextResponse.json({ error: 'playerId required' }, { status: 400 });
-  }
-  const player = await prisma.player.findFirst({
-    where: { id: body.playerId, draftId: draft.id },
-    select: { id: true, name: true },
-  });
-  if (!player) return NextResponse.json({ error: 'Player not found' }, { status: 404 });
+  const result = await withActiveOwnedDraftMutation(
+    session.user.id,
+    input.draftId,
+    async (tx, draft) => {
+      const [player, existingResult] = await Promise.all([
+        tx.player.findFirst({
+          where: { id: input.playerId, draftId: draft.id },
+          select: { id: true, name: true },
+        }),
+        tx.auctionResult.findFirst({
+          where: { playerId: input.playerId, draftId: draft.id },
+          select: { id: true },
+        }),
+      ]);
+      if (!player) throw new DraftMutationFailure('PLAYER_NOT_FOUND');
+      if (existingResult) throw new DraftMutationFailure('PLAYER_ALREADY_CLAIMED');
 
-  const entry = await prisma.playerWatchlist.upsert({
-    where: { playerId_draftId: { playerId: player.id, draftId: draft.id } },
-    create: { playerId: player.id, playerName: player.name, draftId: draft.id },
-    update: { playerName: player.name },
+      return tx.playerWatchlist.upsert({
+        where: { playerId_draftId: { playerId: player.id, draftId: draft.id } },
+        create: { playerId: player.id, playerName: player.name, draftId: draft.id },
+        update: { playerName: player.name },
+      });
+    },
+  );
+  if (!result.ok) return failureResponse(result.code);
+  return NextResponse.json({
+    playerId: result.data.playerId,
+    playerName: result.data.playerName,
   });
-  return NextResponse.json({ playerId: entry.playerId, playerName: entry.playerName });
 }
 
 export async function DELETE(
@@ -39,22 +86,19 @@ export async function DELETE(
   const session = await auth();
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const draftId = parseInt((await params).draftId, 10);
-  const draft = await getDraft(session.user.id, draftId);
-  if (!draft) return NextResponse.json({ error: 'No draft found' }, { status: 404 });
+  const input = await mutationInput(request, params);
+  if (!input) return failureResponse('INVALID_INPUT');
 
-  const body = (await request.json()) as { playerId?: number };
-  if (typeof body.playerId !== 'number') {
-    return NextResponse.json({ error: 'playerId required' }, { status: 400 });
-  }
-  try {
-    await prisma.playerWatchlist.delete({
-      where: { playerId_draftId: { playerId: body.playerId, draftId: draft.id } },
-    });
-  } catch (e) {
-    if ((e as { code?: string }).code !== 'P2025') {
-      return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
-    }
-  }
+  const result = await withActiveOwnedDraftMutation(
+    session.user.id,
+    input.draftId,
+    async (tx, draft) => {
+      await tx.playerWatchlist.deleteMany({
+        where: { playerId: input.playerId, draftId: draft.id },
+      });
+      return null;
+    },
+  );
+  if (!result.ok) return failureResponse(result.code);
   return NextResponse.json({ ok: true });
 }

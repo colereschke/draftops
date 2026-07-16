@@ -72,6 +72,41 @@ describe('NominationHelper UI', () => {
 
     expect(screen.getByTestId('nomination-helper-layout')).toHaveClass('flex-col', 'md:flex-row');
   });
+
+  it('renders completed drafts read-only without nomination or watchlist controls', async () => {
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        teamStats: [],
+        auctionResults: [
+          {
+            playerId: 999,
+            player: 'Prior Winner',
+            position: 'RB',
+            price: 50,
+            teamId: 1,
+          },
+        ],
+        watchlist: [11],
+        nominated: [10],
+        ownerHandle: null,
+        targetRoster: { QB: 4, RB: 9, WR: 11, TE: 3 },
+      }),
+    } as Response);
+
+    render(<NominationHelper draftId={1} players={PLAYERS} isReadOnly />);
+
+    await waitFor(() => expect(screen.getByTestId('draft-read-only-banner')).toBeInTheDocument());
+    expect(screen.queryByRole('button', { name: /^nominate$/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^watch$/i })).not.toBeInTheDocument();
+    expect(screen.queryByPlaceholderText('Add player I want...')).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: /remove josh allen from in auction/i }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByText('Josh Allen')).toBeInTheDocument();
+    expect(screen.getByText('Justin Jefferson')).toBeInTheDocument();
+  });
 });
 
 describe('WatchlistSidebar', () => {

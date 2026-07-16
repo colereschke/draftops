@@ -4,11 +4,36 @@ import { config } from 'dotenv';
 import { Client } from 'pg';
 
 const LOCAL_DATABASE_HOSTS = new Set(['localhost', '127.0.0.1', '::1']);
+const TEST_DATABASE_SAFETY_ERROR =
+  'Integration tests require a local PostgreSQL database ending in _test';
+
+function normalizeHost(host: string): string {
+  return host.startsWith('[') && host.endsWith(']') ? host.slice(1, -1) : host;
+}
+
+function isLoopbackHost(host: string): boolean {
+  return LOCAL_DATABASE_HOSTS.has(normalizeHost(host));
+}
 
 function loadLocalEnvironment(): void {
   const candidates = [resolve('.env.local'), resolve('../..', '.env.local')];
   const envPath = candidates.find((candidate) => existsSync(candidate));
   if (envPath) config({ path: envPath, override: false });
+}
+
+export async function runCleanupSteps(steps: ReadonlyArray<() => Promise<void>>): Promise<void> {
+  const errors: unknown[] = [];
+  for (const step of steps) {
+    try {
+      await step();
+    } catch (error) {
+      errors.push(error);
+    }
+  }
+
+  if (errors.length > 0) {
+    throw new AggregateError(errors, 'One or more integration test cleanup steps failed');
+  }
 }
 
 export function configureTestDatabaseUrl(): string {
@@ -23,9 +48,21 @@ export function configureTestDatabaseUrl(): string {
 
   const testUrl = new URL(sourceUrl);
   if (!explicitTestUrl) testUrl.pathname = '/draftops_test';
-  const databaseName = testUrl.pathname.slice(1);
-  if (!LOCAL_DATABASE_HOSTS.has(testUrl.hostname) || !databaseName.endsWith('_test')) {
-    throw new Error('Integration tests require a local PostgreSQL database ending in _test');
+  if (!isLoopbackHost(testUrl.hostname)) {
+    throw new Error(TEST_DATABASE_SAFETY_ERROR);
+  }
+
+  let pgConfig = new Client({ connectionString: testUrl.toString() });
+  if (!isLoopbackHost(pgConfig.host) || !pgConfig.database?.endsWith('_test')) {
+    throw new Error(TEST_DATABASE_SAFETY_ERROR);
+  }
+
+  if (normalizeHost(pgConfig.host) === '::1') {
+    testUrl.searchParams.set('host', '::1');
+    pgConfig = new Client({ connectionString: testUrl.toString() });
+  }
+  if (!isLoopbackHost(pgConfig.host) || !pgConfig.database?.endsWith('_test')) {
+    throw new Error(TEST_DATABASE_SAFETY_ERROR);
   }
 
   process.env.TEST_DATABASE_URL = testUrl.toString();

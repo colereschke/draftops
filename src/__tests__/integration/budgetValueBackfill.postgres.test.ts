@@ -8,6 +8,7 @@ import { runBudgetValueBackfill } from '@/lib/budgetValueBackfill';
 import { applyProjectionValuesToDraft } from '@/lib/projectionApplication';
 import { DEFAULT_SCORING_SETTINGS, DEFAULT_STARTING_LINEUP, DEFAULT_TARGET_ROSTER } from '@/types';
 import { writeBudgetValueSnapshot } from '../../../prisma/backfill-budget-scaled-values';
+import { runCleanupSteps } from '../../../scripts/testDatabase';
 
 const FIXTURE_PREFIX = `budget-backfill-integration-${process.pid}`;
 const FAILURE_TRIGGER = 'fail_budget_value_backfill_write';
@@ -126,10 +127,11 @@ async function runApply(fixture: Fixture): Promise<void> {
 }
 
 async function dropFailureTrigger(): Promise<void> {
-  await prisma.$executeRawUnsafe(`
-    DROP TRIGGER IF EXISTS ${FAILURE_TRIGGER} ON "DraftPlayerValue";
-    DROP FUNCTION IF EXISTS ${FAILURE_FUNCTION}();
-  `);
+  await prisma.$executeRawUnsafe(`DROP TRIGGER IF EXISTS ${FAILURE_TRIGGER} ON "DraftPlayerValue"`);
+}
+
+async function dropFailureFunction(): Promise<void> {
+  await prisma.$executeRawUnsafe(`DROP FUNCTION IF EXISTS ${FAILURE_FUNCTION}()`);
 }
 
 async function deleteFixtures(): Promise<void> {
@@ -155,23 +157,38 @@ async function deleteFixtures(): Promise<void> {
     });
     await prisma.projectionSource.deleteMany({ where: { id: { in: sourceIds } } });
   }
+}
 
-  while (snapshotDirectories.length > 0) {
-    await rm(snapshotDirectories.pop()!, { recursive: true, force: true });
-  }
+async function deleteSnapshotDirectories(): Promise<void> {
+  const directories = snapshotDirectories.splice(0);
+  await runCleanupSteps(
+    directories.map((directory) => () => rm(directory, { recursive: true, force: true })),
+  );
+}
+
+async function cleanupTestResources(): Promise<void> {
+  await runCleanupSteps([
+    dropFailureTrigger,
+    dropFailureFunction,
+    deleteFixtures,
+    deleteSnapshotDirectories,
+  ]);
 }
 
 describe('budget value backfill against PostgreSQL', () => {
   afterEach(async () => {
-    await dropFailureTrigger();
-    await deleteFixtures();
+    await cleanupTestResources();
   });
 
   afterAll(async () => {
-    await dropFailureTrigger();
-    await deleteFixtures();
-    await prisma.$disconnect();
-    await pool.end();
+    await runCleanupSteps([
+      dropFailureTrigger,
+      dropFailureFunction,
+      deleteFixtures,
+      deleteSnapshotDirectories,
+      () => prisma.$disconnect(),
+      () => pool.end(),
+    ]);
   });
 
   it('scales fallback and active values once without duplicating projection values', async () => {
@@ -233,22 +250,18 @@ describe('budget value backfill against PostgreSQL', () => {
       FOR EACH ROW EXECUTE FUNCTION ${FAILURE_FUNCTION}();
     `);
 
-    try {
-      await expect(runApply(fixture)).rejects.toThrow('forced DraftPlayerValue failure');
-      await expect(
-        prisma.player.findUnique({
-          where: { id: fixture.playerId },
-          select: { budget: true, ceiling: true, floor: true },
-        }),
-      ).resolves.toEqual({ budget: 100, ceiling: 115, floor: 87 });
-      await expect(
-        prisma.draftPlayerValue.findFirst({
-          where: { draftId: fixture.draftId, playerId: fixture.playerId },
-          select: { fallbackAuctionValue: true, activeAuctionValue: true },
-        }),
-      ).resolves.toEqual({ fallbackAuctionValue: 100, activeAuctionValue: 100 });
-    } finally {
-      await dropFailureTrigger();
-    }
+    await expect(runApply(fixture)).rejects.toThrow('forced DraftPlayerValue failure');
+    await expect(
+      prisma.player.findUnique({
+        where: { id: fixture.playerId },
+        select: { budget: true, ceiling: true, floor: true },
+      }),
+    ).resolves.toEqual({ budget: 100, ceiling: 115, floor: 87 });
+    await expect(
+      prisma.draftPlayerValue.findFirst({
+        where: { draftId: fixture.draftId, playerId: fixture.playerId },
+        select: { fallbackAuctionValue: true, activeAuctionValue: true },
+      }),
+    ).resolves.toEqual({ fallbackAuctionValue: 100, activeAuctionValue: 100 });
   });
 });

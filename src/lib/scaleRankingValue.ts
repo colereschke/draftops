@@ -1,3 +1,4 @@
+import { DEFAULT_RANKING_SOURCE_BUDGET, RAW_RANKING_BUDGET } from '@/lib/valuationBudget';
 import type { Position } from '@/types';
 
 export interface ScaledRankingValue {
@@ -6,7 +7,7 @@ export interface ScaledRankingValue {
   floor: number;
 }
 
-const SCALE = 5;
+const SCALE = DEFAULT_RANKING_SOURCE_BUDGET / RAW_RANKING_BUDGET;
 const TE_PREMIUM = 1.18;
 
 export function scaleRankingValue(pos: Position, rawValue: number): ScaledRankingValue {

@@ -43,17 +43,18 @@ model Draft {
   status      DraftStatus @default(ACTIVE)
   createdAt   DateTime    @default(now())
 
-  teamCount             Int                   @default(12)
-  rosterSize            Int                   @default(30)
-  budget                Int                   @default(1000)
-  startingLineup        Json?
-  scoringSettings       Json?
-  targetRoster          Json?
-  futurePickAuctionMode FuturePickAuctionMode @default(PACKAGES)
-  sleeperLeagueId       String?
-  players               Player[]
-  playerValues          DraftPlayerValue[]
-  onboardingProgress    OnboardingProgress?
+  teamCount               Int                   @default(12)
+  rosterSize              Int                   @default(30)
+  budget                  Int                   @default(1000)
+  playerValueSourceBudget Int                   @default(1000)
+  startingLineup          Json?
+  scoringSettings         Json?
+  targetRoster            Json?
+  futurePickAuctionMode   FuturePickAuctionMode @default(PACKAGES)
+  sleeperLeagueId         String?
+  players                 Player[]
+  playerValues            DraftPlayerValue[]
+  onboardingProgress      OnboardingProgress?
 
   teams            Team[]            @relation("DraftTeams")
   ownerTeam        Team?             @relation("DraftOwnerTeam", fields: [ownerTeamId], references: [id])
@@ -255,11 +256,12 @@ model SleeperPlayer {
 }
 
 model UserRankingSet {
-  id         Int                 @id @default(autoincrement())
-  userId     String              @unique
-  fileName   String?
-  uploadedAt DateTime            @default(now())
-  players    UserRankingPlayer[]
+  id           Int                 @id @default(autoincrement())
+  userId       String              @unique
+  fileName     String?
+  sourceBudget Int                 @default(1000)
+  uploadedAt   DateTime            @default(now())
+  players      UserRankingPlayer[]
 }
 
 model UserRankingPlayer {

@@ -1,3 +1,6 @@
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import {
   planBudgetValueBackfill,
   runBudgetValueBackfill,
@@ -6,6 +9,11 @@ import {
   type BudgetValueBackfillPrisma,
 } from '@/lib/budgetValueBackfill';
 import { DEFAULT_SCORING_SETTINGS, DEFAULT_STARTING_LINEUP } from '@/types';
+import {
+  parseBudgetValueBackfillArgs,
+  toOperatorSummary,
+  writeBudgetValueSnapshot,
+} from '../../prisma/backfill-budget-scaled-values';
 
 const draft200: BudgetValueBackfillDraft = {
   id: 5,
@@ -107,6 +115,62 @@ const dependencies: BudgetValueBackfillDependencies = {
   applyProjections: mockApplyProjections,
 };
 
+describe('budget value backfill CLI', () => {
+  it('parses dry-run, apply, draft, and snapshot-directory options', () => {
+    expect(parseBudgetValueBackfillArgs([])).toEqual({
+      apply: false,
+      draftId: undefined,
+      snapshotDir: 'valuation-backfill-snapshots',
+    });
+    expect(
+      parseBudgetValueBackfillArgs(['--apply', '--draft-id', '5', '--snapshot-dir', '/tmp/values']),
+    ).toEqual({ apply: true, draftId: 5, snapshotDir: '/tmp/values' });
+    expect(parseBudgetValueBackfillArgs(['--', '--draft-id', '5'])).toEqual({
+      apply: false,
+      draftId: 5,
+      snapshotDir: 'valuation-backfill-snapshots',
+    });
+  });
+
+  it.each<string[]>([['--draft-id'], ['--draft-id', '0'], ['--draft-id', '1.5'], ['--unknown']])(
+    'rejects malformed arguments: %s',
+    (...args) => {
+      expect(() => parseBudgetValueBackfillArgs(args)).toThrow('Usage:');
+    },
+  );
+
+  it('writes a parseable timestamped JSON snapshot', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'draftops-values-'));
+    try {
+      const path = await writeBudgetValueSnapshot(
+        { createdAt: '2026-07-16T12:00:00.000Z', drafts: [draft200] },
+        directory,
+      );
+
+      expect(path).toContain('budget-values-2026-07-16T12-00-00-000Z.json');
+      await expect(readFile(path, 'utf8').then(JSON.parse)).resolves.toMatchObject({
+        drafts: [{ id: 5 }],
+      });
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it('refuses to overwrite an existing snapshot', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'draftops-values-'));
+    const snapshot = { createdAt: '2026-07-16T12:00:00.000Z', drafts: [draft200] };
+    try {
+      await writeBudgetValueSnapshot(snapshot, directory);
+
+      await expect(writeBudgetValueSnapshot(snapshot, directory)).rejects.toMatchObject({
+        code: 'EEXIST',
+      });
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+});
+
 beforeEach(() => {
   jest.clearAllMocks();
   mockDraftFindMany.mockResolvedValue([draft200]);
@@ -199,6 +263,15 @@ describe('runBudgetValueBackfill', () => {
     expect(result.drafts[0].afterActiveTotal).toBe(22);
     expect(dependencies.writeSnapshot).not.toHaveBeenCalled();
     expect(mockTransaction).not.toHaveBeenCalled();
+  });
+
+  it('labels the dry-run active total as an estimate in operator output', async () => {
+    const result = await runBudgetValueBackfill(prisma, { apply: false }, dependencies);
+
+    expect(toOperatorSummary(result).drafts[0]).toMatchObject({
+      estimatedAfterActiveTotal: 22,
+    });
+    expect(toOperatorSummary(result).drafts[0]).not.toHaveProperty('afterActiveTotal');
   });
 
   it('writes one complete snapshot before the first transaction', async () => {

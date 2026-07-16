@@ -59,6 +59,9 @@ prisma/dev.db-journal
 data/raw/
 data/generated/
 
+# Valuation backfill safety snapshots
+/valuation-backfill-snapshots/
+
 # Env overrides
 .env.local
 .env.*.local

@@ -144,3 +144,69 @@ export function mapSleeperLeague(
     ownerIndex,
   };
 }
+
+export interface SleeperRosterCandidate {
+  sleeperRosterId: number;
+  ownerDisplayName: string | null;
+  ownerTeamName: string | null;
+  suggestedTeamId: number | null;
+  matchSource: 'existing' | 'handle' | 'none';
+}
+
+export function matchSleeperRostersToTeams(
+  rosters: SleeperRoster[],
+  users: SleeperUser[],
+  teams: { id: number; handle: string; sleeperRosterId: number | null }[],
+): SleeperRosterCandidate[] {
+  const usersById = new Map(users.map((u) => [u.user_id, u]));
+  const orderedRosters = [...rosters].sort((a, b) => a.roster_id - b.roster_id);
+  const rosterIdSet = new Set(orderedRosters.map((r) => r.roster_id));
+
+  const claimedTeamIds = new Set<number>();
+  const claimedRosterIds = new Set<number>();
+  const suggestionByRosterId = new Map<
+    number,
+    { teamId: number; matchSource: 'existing' | 'handle' }
+  >();
+
+  // Pass 1: honor an existing saved mapping if its roster is still present in this fetch.
+  for (const team of teams) {
+    if (
+      team.sleeperRosterId !== null &&
+      rosterIdSet.has(team.sleeperRosterId) &&
+      !claimedRosterIds.has(team.sleeperRosterId)
+    ) {
+      suggestionByRosterId.set(team.sleeperRosterId, { teamId: team.id, matchSource: 'existing' });
+      claimedTeamIds.add(team.id);
+      claimedRosterIds.add(team.sleeperRosterId);
+    }
+  }
+
+  // Pass 2: exact case-insensitive handle match among whatever's left unclaimed.
+  for (const roster of orderedRosters) {
+    if (claimedRosterIds.has(roster.roster_id)) continue;
+    const owner = roster.owner_id ? usersById.get(roster.owner_id) : undefined;
+    if (!owner) continue;
+    const match = teams.find(
+      (team) =>
+        !claimedTeamIds.has(team.id) &&
+        team.handle.toLowerCase() === owner.display_name.toLowerCase(),
+    );
+    if (!match) continue;
+    suggestionByRosterId.set(roster.roster_id, { teamId: match.id, matchSource: 'handle' });
+    claimedTeamIds.add(match.id);
+    claimedRosterIds.add(roster.roster_id);
+  }
+
+  return orderedRosters.map((roster) => {
+    const owner = roster.owner_id ? usersById.get(roster.owner_id) : undefined;
+    const suggestion = suggestionByRosterId.get(roster.roster_id);
+    return {
+      sleeperRosterId: roster.roster_id,
+      ownerDisplayName: owner?.display_name ?? null,
+      ownerTeamName: owner?.metadata?.team_name ?? null,
+      suggestedTeamId: suggestion?.teamId ?? null,
+      matchSource: suggestion?.matchSource ?? 'none',
+    };
+  });
+}

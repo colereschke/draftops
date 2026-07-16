@@ -8,7 +8,7 @@ interface SignInScreenProps {
 
 export default function SignInScreen({ callbackUrl }: SignInScreenProps) {
   return (
-    <div className="bg-background flex h-screen flex-col overflow-hidden md:flex-row">
+    <div className="bg-background flex h-screen flex-col overflow-y-auto md:flex-row md:overflow-hidden">
       <div className="bg-card border-border flex flex-col items-center justify-center gap-6 border-b px-8 py-16 text-center md:w-[40%] md:items-start md:border-r md:border-b-0 md:px-14 md:py-0 md:text-left">
         <LogoLockup size={26} textClassName="text-[19px] md:text-[21px]" />
         <div className="flex flex-col items-center md:items-start">
@@ -40,7 +40,7 @@ export default function SignInScreen({ callbackUrl }: SignInScreenProps) {
           </button>
         </form>
       </div>
-      <ValueTicker className="h-[150px] md:h-full md:flex-1" />
+      <ValueTicker className="h-[150px] shrink-0 md:h-full md:flex-1" />
     </div>
   );
 }

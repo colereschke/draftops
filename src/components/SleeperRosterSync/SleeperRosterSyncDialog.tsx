@@ -251,7 +251,7 @@ export default function SleeperRosterSyncDialog({
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent showCloseButton={false} className="max-h-[85vh] overflow-y-auto sm:max-w-2xl">
+      <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-2xl">
         <DialogTitle>Sleeper roster catch-up</DialogTitle>
         {view === 'loading' && <p data-testid="sleeper-sync-loading">Loading Sleeper roster…</p>}
 
@@ -442,9 +442,6 @@ export default function SleeperRosterSyncDialog({
             {error}
           </p>
         )}
-        <Button variant="outline" onClick={onClose}>
-          Close
-        </Button>
       </DialogContent>
     </Dialog>
   );

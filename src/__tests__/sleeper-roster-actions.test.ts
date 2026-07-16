@@ -14,6 +14,7 @@ const mockRevalidatePath = jest.fn();
 const mockTransaction = jest.fn();
 const mockDraftUpdate = jest.fn();
 const mockTeamFindMany = jest.fn();
+const mockTeamFindFirst = jest.fn();
 const mockTeamUpdateMany = jest.fn();
 const mockTeamUpdate = jest.fn();
 const mockPlayerFindMany = jest.fn();
@@ -21,9 +22,14 @@ const mockAuctionFindMany = jest.fn();
 const mockAuctionCreate = jest.fn();
 const mockAuctionCreateManyAndReturn = jest.fn();
 const mockNominationDeleteMany = jest.fn();
+const mockWithActiveOwnedDraftMutation = jest.fn();
 
 jest.mock('@/auth', () => ({ auth: () => mockAuth() }));
 jest.mock('@/lib/draft', () => ({ getDraft: (...args: unknown[]) => mockGetDraft(...args) }));
+jest.mock('@/lib/draftMutation', () => ({
+  ...jest.requireActual('@/lib/draftMutation'),
+  withActiveOwnedDraftMutation: (...args: unknown[]) => mockWithActiveOwnedDraftMutation(...args),
+}));
 jest.mock('next/cache', () => ({
   revalidatePath: (...args: unknown[]) => mockRevalidatePath(...args),
 }));
@@ -39,6 +45,7 @@ jest.mock('@/lib/db', () => ({
     draft: { update: (...args: unknown[]) => mockDraftUpdate(...args) },
     team: {
       findMany: (...args: unknown[]) => mockTeamFindMany(...args),
+      findFirst: (...args: unknown[]) => mockTeamFindFirst(...args),
       updateMany: (...args: unknown[]) => mockTeamUpdateMany(...args),
       update: (...args: unknown[]) => mockTeamUpdate(...args),
     },
@@ -53,6 +60,21 @@ jest.mock('@/lib/db', () => ({
 }));
 
 const DRAFT = { id: 4, sleeperLeagueId: 'league-1' };
+const LOCKED_DRAFT = {
+  ...DRAFT,
+  name: 'Sleeper Draft',
+  ownerId: 'owner',
+  ownerTeamId: 7,
+  status: 'ACTIVE',
+  createdAt: new Date('2026-07-16T00:00:00.000Z'),
+  teamCount: 12,
+  rosterSize: 30,
+  budget: 1000,
+  startingLineup: null,
+  scoringSettings: null,
+  targetRoster: null,
+  futurePickAuctionMode: 'PACKAGES',
+};
 const TEAM = { id: 7, sleeperRosterId: 9, handle: 'cole', displayName: 'Cole' };
 const PLAYER = {
   id: 3,
@@ -66,7 +88,12 @@ const PLAYER = {
 
 function transactionClient() {
   return {
-    team: { findMany: mockTeamFindMany, updateMany: mockTeamUpdateMany, update: mockTeamUpdate },
+    team: {
+      findMany: mockTeamFindMany,
+      findFirst: mockTeamFindFirst,
+      updateMany: mockTeamUpdateMany,
+      update: mockTeamUpdate,
+    },
     draft: { update: mockDraftUpdate },
     player: { findMany: mockPlayerFindMany },
     auctionResult: {
@@ -86,6 +113,7 @@ beforeEach(() => {
   mockFetchUsers.mockResolvedValue([]);
   mockFetchRosters.mockResolvedValue([{ roster_id: 9, owner_id: 'owner', players: ['s-3'] }]);
   mockTeamFindMany.mockResolvedValue([TEAM]);
+  mockTeamFindFirst.mockResolvedValue({ id: TEAM.id, budget: 1000 });
   mockPlayerFindMany.mockResolvedValue([PLAYER]);
   mockAuctionFindMany.mockResolvedValue([]);
   mockAuctionCreate.mockResolvedValue({});
@@ -95,6 +123,16 @@ beforeEach(() => {
   mockTransaction.mockImplementation(
     (callback: (tx: ReturnType<typeof transactionClient>) => unknown) =>
       callback(transactionClient()),
+  );
+  mockWithActiveOwnedDraftMutation.mockImplementation(
+    async (
+      _userId: string,
+      _draftId: number,
+      operation: (
+        tx: ReturnType<typeof transactionClient>,
+        draft: typeof LOCKED_DRAFT,
+      ) => Promise<unknown>,
+    ) => ({ ok: true, data: await operation(transactionClient(), LOCKED_DRAFT) }),
   );
 });
 
@@ -155,6 +193,23 @@ describe('Sleeper roster actions', () => {
     });
   });
 
+  it('rejects mapping writes when the draft completes before persistence', async () => {
+    mockWithActiveOwnedDraftMutation.mockResolvedValue({
+      ok: false,
+      code: 'DRAFT_COMPLETE',
+    });
+
+    await expect(
+      saveSleeperRosterMapping({
+        draftId: 4,
+        leagueId: 'league-1',
+        mappings: [{ teamId: 7, sleeperRosterId: 9 }],
+      }),
+    ).resolves.toEqual({ ok: false, code: 'draft_complete' });
+    expect(mockTeamUpdateMany).not.toHaveBeenCalled();
+    expect(mockDraftUpdate).not.toHaveBeenCalled();
+  });
+
   it('excludes existing results from a preview', async () => {
     mockAuctionFindMany.mockResolvedValue([{ playerId: 3 }]);
     const result = await previewSleeperRosterSync({ draftId: 4 });
@@ -190,6 +245,22 @@ describe('Sleeper roster actions', () => {
     });
     expect(result).toEqual({ ok: true, createdPlayerIds: [3], conflicts: [] });
     expect(mockNominationDeleteMany).toHaveBeenCalledWith({ where: { draftId: 4, playerId: 3 } });
+  });
+
+  it('rejects catch-up writes when the draft completes before persistence', async () => {
+    mockWithActiveOwnedDraftMutation.mockResolvedValue({
+      ok: false,
+      code: 'DRAFT_COMPLETE',
+    });
+
+    await expect(
+      logSleeperRosterCatchUp({
+        draftId: 4,
+        entries: [{ playerId: 3, teamId: 7, price: 42 }],
+      }),
+    ).resolves.toEqual({ ok: false, code: 'draft_complete' });
+    expect(mockAuctionCreateManyAndReturn).not.toHaveBeenCalled();
+    expect(mockNominationDeleteMany).not.toHaveBeenCalled();
   });
 
   it('distinguishes missing ownership, Sleeper configuration, and Sleeper failures', async () => {
@@ -253,7 +324,12 @@ describe('Sleeper roster actions', () => {
     mockFetchRosters.mockResolvedValue([
       { roster_id: 9, owner_id: 'owner', players: ['s-3', 's-4'] },
     ]);
-    mockAuctionCreateManyAndReturn.mockResolvedValue([{ playerId: 4 }]);
+    mockAuctionCreate
+      .mockRejectedValueOnce({
+        code: 'P2002',
+        meta: { target: ['draftId', 'playerId'] },
+      })
+      .mockResolvedValueOnce({ id: 44 });
 
     await expect(
       logSleeperRosterCatchUp({
@@ -269,7 +345,59 @@ describe('Sleeper roster actions', () => {
       conflicts: [{ playerId: 3, reason: 'already_logged' }],
     });
     expect(mockNominationDeleteMany).toHaveBeenCalledWith({ where: { draftId: 4, playerId: 4 } });
-    expect(mockAuctionCreate).not.toHaveBeenCalled();
+    expect(mockAuctionCreate).toHaveBeenCalledTimes(2);
+    expect(mockAuctionCreateManyAndReturn).not.toHaveBeenCalled();
+  });
+
+  it('preserves legal catch-up entries and rejects a later same-team budget violation', async () => {
+    const secondPlayer = { ...PLAYER, id: 4, sleeperId: 's-4', name: 'Lamar Jackson' };
+    const acceptedResults: Array<{ id: number; price: number; position: string }> = [];
+    mockPlayerFindMany.mockResolvedValue([PLAYER, secondPlayer]);
+    mockFetchRosters.mockResolvedValue([
+      { roster_id: 9, owner_id: 'owner', players: ['s-3', 's-4'] },
+    ]);
+    mockTeamFindFirst.mockResolvedValue({ id: TEAM.id, budget: 10 });
+    mockAuctionFindMany.mockImplementation((args: { select?: { playerId?: boolean } }) =>
+      args.select?.playerId ? Promise.resolve([]) : Promise.resolve(acceptedResults),
+    );
+    mockAuctionCreate.mockImplementation(
+      (args: { data: { playerId: number; price: number; position: string } }) => {
+        acceptedResults.push({
+          id: args.data.playerId,
+          price: args.data.price,
+          position: args.data.position,
+        });
+        return Promise.resolve({ id: args.data.playerId });
+      },
+    );
+    mockWithActiveOwnedDraftMutation.mockImplementation(
+      async (
+        _userId: string,
+        _draftId: number,
+        operation: (
+          tx: ReturnType<typeof transactionClient>,
+          draft: typeof LOCKED_DRAFT,
+        ) => Promise<unknown>,
+      ) => ({
+        ok: true,
+        data: await operation(transactionClient(), { ...LOCKED_DRAFT, rosterSize: 2 }),
+      }),
+    );
+
+    await expect(
+      logSleeperRosterCatchUp({
+        draftId: 4,
+        entries: [
+          { playerId: 3, teamId: 7, price: 6 },
+          { playerId: 4, teamId: 7, price: 5 },
+        ],
+      }),
+    ).resolves.toEqual({
+      ok: true,
+      createdPlayerIds: [3],
+      conflicts: [{ playerId: 4, reason: 'bid_exceeds_max' }],
+    });
+    expect(mockNominationDeleteMany).toHaveBeenCalledTimes(1);
   });
 
   it('rejects zero-price entries without creating results', async () => {

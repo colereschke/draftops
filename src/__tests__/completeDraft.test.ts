@@ -3,6 +3,7 @@ import { completeDraft } from '@/lib/actions';
 const mockUpdateMany = jest.fn().mockResolvedValue({ count: 1 });
 const mockRevalidatePath = jest.fn();
 const mockAuth = jest.fn();
+const mockCompleteOwnedDraft = jest.fn();
 
 jest.mock('@/lib/db', () => ({
   prisma: {
@@ -19,12 +20,16 @@ jest.mock('next/cache', () => ({
 jest.mock('@/auth', () => ({
   auth: () => mockAuth(),
 }));
+jest.mock('@/lib/draftMutation', () => ({
+  completeOwnedDraft: (...args: unknown[]) => mockCompleteOwnedDraft(...args),
+}));
 
 const MOCK_SESSION = { user: { id: '123456789', name: 'Cole' } };
 
 beforeEach(() => {
   jest.clearAllMocks();
   mockAuth.mockResolvedValue(MOCK_SESSION);
+  mockCompleteOwnedDraft.mockResolvedValue({ ok: true, data: null });
 });
 
 describe('completeDraft', () => {
@@ -34,16 +39,14 @@ describe('completeDraft', () => {
   });
 
   it('throws when draft not found or not owned by user', async () => {
-    mockUpdateMany.mockResolvedValueOnce({ count: 0 });
+    mockCompleteOwnedDraft.mockResolvedValueOnce({ ok: false, code: 'NOT_FOUND' });
     await expect(completeDraft(3)).rejects.toThrow('Draft not found');
   });
 
-  it('updates draft status to COMPLETE scoped to the owner', async () => {
+  it('completes through the serialized draft mutation boundary', async () => {
     await completeDraft(3);
-    expect(mockUpdateMany).toHaveBeenCalledWith({
-      where: { id: 3, ownerId: '123456789' },
-      data: { status: 'COMPLETE' },
-    });
+    expect(mockCompleteOwnedDraft).toHaveBeenCalledWith('123456789', 3);
+    expect(mockUpdateMany).not.toHaveBeenCalled();
   });
 
   it('revalidates /drafts after marking complete', async () => {

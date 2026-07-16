@@ -57,7 +57,7 @@ function renderSheet() {
 
 beforeEach(() => {
   mockRecordBidLogged.mockClear();
-  mockLogBid.mockResolvedValue(undefined);
+  mockLogBid.mockResolvedValue({ ok: true, data: { bidId: 99 } });
   mockUseOnboarding.mockReturnValue({
     progress: null,
     recordBidLogged: mockRecordBidLogged,

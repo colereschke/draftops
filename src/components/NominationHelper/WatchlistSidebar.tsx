@@ -17,6 +17,7 @@ interface WatchlistSidebarProps {
   onRemoveFromWatchlist: (playerId: number | string) => void;
   onUnNominate: (playerId: number | string) => void;
   onboardingSubjectPlayerName?: string | null;
+  isReadOnly?: boolean;
 }
 
 export default function WatchlistSidebar({
@@ -29,6 +30,7 @@ export default function WatchlistSidebar({
   onRemoveFromWatchlist,
   onUnNominate,
   onboardingSubjectPlayerName,
+  isReadOnly = false,
 }: WatchlistSidebarProps) {
   const [search, setSearch] = useState('');
   const wrapperRef = useRef<HTMLDivElement>(null);
@@ -102,23 +104,25 @@ export default function WatchlistSidebar({
                       </div>
                     )}
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => onUnNominate(playerId)}
-                    title="Remove from in auction"
-                    aria-label={`Remove ${name} from in auction`}
-                    data-testid={
-                      name === onboardingSubjectPlayerName
-                        ? `onboarding-nominate-undo-${name}`
-                        : undefined
-                    }
-                    data-onboarding-target={
-                      name === onboardingSubjectPlayerName ? 'nominate-undo' : undefined
-                    }
-                    className="shrink-0 text-muted-foreground transition-colors hover:text-primary"
-                  >
-                    <X className="size-3.5" />
-                  </button>
+                  {!isReadOnly ? (
+                    <button
+                      type="button"
+                      onClick={() => onUnNominate(playerId)}
+                      title="Remove from in auction"
+                      aria-label={`Remove ${name} from in auction`}
+                      data-testid={
+                        name === onboardingSubjectPlayerName
+                          ? `onboarding-nominate-undo-${name}`
+                          : undefined
+                      }
+                      data-onboarding-target={
+                        name === onboardingSubjectPlayerName ? 'nominate-undo' : undefined
+                      }
+                      className="shrink-0 text-muted-foreground transition-colors hover:text-primary"
+                    >
+                      <X className="size-3.5" />
+                    </button>
+                  ) : null}
                 </div>
               );
             })
@@ -133,34 +137,36 @@ export default function WatchlistSidebar({
       </div>
 
       {/* Search-to-add */}
-      <div ref={wrapperRef} className="relative">
-        <Command shouldFilter={false} className="rounded-[5px] border border-border bg-muted">
-          <CommandInput
-            value={search}
-            onValueChange={setSearch}
-            placeholder="Add player I want..."
-          />
-          {search.trim() !== '' && searchResults.length > 0 && (
-            <CommandList className="absolute top-full right-0 left-0 z-10 mt-1 rounded-[5px] border border-border bg-popover">
-              {searchResults.map((p) => (
-                <CommandItem
-                  key={p.player}
-                  value={p.player}
-                  onSelect={() => {
-                    onAddToWatchlist(p);
-                    setSearch('');
-                  }}
-                >
-                  <span className="font-semibold text-foreground">{p.player}</span>
-                  <span className="ml-1.5 font-mono text-[10px] text-muted-foreground">
-                    {p.pos} · ${p.budget}
-                  </span>
-                </CommandItem>
-              ))}
-            </CommandList>
-          )}
-        </Command>
-      </div>
+      {!isReadOnly ? (
+        <div ref={wrapperRef} className="relative">
+          <Command shouldFilter={false} className="rounded-[5px] border border-border bg-muted">
+            <CommandInput
+              value={search}
+              onValueChange={setSearch}
+              placeholder="Add player I want..."
+            />
+            {search.trim() !== '' && searchResults.length > 0 && (
+              <CommandList className="absolute top-full right-0 left-0 z-10 mt-1 rounded-[5px] border border-border bg-popover">
+                {searchResults.map((p) => (
+                  <CommandItem
+                    key={p.player}
+                    value={p.player}
+                    onSelect={() => {
+                      onAddToWatchlist(p);
+                      setSearch('');
+                    }}
+                  >
+                    <span className="font-semibold text-foreground">{p.player}</span>
+                    <span className="ml-1.5 font-mono text-[10px] text-muted-foreground">
+                      {p.pos} · ${p.budget}
+                    </span>
+                  </CommandItem>
+                ))}
+              </CommandList>
+            )}
+          </Command>
+        </div>
+      ) : null}
 
       {/* Watchlist entries */}
       <div className="flex flex-col gap-1.5 overflow-y-auto">
@@ -187,15 +193,17 @@ export default function WatchlistSidebar({
                     </div>
                   )}
                 </div>
-                <button
-                  type="button"
-                  onClick={() => onRemoveFromWatchlist(playerId)}
-                  title="Remove from watchlist"
-                  aria-label={`Remove ${name} from watchlist`}
-                  className="shrink-0 text-muted-foreground transition-colors hover:text-destructive"
-                >
-                  <X className="size-3.5" />
-                </button>
+                {!isReadOnly ? (
+                  <button
+                    type="button"
+                    onClick={() => onRemoveFromWatchlist(playerId)}
+                    title="Remove from watchlist"
+                    aria-label={`Remove ${name} from watchlist`}
+                    className="shrink-0 text-muted-foreground transition-colors hover:text-destructive"
+                  >
+                    <X className="size-3.5" />
+                  </button>
+                ) : null}
               </div>
             );
           })

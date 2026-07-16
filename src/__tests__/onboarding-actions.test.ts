@@ -2,6 +2,7 @@ const mockAuth = jest.fn();
 const mockRevalidatePath = jest.fn();
 const mockOnboardingUpsert = jest.fn();
 const mockOnboardingUpdateMany = jest.fn();
+const mockWithActiveOwnedDraftMutation = jest.fn();
 
 jest.mock('@/auth', () => ({ auth: () => mockAuth() }));
 jest.mock('next/cache', () => ({
@@ -15,6 +16,10 @@ jest.mock('@/lib/db', () => ({
     },
   },
 }));
+jest.mock('@/lib/draftMutation', () => ({
+  ...jest.requireActual('@/lib/draftMutation'),
+  withActiveOwnedDraftMutation: (...args: unknown[]) => mockWithActiveOwnedDraftMutation(...args),
+}));
 
 import {
   advanceOnboardingStep,
@@ -27,6 +32,19 @@ beforeEach(() => {
   mockAuth.mockResolvedValue({ user: { id: '123456789' } });
   mockOnboardingUpsert.mockResolvedValue({});
   mockOnboardingUpdateMany.mockResolvedValue({ count: 1 });
+  mockWithActiveOwnedDraftMutation.mockImplementation(
+    async (
+      _userId: string,
+      _draftId: number,
+      operation: (
+        tx: (typeof import('@/lib/db'))['prisma'],
+        draft: { id: number },
+      ) => Promise<unknown>,
+    ) => ({
+      ok: true,
+      data: await operation((await import('@/lib/db')).prisma, { id: 5 }),
+    }),
+  );
 });
 
 describe('beginOnboarding', () => {
@@ -69,6 +87,18 @@ describe('advanceOnboardingStep', () => {
     await expect(advanceOnboardingStep({ draftId: 5, step: 'BID_UNDO' })).rejects.toThrow(
       'Onboarding not found',
     );
+  });
+
+  it('rejects completed drafts without updating tour progress', async () => {
+    mockWithActiveOwnedDraftMutation.mockResolvedValue({
+      ok: false,
+      code: 'DRAFT_COMPLETE',
+    });
+
+    await expect(advanceOnboardingStep({ draftId: 5, step: 'BID_UNDO' })).rejects.toMatchObject({
+      code: 'DRAFT_COMPLETE',
+    });
+    expect(mockOnboardingUpdateMany).not.toHaveBeenCalled();
   });
 });
 

@@ -58,5 +58,11 @@ export default async function NominatePage({ params }: { params: Promise<{ draft
     fromPrismaFuturePickMode(draft.futurePickAuctionMode),
   );
 
-  return <NominationHelper draftId={draftId} players={players} />;
+  return (
+    <NominationHelper
+      draftId={draftId}
+      players={players}
+      isReadOnly={draft.status === 'COMPLETE'}
+    />
+  );
 }

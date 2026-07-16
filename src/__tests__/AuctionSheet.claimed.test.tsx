@@ -33,10 +33,14 @@ const MOCK_PLAYERS: Player[] = [
   },
 ];
 
+const mockLogBid = jest.fn();
+const mockUpdateBid = jest.fn();
+const mockDeleteBid = jest.fn();
+
 jest.mock('@/lib/actions', () => ({
-  logBid: jest.fn().mockResolvedValue(undefined),
-  updateBid: jest.fn().mockResolvedValue(undefined),
-  deleteBid: jest.fn().mockResolvedValue(undefined),
+  logBid: (...args: unknown[]) => mockLogBid(...args),
+  updateBid: (...args: unknown[]) => mockUpdateBid(...args),
+  deleteBid: (...args: unknown[]) => mockDeleteBid(...args),
 }));
 
 jest.mock('@/components/Onboarding/OnboardingContext', () => ({
@@ -64,6 +68,9 @@ const mockClaim: ClaimedBid = {
 
 beforeEach(() => {
   global.fetch = jest.fn().mockResolvedValue({ ok: true } as Response);
+  mockLogBid.mockResolvedValue({ ok: true, data: { bidId: 99 } });
+  mockUpdateBid.mockResolvedValue({ ok: true, data: { bidId: 1 } });
+  mockDeleteBid.mockResolvedValue({ ok: true, data: null });
 });
 
 afterEach(() => {
@@ -164,6 +171,24 @@ describe('AuctionSheet with claimed bids', () => {
     expect(screen.getByRole('button', { name: /log bid/i })).toBeInTheDocument();
   });
 
+  it('renders completed drafts as explicit read-only history without mutation controls', async () => {
+    const user = userEvent.setup();
+    renderSheet({
+      claimedBids: [mockClaim],
+      isReadOnly: true,
+      sleeperSyncConfigured: true,
+    });
+
+    expect(screen.getByTestId('draft-read-only-banner')).toBeInTheDocument();
+    expect(screen.queryByTestId('open-sleeper-sync')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /open bid modal for josh allen/i })).toBeNull();
+
+    await user.click(screen.getAllByText('Josh Allen')[0]);
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /available only/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /sort by player/i })).toBeInTheDocument();
+  });
+
   it('shows LIVE badge for a player in the nominatedPlayers prop', () => {
     renderSheet({ nominatedPlayers: [10] });
 
@@ -198,6 +223,37 @@ describe('AuctionSheet with claimed bids', () => {
     await user.click(screen.getByTestId('bid-submit'));
 
     await waitFor(() => expect(screen.queryByText('LIVE')).not.toBeInTheDocument());
+  });
+
+  it('shows the typed maximum-bid failure and keeps the modal open', async () => {
+    const user = userEvent.setup();
+    mockLogBid.mockResolvedValue({ ok: false, code: 'BID_EXCEEDS_MAX' });
+    renderSheet();
+
+    await user.click(screen.getByText('Josh Allen'));
+    await user.type(screen.getByTestId('bid-price'), '999');
+    await user.click(screen.getByTestId('bid-submit'));
+
+    await waitFor(() => {
+      expect(
+        screen.getByText(/leave at least \$1 for every open roster spot/i),
+      ).toBeInTheDocument();
+    });
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+  });
+
+  it('shows a stale-page read-only message when the draft completed concurrently', async () => {
+    const user = userEvent.setup();
+    mockDeleteBid.mockResolvedValue({ ok: false, code: 'DRAFT_COMPLETE' });
+    renderSheet({ claimedBids: [mockClaim] });
+
+    await user.click(screen.getAllByText('Josh Allen')[0]);
+    await user.click(screen.getByRole('button', { name: /^remove$/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText(/draft is complete and now read-only/i)).toBeInTheDocument();
+    });
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
   });
 
   it('closes modal, shows LIVE badge, and calls /api/draft/1/nominated after clicking Nom', async () => {

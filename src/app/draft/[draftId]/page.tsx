@@ -107,6 +107,7 @@ export default async function DraftHomePage({ params }: { params: Promise<{ draf
       scoringSettings={(draft.scoringSettings ?? DEFAULT_SCORING_SETTINGS) as ScoringSettings}
       sleeperSyncConfigured={sleeperSyncConfigured}
       sleeperLeagueId={draft.sleeperLeagueId}
+      isReadOnly={draft.status === 'COMPLETE'}
     />
   );
 }

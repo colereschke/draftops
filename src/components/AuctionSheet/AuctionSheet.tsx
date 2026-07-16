@@ -10,6 +10,8 @@ import { useOnboarding } from '@/components/Onboarding/OnboardingContext';
 import AuctionHeader from './AuctionHeader';
 import FilterControls, { type PositionFilter, type StrategyFilter } from './FilterControls';
 import PlayerTable, { type SortKey } from './PlayerTable';
+import DraftReadOnlyBanner from '@/components/DraftReadOnlyBanner';
+import type { DraftMutationCode } from '@/lib/draftMutation';
 
 const SleeperRosterSyncDialog = dynamic(
   () => import('@/components/SleeperRosterSync/SleeperRosterSyncDialog'),
@@ -32,6 +34,7 @@ interface AuctionSheetProps {
   scoringSettings: ScoringSettings;
   sleeperSyncConfigured?: boolean;
   sleeperLeagueId?: string | null;
+  isReadOnly?: boolean;
 }
 
 export default function AuctionSheet({
@@ -45,6 +48,7 @@ export default function AuctionSheet({
   scoringSettings,
   sleeperSyncConfigured = false,
   sleeperLeagueId = null,
+  isReadOnly = false,
 }: AuctionSheetProps) {
   const { progress, recordBidLogged } = useOnboarding();
   const [posFilter, setPosFilter] = useState<PositionFilter>('ALL');
@@ -102,6 +106,25 @@ export default function AuctionSheet({
 
   const hasClaims = optimisticBids.length > 0 && !availableOnly;
 
+  function handleMutationFailure(code: DraftMutationCode) {
+    if (code === 'UNAUTHORIZED') {
+      window.location.href = '/sign-in';
+      return;
+    }
+    const messages: Partial<Record<DraftMutationCode, string>> = {
+      INVALID_INPUT: 'Use positive whole-dollar prices and valid draft records.',
+      NOT_FOUND: 'Draft not configured. Please check your setup.',
+      DRAFT_COMPLETE: 'This draft is complete and now read-only. Refresh to view final results.',
+      TEAM_NOT_FOUND: 'That team is not part of this draft.',
+      PLAYER_NOT_FOUND: 'That player is not part of this draft.',
+      BID_NOT_FOUND: 'That bid no longer exists. Refresh to see the latest results.',
+      PLAYER_ALREADY_CLAIMED: 'That player has already been won by another team.',
+      ROSTER_FULL: 'That team has no open roster spots for another player.',
+      BID_EXCEEDS_MAX: 'This bid must leave at least $1 for every open roster spot.',
+    };
+    setModalError(messages[code] ?? 'Unable to save this bid. Please try again.');
+  }
+
   function handleModalSubmit({ price, teamId }: { price: number; teamId: number }) {
     if (!modalPlayer) return;
     const existingBid = claimMap.get(playerIdentityKey(modalPlayer));
@@ -114,19 +137,14 @@ export default function AuctionSheet({
       startTransition(async () => {
         dispatchOptimistic({ type: 'update', bid: updated });
         try {
-          await updateBid({ id: existingBid.id, price, teamId, draftId });
-          setModalPlayer(null);
-        } catch (e) {
-          if (e instanceof Error && e.message === 'Unauthorized') {
-            window.location.href = '/sign-in';
-          } else if (
-            e instanceof Error &&
-            (e.message === 'No draft found' || e.message === 'Team not found in draft')
-          ) {
-            setModalError('Draft not configured. Please check your setup.');
-          } else {
-            setModalError('Failed to save bid. Please try again.');
+          const result = await updateBid({ id: existingBid.id, price, teamId, draftId });
+          if (!result.ok) {
+            handleMutationFailure(result.code);
+            return;
           }
+          setModalPlayer(null);
+        } catch {
+          setModalError('Failed to save bid. Please try again.');
         }
       });
     } else {
@@ -147,29 +165,24 @@ export default function AuctionSheet({
       startTransition(async () => {
         dispatchOptimistic({ type: 'add', bid: tempBid });
         try {
-          await logBid({
+          const result = await logBid({
             playerId,
             price,
             teamId,
             draftId,
           });
+          if (!result.ok) {
+            handleMutationFailure(result.code);
+            return;
+          }
           setClearedNominations((previous) => new Set(previous).add(playerId));
           setExtraNominated((previous) =>
             previous.filter((nominatedId) => nominatedId !== playerId),
           );
           await recordBidLogged(modalPlayer.player);
           setModalPlayer(null);
-        } catch (e) {
-          if (e instanceof Error && e.message === 'Unauthorized') {
-            window.location.href = '/sign-in';
-          } else if (
-            e instanceof Error &&
-            (e.message === 'No draft found' || e.message === 'Team not found in draft')
-          ) {
-            setModalError('Draft not configured. Please check your setup.');
-          } else {
-            setModalError('Failed to log bid. Please try again.');
-          }
+        } catch {
+          setModalError('Failed to log bid. Please try again.');
         }
       });
     }
@@ -183,19 +196,14 @@ export default function AuctionSheet({
     startTransition(async () => {
       dispatchOptimistic({ type: 'delete', id: existingBid.id });
       try {
-        await deleteBid({ id: existingBid.id, draftId });
-        setModalPlayer(null);
-      } catch (e) {
-        if (e instanceof Error && e.message === 'Unauthorized') {
-          window.location.href = '/sign-in';
-        } else if (
-          e instanceof Error &&
-          (e.message === 'No draft found' || e.message === 'Team not found in draft')
-        ) {
-          setModalError('Draft not configured. Please check your setup.');
-        } else {
-          setModalError('Failed to remove bid. Please try again.');
+        const result = await deleteBid({ id: existingBid.id, draftId });
+        if (!result.ok) {
+          handleMutationFailure(result.code);
+          return;
         }
+        setModalPlayer(null);
+      } catch {
+        setModalError('Failed to remove bid. Please try again.');
       }
     });
   }
@@ -301,6 +309,7 @@ export default function AuctionSheet({
 
   return (
     <div className="min-h-screen bg-background text-foreground">
+      {isReadOnly ? <DraftReadOnlyBanner /> : null}
       <div data-onboarding-target="value-sheet">
         <AuctionHeader
           ownerBudget={ownerBudget}
@@ -325,10 +334,10 @@ export default function AuctionSheet({
           strategyFilter={strategyFilter}
           onStrategyFilterChange={setStrategyFilter}
           showStrategyFilter={hasStrategyTags}
-          onOpenSleeperSync={() => setShowSleeperSync(true)}
+          onOpenSleeperSync={isReadOnly ? undefined : () => setShowSleeperSync(true)}
         />
       </div>
-      <div data-onboarding-target="bid-practice">
+      <div data-onboarding-target={isReadOnly ? undefined : 'bid-practice'}>
         <PlayerTable
           players={filtered}
           showNotes={showNotes}
@@ -338,8 +347,8 @@ export default function AuctionSheet({
           sortBy={sortBy}
           sortDir={sortDir}
           onSort={handleSort}
-          onRowClick={setModalPlayer}
-          onboardingSubjectPlayerName={progress?.subjectPlayerName}
+          onRowClick={isReadOnly ? undefined : setModalPlayer}
+          onboardingSubjectPlayerName={isReadOnly ? null : progress?.subjectPlayerName}
         />
       </div>
 
@@ -352,7 +361,7 @@ export default function AuctionSheet({
           PKG target = {futurePickYear ?? 'future'} 1st+2nd+3rd package
         </span>
       </div>
-      {modalPlayer && (
+      {!isReadOnly && modalPlayer ? (
         <BidModal
           player={modalPlayer}
           teams={teams}
@@ -364,8 +373,8 @@ export default function AuctionSheet({
           isNominated={nominatedSet.has(playerIdentityKey(modalPlayer))}
           onNominate={() => handleNominate(modalPlayer)}
         />
-      )}
-      {showSleeperSync && (
+      ) : null}
+      {!isReadOnly && showSleeperSync ? (
         <SleeperRosterSyncDialog
           draftId={draftId}
           teams={teams}
@@ -373,7 +382,7 @@ export default function AuctionSheet({
           sleeperLeagueId={sleeperLeagueId}
           onClose={() => setShowSleeperSync(false)}
         />
-      )}
+      ) : null}
     </div>
   );
 }

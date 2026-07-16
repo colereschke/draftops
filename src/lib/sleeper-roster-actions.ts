@@ -8,7 +8,10 @@ import {
   fetchSleeperLeague,
   fetchSleeperLeagueRosters,
   fetchSleeperLeagueUsers,
+  matchSleeperRostersToTeams,
 } from '@/lib/sleeper';
+import type { SleeperRosterCandidate } from '@/lib/sleeper';
+import type { LeagueTeam } from '@/types';
 import { reconcileSleeperRosters } from '@/lib/sleeperRosterSync';
 import type { SleeperRosterPreview } from '@/lib/sleeperRosterSync';
 
@@ -40,6 +43,10 @@ export type SleeperRosterCatchUpResponse =
       createdPlayerIds: number[];
       conflicts: Array<{ playerId: number; reason: 'already_logged' | 'assignment_changed' }>;
     };
+
+export type SleeperRosterMatchResponse =
+  | { ok: true; leagueName: string; rosters: SleeperRosterCandidate[]; teams: LeagueTeam[] }
+  | { ok: false; code: 'not_found' | 'sleeper_error' | 'invalid_league_id' };
 
 interface OwnedDraft {
   id: number;
@@ -106,6 +113,46 @@ export async function previewSleeperRosterSync(input: {
     if (isSleeperError(error)) return { ok: false, code: 'sleeper_error' };
     throw error;
   }
+}
+
+export async function previewSleeperRosterMatch(input: {
+  draftId: number;
+  leagueId: string;
+}): Promise<SleeperRosterMatchResponse> {
+  const draft = await requireOwnedDraft(input.draftId);
+  if (!draft) return { ok: false, code: 'not_found' };
+  const leagueId = input.leagueId.trim();
+  if (!leagueId) return { ok: false, code: 'invalid_league_id' };
+
+  let league: Awaited<ReturnType<typeof fetchSleeperLeague>>;
+  let users: Awaited<ReturnType<typeof fetchSleeperLeagueUsers>>;
+  let rosters: Awaited<ReturnType<typeof fetchSleeperLeagueRosters>>;
+  try {
+    [league, users, rosters] = await Promise.all([
+      fetchSleeperLeague(leagueId),
+      fetchSleeperLeagueUsers(leagueId),
+      fetchSleeperLeagueRosters(leagueId),
+    ]);
+  } catch (error) {
+    if (isSleeperError(error)) return { ok: false, code: 'sleeper_error' };
+    throw error;
+  }
+
+  const teams = await prisma.team.findMany({
+    where: { draftId: draft.id },
+    select: { id: true, handle: true, displayName: true, sleeperRosterId: true },
+  });
+
+  return {
+    ok: true,
+    leagueName: league.name ?? '',
+    rosters: matchSleeperRostersToTeams(rosters, users, teams),
+    teams: teams.map((team) => ({
+      id: team.id,
+      handle: team.handle,
+      displayName: team.displayName,
+    })),
+  };
 }
 
 export async function saveSleeperRosterMapping(input: {

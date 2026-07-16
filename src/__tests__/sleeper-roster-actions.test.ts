@@ -1,5 +1,6 @@
 import {
   logSleeperRosterCatchUp,
+  previewSleeperRosterMatch,
   previewSleeperRosterSync,
   saveSleeperRosterMapping,
 } from '@/lib/sleeper-roster-actions';
@@ -27,6 +28,7 @@ jest.mock('next/cache', () => ({
   revalidatePath: (...args: unknown[]) => mockRevalidatePath(...args),
 }));
 jest.mock('@/lib/sleeper', () => ({
+  ...jest.requireActual('@/lib/sleeper'),
   fetchSleeperLeague: (...args: unknown[]) => mockFetchLeague(...args),
   fetchSleeperLeagueUsers: (...args: unknown[]) => mockFetchUsers(...args),
   fetchSleeperLeagueRosters: (...args: unknown[]) => mockFetchRosters(...args),
@@ -275,5 +277,60 @@ describe('Sleeper roster actions', () => {
       logSleeperRosterCatchUp({ draftId: 4, entries: [{ playerId: 3, teamId: 7, price: 0 }] }),
     ).resolves.toEqual({ ok: false, code: 'invalid_input' });
     expect(mockAuctionCreate).not.toHaveBeenCalled();
+  });
+
+  it('returns not_found for previewSleeperRosterMatch when unauthenticated', async () => {
+    mockAuth.mockResolvedValue(null);
+    await expect(previewSleeperRosterMatch({ draftId: 4, leagueId: 'league-1' })).resolves.toEqual({
+      ok: false,
+      code: 'not_found',
+    });
+  });
+
+  it('rejects a blank league ID for previewSleeperRosterMatch without calling Sleeper', async () => {
+    await expect(previewSleeperRosterMatch({ draftId: 4, leagueId: '   ' })).resolves.toEqual({
+      ok: false,
+      code: 'invalid_league_id',
+    });
+    expect(mockFetchLeague).not.toHaveBeenCalled();
+  });
+
+  it('returns sleeper_error from previewSleeperRosterMatch when Sleeper cannot be reached', async () => {
+    mockFetchLeague.mockRejectedValue(new Error('NOT_FOUND'));
+    await expect(previewSleeperRosterMatch({ draftId: 4, leagueId: 'league-1' })).resolves.toEqual({
+      ok: false,
+      code: 'sleeper_error',
+    });
+  });
+
+  it('rethrows an unexpected previewSleeperRosterMatch failure instead of masking it', async () => {
+    mockFetchLeague.mockRejectedValue(new Error('DB connection lost'));
+    await expect(previewSleeperRosterMatch({ draftId: 4, leagueId: 'league-1' })).rejects.toThrow(
+      'DB connection lost',
+    );
+  });
+
+  it('auto-matches by handle and returns the league name and team list', async () => {
+    mockTeamFindMany.mockResolvedValue([
+      { id: 7, sleeperRosterId: null, handle: 'cole', displayName: 'Cole' },
+    ]);
+    mockFetchLeague.mockResolvedValue({ name: 'Dynasty Warlords' });
+    mockFetchUsers.mockResolvedValue([{ user_id: 'u1', display_name: 'cole' }]);
+    mockFetchRosters.mockResolvedValue([{ roster_id: 9, owner_id: 'u1' }]);
+
+    await expect(previewSleeperRosterMatch({ draftId: 4, leagueId: 'league-1' })).resolves.toEqual({
+      ok: true,
+      leagueName: 'Dynasty Warlords',
+      rosters: [
+        {
+          sleeperRosterId: 9,
+          ownerDisplayName: 'cole',
+          ownerTeamName: null,
+          suggestedTeamId: 7,
+          matchSource: 'handle',
+        },
+      ],
+      teams: [{ id: 7, handle: 'cole', displayName: 'Cole' }],
+    });
   });
 });

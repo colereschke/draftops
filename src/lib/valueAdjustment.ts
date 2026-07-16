@@ -1,5 +1,6 @@
 import type { Player, Position, ScoringSettings, StartingSlot } from '@/types';
 import { DEFAULT_SCORING_SETTINGS, DEFAULT_STARTING_LINEUP } from '@/types';
+import { getBudgetScale, scaleWholeDollar } from '@/lib/valuationBudget';
 import {
   SCORING_COEF,
   SCORING_BAND,
@@ -100,6 +101,8 @@ export interface DraftValueSettings {
   startingLineup: StartingSlot[];
   scoringSettings: ScoringSettings;
   teamCount: number;
+  sourceBudget: number;
+  draftBudget: number;
 }
 
 export interface ValuedPlayer extends Player {
@@ -116,6 +119,8 @@ export function adjustPlayerValues(
   basePlayers: Player[],
   settings: DraftValueSettings,
 ): ValuedPlayer[] {
+  const budgetScale = getBudgetScale(settings.sourceBudget, settings.draftBudget);
+  const scaledFloorMinimum = scaleWholeDollar(5, budgetScale, 1);
   const lineup = settings.startingLineup ?? [...DEFAULT_STARTING_LINEUP];
   const scoring = settings.scoringSettings ?? { ...DEFAULT_SCORING_SETTINGS };
 
@@ -134,17 +139,24 @@ export function adjustPlayerValues(
 
   return basePlayers.map((p) => {
     if (!isAdjustable(p.pos)) {
-      // PICK/PKG pass through verbatim — no re-derivation.
-      return { ...p, baseBudget: p.budget, baseCeiling: p.ceiling, baseFloor: p.floor };
+      return {
+        ...p,
+        budget: scaleWholeDollar(p.budget, budgetScale),
+        ceiling: scaleWholeDollar(p.ceiling, budgetScale),
+        floor: scaleWholeDollar(p.floor, budgetScale),
+        baseBudget: p.budget,
+        baseCeiling: p.ceiling,
+        baseFloor: p.floor,
+      };
     }
     const idx = rankIndex.get(p.player) ?? 0;
     const percentile = n > 1 ? idx / (n - 1) : 0;
     const conc = computeConcentrationFactor(percentile, totalStarters);
     const mult = scarcityMults[p.pos] * scoringMults[p.pos] * conc;
 
-    const budget = Math.max(1, Math.round(p.budget * mult));
+    const budget = Math.max(1, Math.round(p.budget * budgetScale * mult));
     const ceiling = Math.round(budget * 1.15);
-    const floor = Math.max(5, Math.round(budget * 0.87));
+    const floor = Math.max(scaledFloorMinimum, Math.round(budget * 0.87));
 
     return {
       ...p,

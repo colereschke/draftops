@@ -17,6 +17,7 @@ import { adjustPlayerValues } from '@/lib/valueAdjustment';
 import { applyProjectionValuesToDraft } from '@/lib/projectionApplication';
 import { getCustomPlayerKey } from '@/lib/playerIdentity';
 import { buildSleeperPlayerIndex, matchToSleeperIndexed } from '@/lib/sleeperMatch';
+import { DEFAULT_RANKING_SOURCE_BUDGET } from '@/lib/valuationBudget';
 
 export async function logBid(data: {
   playerId: number;
@@ -210,6 +211,8 @@ export async function createDraft(data: {
       startingLineup: data.startingLineup,
       scoringSettings: data.scoringSettings,
       teamCount: data.teams.length,
+      sourceBudget: DEFAULT_RANKING_SOURCE_BUDGET,
+      draftBudget: data.budgetPerTeam,
     });
     const nextPickYear = getNextFuturePickYear(draft.createdAt);
     const futurePickAssets = generateFuturePickAssets({

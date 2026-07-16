@@ -232,6 +232,7 @@ git commit -m "feat: add explicit valuation source budgets"
 **Files:**
 
 - Modify: `src/lib/valueAdjustment.ts`
+- Modify: `src/lib/actions.ts`
 - Modify: `src/__tests__/valueAdjustment.test.ts`
 
 **Interfaces:**
@@ -384,22 +385,31 @@ const floor = Math.max(scaledFloorMinimum, Math.round(budget * 0.87));
 ```
 
 Update existing tests that construct `DraftValueSettings`; keep the scale-one identity assertion
-unchanged.
+unchanged. To keep this task independently type-safe before Task 3 restructures source selection,
+add the two explicit arguments to the existing `adjustPlayerValues` call in `src/lib/actions.ts`:
+
+```ts
+sourceBudget: DEFAULT_RANKING_SOURCE_BUDGET,
+draftBudget: data.budgetPerTeam,
+```
+
+Import `DEFAULT_RANKING_SOURCE_BUDGET` from `@/lib/valuationBudget`. Task 3 replaces the default
+with the selected custom source and moves generated future assets into this adjustment pass.
 
 - [ ] **Step 4: Run focused tests and typecheck**
 
 ```bash
 pnpm test --runInBand src/__tests__/valueAdjustment.test.ts
+pnpm test --runInBand src/__tests__/createDraft.test.ts
 pnpm typecheck
 ```
 
-Expected: value-adjustment tests PASS; typecheck identifies only the expected missing settings at
-the `createDraft` call, which Task 3 resolves.
+Expected: value-adjustment and existing draft-creation tests PASS; typecheck PASS.
 
 - [ ] **Step 5: Commit the pure valuation change**
 
 ```bash
-git add src/lib/valueAdjustment.ts src/__tests__/valueAdjustment.test.ts
+git add src/lib/valueAdjustment.ts src/lib/actions.ts src/__tests__/valueAdjustment.test.ts
 git commit -m "feat: scale draft values to configured budgets"
 ```
 
@@ -1349,7 +1359,14 @@ pnpm test --runInBand src/__tests__/valuationBudget.test.ts src/__tests__/scaleR
 
 Expected: PASS.
 
-- [ ] **Step 3: Run the full repository quality gate**
+- [ ] **Step 3: Commit documentation**
+
+```bash
+git add README.md AGENTS.md
+git commit -m "docs: explain budget-scaled valuation workflow"
+```
+
+- [ ] **Step 4: Run the full repository quality gate**
 
 ```bash
 make check
@@ -1357,7 +1374,7 @@ make check
 
 Expected: typecheck, ESLint, Prettier, 81+ Jest suites, and all tests PASS.
 
-- [ ] **Step 4: Run real-PostgreSQL verification again**
+- [ ] **Step 5: Run real-PostgreSQL verification again**
 
 ```bash
 pnpm test:integration
@@ -1365,7 +1382,7 @@ pnpm test:integration
 
 Expected: all PostgreSQL integration tests PASS.
 
-- [ ] **Step 5: Inspect the final diff and generated artifacts**
+- [ ] **Step 6: Inspect the final diff and generated artifacts**
 
 ```bash
 git status --short
@@ -1376,13 +1393,6 @@ git ls-files valuation-backfill-snapshots
 
 Expected: no uncommitted changes, no whitespace errors, only HARD-003 files in the diff, and no
 tracked snapshot files.
-
-- [ ] **Step 6: Commit documentation**
-
-```bash
-git add README.md AGENTS.md
-git commit -m "docs: explain budget-scaled valuation workflow"
-```
 
 - [ ] **Step 7: Request strongest-model code review**
 

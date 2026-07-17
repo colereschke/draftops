@@ -2,8 +2,11 @@ import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/auth';
 import { prisma } from '@/lib/db';
 import { getDraft } from '@/lib/draft';
-import { DEFAULT_TARGET_ROSTER } from '@/types';
-import type { TeamStats, AuctionResultEntry, Position } from '@/types';
+import { getActiveDraftPlayers } from '@/lib/activeDraftPlayers';
+import { computeDraftTeamStats } from '@/lib/computeDraftTeamStats';
+import { fromPrismaFuturePickMode } from '@/lib/futurePickAssets';
+import { DEFAULT_STARTING_LINEUP, DEFAULT_TARGET_ROSTER } from '@/types';
+import type { AuctionResultEntry, Position, StartingSlot } from '@/types';
 
 export async function GET(
   _request: NextRequest,
@@ -16,31 +19,37 @@ export async function GET(
   const draft = await getDraft(session.user.id, draftId);
   if (!draft) return NextResponse.json({ error: 'No draft found' }, { status: 404 });
 
-  const teams = await prisma.team.findMany({
-    where: { draftId: draft.id },
-    include: { results: true },
-  });
+  const [teams, watchlistEntries, nominatedEntries] = await Promise.all([
+    prisma.team.findMany({
+      where: { draftId: draft.id },
+      include: { results: true },
+    }),
+    prisma.playerWatchlist.findMany({
+      where: { draftId: draft.id },
+      orderBy: { createdAt: 'asc' },
+    }),
+    prisma.nominatedPlayer.findMany({
+      where: { draftId: draft.id },
+      orderBy: { createdAt: 'asc' },
+    }),
+  ]);
 
-  const teamStats: TeamStats[] = teams.map((team) => {
-    const spent = team.results.reduce((sum: number, r) => sum + r.price, 0);
-    const remaining = team.budget - spent;
-    const rosterCount = team.results.length;
-    const rosterRemaining = draft.rosterSize - rosterCount;
-    const buyingPower = remaining - rosterRemaining;
-    const pkgCount = team.results.filter((r) => r.position === 'PKG').length;
-    return {
-      id: team.id,
-      handle: team.handle,
-      displayName: team.displayName,
-      budget: team.budget,
-      spent,
-      remaining,
-      rosterCount,
-      rosterRemaining,
-      buyingPower,
-      pkgCount,
-      avgAge: null,
-    };
+  const players = await getActiveDraftPlayers({
+    draftId: draft.id,
+    bids: teams.flatMap((team) =>
+      team.results.map((result) => ({
+        player: result.player,
+        price: result.price,
+        teamHandle: team.handle,
+      })),
+    ),
+    startingLineup: (draft.startingLineup ?? DEFAULT_STARTING_LINEUP) as StartingSlot[],
+    futurePickAuctionMode: fromPrismaFuturePickMode(draft.futurePickAuctionMode),
+  });
+  const teamStats = computeDraftTeamStats({
+    teams,
+    players,
+    rosterSize: draft.rosterSize,
   });
 
   const auctionResults: AuctionResultEntry[] = teams.flatMap((team) =>
@@ -57,17 +66,6 @@ export async function GET(
       createdAt: r.createdAt,
     })),
   );
-
-  const [watchlistEntries, nominatedEntries] = await Promise.all([
-    prisma.playerWatchlist.findMany({
-      where: { draftId: draft.id },
-      orderBy: { createdAt: 'asc' },
-    }),
-    prisma.nominatedPlayer.findMany({
-      where: { draftId: draft.id },
-      orderBy: { createdAt: 'asc' },
-    }),
-  ]);
 
   return NextResponse.json({
     teamStats,

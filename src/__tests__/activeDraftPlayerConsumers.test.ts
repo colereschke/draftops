@@ -9,6 +9,7 @@ const consumers = [
   'src/app/draft/[draftId]/nominate/page.tsx',
   'src/app/draft/[draftId]/teams/page.tsx',
   'src/app/draft/[draftId]/budget/page.tsx',
+  'src/app/api/draft/[draftId]/nomination-data/route.ts',
 ];
 
 describe('active draft player consumers', () => {
@@ -21,15 +22,16 @@ describe('active draft player consumers', () => {
     expect(source).not.toContain("from '@/lib/dynamicPickValues'");
   });
 
-  it.each(['src/app/draft/[draftId]/teams/page.tsx', 'src/app/draft/[draftId]/budget/page.tsx'])(
-    '%s uses canonical team statistics',
-    (file) => {
-      const source = readFileSync(resolve(process.cwd(), file), 'utf8');
+  it.each([
+    'src/app/draft/[draftId]/teams/page.tsx',
+    'src/app/draft/[draftId]/budget/page.tsx',
+    'src/app/api/draft/[draftId]/nomination-data/route.ts',
+  ])('%s uses canonical team statistics', (file) => {
+    const source = readFileSync(resolve(process.cwd(), file), 'utf8');
 
-      expect(source).toContain("from '@/lib/computeDraftTeamStats'");
-      expect(source).toContain('computeDraftTeamStats({');
-      expect(source).not.toContain("from '@/lib/budget'");
-      expect(source).not.toContain("from '@/lib/computeTeamStats'");
-    },
-  );
+    expect(source).toContain("from '@/lib/computeDraftTeamStats'");
+    expect(source).toContain('computeDraftTeamStats({');
+    expect(source).not.toContain("from '@/lib/budget'");
+    expect(source).not.toContain("from '@/lib/computeTeamStats'");
+  });
 });

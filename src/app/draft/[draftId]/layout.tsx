@@ -25,7 +25,9 @@ export default async function DraftLayout({
   if (!draft) notFound();
 
   const tourProgress =
-    onboardingProgress?.phase === 'FEATURE_TOUR' && onboardingProgress.draftId === draftId
+    draft.status === 'ACTIVE' &&
+    onboardingProgress?.phase === 'FEATURE_TOUR' &&
+    onboardingProgress.draftId === draftId
       ? {
           draftId,
           step: onboardingProgress.step,

@@ -14,6 +14,8 @@ import type { SleeperRosterCandidate } from '@/lib/sleeper';
 import type { LeagueTeam } from '@/types';
 import { reconcileSleeperRosters } from '@/lib/sleeperRosterSync';
 import type { SleeperRosterPreview } from '@/lib/sleeperRosterSync';
+import { DraftMutationFailure, withActiveOwnedDraftMutation } from '@/lib/draftMutation';
+import { createBidInTransaction } from '@/lib/bidMutation';
 
 export interface SleeperRosterMappingInput {
   teamId: number;
@@ -30,18 +32,31 @@ export type SleeperRosterSyncResponse =
   | { ok: true; preview: SleeperRosterPreview }
   | {
       ok: false;
-      code: 'configuration_required' | 'mapping_required' | 'not_found' | 'sleeper_error';
+      code:
+        | 'configuration_required'
+        | 'mapping_required'
+        | 'not_found'
+        | 'sleeper_error'
+        | 'draft_complete';
     };
 
 export type SleeperRosterCatchUpResponse =
   | {
       ok: false;
-      code: 'invalid_input' | 'not_found' | 'configuration_required' | 'sleeper_error';
+      code:
+        | 'invalid_input'
+        | 'not_found'
+        | 'configuration_required'
+        | 'sleeper_error'
+        | 'draft_complete';
     }
   | {
       ok: true;
       createdPlayerIds: number[];
-      conflicts: Array<{ playerId: number; reason: 'already_logged' | 'assignment_changed' }>;
+      conflicts: Array<{
+        playerId: number;
+        reason: 'already_logged' | 'assignment_changed' | 'roster_full' | 'bid_exceeds_max';
+      }>;
     };
 
 export type SleeperRosterMatchResponse =
@@ -51,13 +66,17 @@ export type SleeperRosterMatchResponse =
 interface OwnedDraft {
   id: number;
   sleeperLeagueId: string | null;
+  userId: string;
 }
 
 async function requireOwnedDraft(draftId: number): Promise<OwnedDraft | null> {
   if (!Number.isSafeInteger(draftId) || draftId <= 0) return null;
   const session = await auth();
   if (!session?.user.id) return null;
-  return getDraft(session.user.id, draftId);
+  const draft = await getDraft(session.user.id, draftId);
+  return draft
+    ? { id: draft.id, sleeperLeagueId: draft.sleeperLeagueId, userId: session.user.id }
+    : null;
 }
 
 function isSleeperError(error: unknown): boolean {
@@ -194,35 +213,57 @@ export async function saveSleeperRosterMapping(input: {
     throw error;
   }
 
-  const [teams, players, loggedResults] = await Promise.all([
-    prisma.team.findMany({
-      where: { draftId: draft.id },
-      select: { id: true, sleeperRosterId: true, handle: true, displayName: true },
-    }),
-    prisma.player.findMany({
-      where: { draftId: draft.id },
-      select: { id: true, sleeperId: true, name: true, pos: true, nflTeam: true, budget: true },
-    }),
-    prisma.auctionResult.findMany({ where: { draftId: draft.id }, select: { playerId: true } }),
-  ]);
-  if (teamIds.some((teamId) => !teams.some((team) => team.id === teamId))) {
-    return { ok: false, code: 'mapping_required' };
-  }
   const sleeperRosterIds = new Set(rosters.map((roster) => roster.roster_id));
   if (rosterIds.some((rosterId) => !sleeperRosterIds.has(rosterId))) {
     return { ok: false, code: 'mapping_required' };
   }
 
-  await prisma.$transaction(async (tx) => {
-    await tx.team.updateMany({ where: { draftId: draft.id }, data: { sleeperRosterId: null } });
-    await tx.draft.update({ where: { id: draft.id }, data: { sleeperLeagueId: input.leagueId } });
-    for (const mapping of input.mappings) {
-      await tx.team.update({
-        where: { id: mapping.teamId },
-        data: { sleeperRosterId: mapping.sleeperRosterId },
+  const mutation = await withActiveOwnedDraftMutation(
+    draft.userId,
+    draft.id,
+    async (tx, lockedDraft) => {
+      const [teams, players, loggedResults] = await Promise.all([
+        tx.team.findMany({
+          where: { draftId: lockedDraft.id },
+          select: { id: true, sleeperRosterId: true, handle: true, displayName: true },
+        }),
+        tx.player.findMany({
+          where: { draftId: lockedDraft.id },
+          select: { id: true, sleeperId: true, name: true, pos: true, nflTeam: true, budget: true },
+        }),
+        tx.auctionResult.findMany({
+          where: { draftId: lockedDraft.id },
+          select: { playerId: true },
+        }),
+      ]);
+      if (teamIds.some((teamId) => !teams.some((team) => team.id === teamId))) {
+        throw new DraftMutationFailure('INVALID_INPUT');
+      }
+
+      await tx.team.updateMany({
+        where: { draftId: lockedDraft.id },
+        data: { sleeperRosterId: null },
       });
-    }
-  });
+      await tx.draft.update({
+        where: { id: lockedDraft.id },
+        data: { sleeperLeagueId: input.leagueId },
+      });
+      for (const mapping of input.mappings) {
+        await tx.team.update({
+          where: { id: mapping.teamId },
+          data: { sleeperRosterId: mapping.sleeperRosterId },
+        });
+      }
+      return { teams, players, loggedResults };
+    },
+  );
+  if (!mutation.ok) {
+    if (mutation.code === 'DRAFT_COMPLETE') return { ok: false, code: 'draft_complete' };
+    if (mutation.code === 'INVALID_INPUT') return { ok: false, code: 'mapping_required' };
+    return { ok: false, code: 'not_found' };
+  }
+
+  const { teams, players, loggedResults } = mutation.data;
 
   const mappedTeams = teams.map((team) => ({
     ...team,
@@ -279,100 +320,100 @@ export async function logSleeperRosterCatchUp(input: {
     return { ok: false, code: 'sleeper_error' };
   }
 
-  const result = await prisma.$transaction(async (tx) => {
-    const playerIds = input.entries.map((entry) => entry.playerId);
-    const [teams, players, existingResults] = await Promise.all([
-      tx.team.findMany({
-        where: { draftId: draft.id },
-        select: { id: true, sleeperRosterId: true },
-      }),
-      tx.player.findMany({
-        where: { draftId: draft.id, id: { in: playerIds } },
-        select: { id: true, sleeperId: true, name: true, pos: true, nflTeam: true, sfRank: true },
-      }),
-      tx.auctionResult.findMany({
-        where: { draftId: draft.id, playerId: { in: playerIds } },
-        select: { playerId: true },
-      }),
-    ]);
-    const teamById = new Map(teams.map((team) => [team.id, team]));
-    const playerById = new Map(players.map((player) => [player.id, player]));
-    const loggedPlayerIds = new Set(
-      existingResults.flatMap((entry) => (entry.playerId === null ? [] : [entry.playerId])),
-    );
-    const sleeperRosterByPlayerId = new Map<string, number>();
-    for (const roster of rosters) {
-      for (const sleeperId of roster.players ?? [])
-        sleeperRosterByPlayerId.set(sleeperId, roster.roster_id);
-    }
+  const mutation = await withActiveOwnedDraftMutation(
+    draft.userId,
+    draft.id,
+    async (tx, lockedDraft) => {
+      const playerIds = input.entries.map((entry) => entry.playerId);
+      const [teams, players, existingResults] = await Promise.all([
+        tx.team.findMany({
+          where: { draftId: lockedDraft.id },
+          select: { id: true, sleeperRosterId: true },
+        }),
+        tx.player.findMany({
+          where: { draftId: lockedDraft.id, id: { in: playerIds } },
+          select: { id: true, sleeperId: true, name: true, pos: true, nflTeam: true, sfRank: true },
+        }),
+        tx.auctionResult.findMany({
+          where: { draftId: lockedDraft.id, playerId: { in: playerIds } },
+          select: { playerId: true },
+        }),
+      ]);
+      const teamById = new Map(teams.map((team) => [team.id, team]));
+      const playerById = new Map(players.map((player) => [player.id, player]));
+      const loggedPlayerIds = new Set(
+        existingResults.flatMap((entry) => (entry.playerId === null ? [] : [entry.playerId])),
+      );
+      const sleeperRosterByPlayerId = new Map<string, number>();
+      for (const roster of rosters) {
+        for (const sleeperId of roster.players ?? [])
+          sleeperRosterByPlayerId.set(sleeperId, roster.roster_id);
+      }
 
-    const conflictByPlayerId = new Map<number, 'already_logged' | 'assignment_changed'>();
-    const candidates: Array<{
-      player: string;
-      playerId: number;
-      position: string;
-      nflTeam: string;
-      price: number;
-      sfRank: number;
-      teamId: number;
-      draftId: number;
-    }> = [];
-    for (const entry of input.entries) {
-      if (loggedPlayerIds.has(entry.playerId)) {
-        conflictByPlayerId.set(entry.playerId, 'already_logged');
-        continue;
+      type ConflictReason =
+        | 'already_logged'
+        | 'assignment_changed'
+        | 'roster_full'
+        | 'bid_exceeds_max';
+      const conflictByPlayerId = new Map<number, ConflictReason>();
+      const createdPlayerIdSet = new Set<number>();
+      for (const entry of input.entries) {
+        if (loggedPlayerIds.has(entry.playerId)) {
+          conflictByPlayerId.set(entry.playerId, 'already_logged');
+          continue;
+        }
+        const player = playerById.get(entry.playerId);
+        const team = teamById.get(entry.teamId);
+        if (
+          !player ||
+          !player.sleeperId ||
+          !team?.sleeperRosterId ||
+          sleeperRosterByPlayerId.get(player.sleeperId) !== team.sleeperRosterId
+        ) {
+          conflictByPlayerId.set(entry.playerId, 'assignment_changed');
+          continue;
+        }
+        try {
+          await createBidInTransaction(tx, lockedDraft, {
+            player,
+            teamId: team.id,
+            price: entry.price,
+          });
+          createdPlayerIdSet.add(player.id);
+        } catch (error) {
+          if (error instanceof DraftMutationFailure) {
+            if (error.code === 'PLAYER_ALREADY_CLAIMED') {
+              conflictByPlayerId.set(entry.playerId, 'already_logged');
+              continue;
+            }
+            if (error.code === 'ROSTER_FULL') {
+              conflictByPlayerId.set(entry.playerId, 'roster_full');
+              continue;
+            }
+            if (error.code === 'BID_EXCEEDS_MAX') {
+              conflictByPlayerId.set(entry.playerId, 'bid_exceeds_max');
+              continue;
+            }
+          }
+          throw error;
+        }
       }
-      const player = playerById.get(entry.playerId);
-      const team = teamById.get(entry.teamId);
-      if (
-        !player ||
-        !player.sleeperId ||
-        !team?.sleeperRosterId ||
-        sleeperRosterByPlayerId.get(player.sleeperId) !== team.sleeperRosterId
-      ) {
-        conflictByPlayerId.set(entry.playerId, 'assignment_changed');
-        continue;
-      }
-      candidates.push({
-        player: player.name,
-        playerId: player.id,
-        position: player.pos,
-        nflTeam: player.nflTeam,
-        price: entry.price,
-        sfRank: player.sfRank,
-        teamId: team.id,
-        draftId: draft.id,
-      });
-    }
-    const insertedResults = await tx.auctionResult.createManyAndReturn({
-      data: candidates,
-      skipDuplicates: true,
-      select: { playerId: true },
-    });
-    const createdPlayerIdSet = new Set(
-      insertedResults.flatMap((result) => (result.playerId === null ? [] : [result.playerId])),
-    );
-    for (const candidate of candidates) {
-      if (!createdPlayerIdSet.has(candidate.playerId)) {
-        conflictByPlayerId.set(candidate.playerId, 'already_logged');
-      }
-    }
-    await Promise.all(
-      [...createdPlayerIdSet].map((playerId) =>
-        tx.nominatedPlayer.deleteMany({ where: { draftId: draft.id, playerId } }),
-      ),
-    );
-    return {
-      ok: true as const,
-      createdPlayerIds: input.entries
-        .map((entry) => entry.playerId)
-        .filter((playerId) => createdPlayerIdSet.has(playerId)),
-      conflicts: input.entries.flatMap((entry) => {
-        const reason = conflictByPlayerId.get(entry.playerId);
-        return reason === undefined ? [] : [{ playerId: entry.playerId, reason }];
-      }),
-    };
-  });
-  if (result.createdPlayerIds.length > 0) revalidatePath(`/draft/${draft.id}`);
-  return result;
+      return {
+        ok: true as const,
+        createdPlayerIds: input.entries
+          .map((entry) => entry.playerId)
+          .filter((playerId) => createdPlayerIdSet.has(playerId)),
+        conflicts: input.entries.flatMap((entry) => {
+          const reason = conflictByPlayerId.get(entry.playerId);
+          return reason === undefined ? [] : [{ playerId: entry.playerId, reason }];
+        }),
+      };
+    },
+  );
+  if (!mutation.ok) {
+    if (mutation.code === 'DRAFT_COMPLETE') return { ok: false, code: 'draft_complete' };
+    return { ok: false, code: 'not_found' };
+  }
+  if (mutation.data.createdPlayerIds.length > 0) revalidatePath(`/draft/${draft.id}`);
+  return mutation.data;
 }

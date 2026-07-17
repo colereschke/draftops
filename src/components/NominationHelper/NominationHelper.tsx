@@ -7,6 +7,7 @@ import { computeNominationScores, type ScoredPlayer } from '@/lib/nominationScor
 import { useOnboarding } from '@/components/Onboarding/OnboardingContext';
 import WatchlistSidebar from './WatchlistSidebar';
 import NominationTable from './NominationTable';
+import DraftReadOnlyBanner from '@/components/DraftReadOnlyBanner';
 
 interface NomData {
   teamStats: TeamStats[];
@@ -20,9 +21,14 @@ interface NomData {
 interface NominationHelperProps {
   draftId: number;
   players: Player[];
+  isReadOnly?: boolean;
 }
 
-export default function NominationHelper({ draftId, players }: NominationHelperProps) {
+export default function NominationHelper({
+  draftId,
+  players,
+  isReadOnly = false,
+}: NominationHelperProps) {
   const router = useRouter();
   const { progress, recordPlayerNominated } = useOnboarding();
   const [data, setData] = useState<NomData | null>(null);
@@ -201,12 +207,14 @@ export default function NominationHelper({ draftId, players }: NominationHelperP
         onUnNominate={(playerId) => {
           if (typeof playerId === 'number') void unNominatePlayer(playerId);
         }}
-        onboardingSubjectPlayerName={progress?.subjectPlayerName ?? null}
+        onboardingSubjectPlayerName={isReadOnly ? null : (progress?.subjectPlayerName ?? null)}
+        isReadOnly={isReadOnly}
       />
 
       <div className="min-w-0 flex-1 overflow-x-auto px-5 pt-4 pb-10">
+        {isReadOnly ? <DraftReadOnlyBanner /> : null}
         <div
-          data-onboarding-target="nominate-intro"
+          data-onboarding-target={isReadOnly ? undefined : 'nominate-intro'}
           className="mb-4 grid gap-3 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-stretch"
         >
           <section className="rounded-lg border border-border-subtle bg-card px-4 py-3">
@@ -251,6 +259,7 @@ export default function NominationHelper({ draftId, players }: NominationHelperP
           hasAuctionData={hasAuctionData}
           onWatch={addToWatchlist}
           onNominate={nominatePlayer}
+          isReadOnly={isReadOnly}
         />
       </div>
     </div>

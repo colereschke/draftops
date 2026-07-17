@@ -1,6 +1,6 @@
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import NavBar from '@/components/NavBar';
+import NavBar from '@/components/NavBar/NavBar';
 import type { Session } from 'next-auth';
 
 jest.mock('@/auth', () => ({
@@ -137,5 +137,10 @@ describe('NavBar', () => {
       'href',
       '/rankings',
     );
+  });
+
+  it('links the logo back to home', () => {
+    render(<NavBar session={null} />);
+    expect(screen.getByTestId('nav-logo-link')).toHaveAttribute('href', '/');
   });
 });

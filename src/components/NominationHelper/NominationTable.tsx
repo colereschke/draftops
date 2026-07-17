@@ -28,6 +28,7 @@ interface NominationTableProps {
   hasAuctionData: boolean;
   onWatch: (player: Player) => void;
   onNominate: (player: Player) => void;
+  isReadOnly?: boolean;
 }
 
 export default function NominationTable({
@@ -37,11 +38,13 @@ export default function NominationTable({
   hasAuctionData,
   onWatch,
   onNominate,
+  isReadOnly = false,
 }: NominationTableProps) {
   const filtered = useMemo(
     () => (posFilter === 'ALL' ? scored : scored.filter((s) => s.player.pos === posFilter)),
     [scored, posFilter],
   );
+  const visibleColumns = isReadOnly ? COLUMNS.slice(0, 5) : COLUMNS;
 
   if (!hasAuctionData) {
     return (
@@ -92,7 +95,7 @@ export default function NominationTable({
       <Table className="mt-1.5">
         <TableHeader>
           <TableRow className="border-border hover:bg-transparent">
-            {COLUMNS.map((col, i) => (
+            {visibleColumns.map((col, i) => (
               <TableHead
                 key={i}
                 className="font-label border-none py-2 text-[10px] font-semibold tracking-wide whitespace-nowrap text-muted-foreground uppercase"
@@ -170,36 +173,43 @@ export default function NominationTable({
                 <TableCell className="min-w-[200px] text-left">
                   <RivalDemandBar rivalContributions={rivalContributions} />
                 </TableCell>
-                <TableCell className="text-center">
-                  <Button
-                    variant="outline"
-                    size="xs"
-                    onClick={() => onWatch(player)}
-                    className="font-label tracking-wide hover:border-[var(--pos-rb)]"
-                    style={{ color: 'var(--pos-rb)' }}
-                  >
-                    Watch
-                  </Button>
-                </TableCell>
-                <TableCell className="text-center">
-                  <Button
-                    variant="outline"
-                    size="xs"
-                    onClick={() => onNominate(player)}
-                    data-testid={`nominate-player-${player.player}`}
-                    data-onboarding-target="nominate-practice"
-                    className="font-label tracking-wide hover:border-[var(--pos-pick)]"
-                    style={{ color: 'var(--pos-pick)' }}
-                  >
-                    Nominate
-                  </Button>
-                </TableCell>
+                {!isReadOnly ? (
+                  <>
+                    <TableCell className="text-center">
+                      <Button
+                        variant="outline"
+                        size="xs"
+                        onClick={() => onWatch(player)}
+                        className="font-label tracking-wide hover:border-[var(--pos-rb)]"
+                        style={{ color: 'var(--pos-rb)' }}
+                      >
+                        Watch
+                      </Button>
+                    </TableCell>
+                    <TableCell className="text-center">
+                      <Button
+                        variant="outline"
+                        size="xs"
+                        onClick={() => onNominate(player)}
+                        data-testid={`nominate-player-${player.player}`}
+                        data-onboarding-target="nominate-practice"
+                        className="font-label tracking-wide hover:border-[var(--pos-pick)]"
+                        style={{ color: 'var(--pos-pick)' }}
+                      >
+                        Nominate
+                      </Button>
+                    </TableCell>
+                  </>
+                ) : null}
               </TableRow>
             );
           })}
           {filtered.length === 0 && (
             <TableRow className="hover:bg-transparent">
-              <TableCell colSpan={7} className="p-10 text-center text-xs text-muted-foreground">
+              <TableCell
+                colSpan={visibleColumns.length}
+                className="p-10 text-center text-xs text-muted-foreground"
+              >
                 No nomination targets found.
               </TableCell>
             </TableRow>

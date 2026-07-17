@@ -165,7 +165,7 @@ const ROSTER_TEAM: TeamWithRoster = { ...TEAM_STATS, results: [] };
 beforeEach(() => {
   jest.clearAllMocks();
   mockAuth.mockResolvedValue({ user: { id: 'user-1' } });
-  mockGetDraft.mockResolvedValue({ id: 5 });
+  mockGetDraft.mockResolvedValue({ id: 5, status: 'ACTIVE' });
   global.fetch = jest.fn().mockResolvedValue({
     ok: true,
     status: 200,
@@ -191,6 +191,15 @@ describe('onboarding targets', () => {
 
     mockProgress.mockResolvedValue({ ...FEATURE_TOUR_PROGRESS, draftId: 6 });
     render(await DraftLayout({ children: <div />, params: Promise.resolve({ draftId: '5' }) }));
+    expect(screen.queryByTestId('onboarding-tour')).not.toBeInTheDocument();
+  });
+
+  it('does not mount onboarding practice UI for a completed draft', async () => {
+    mockProgress.mockResolvedValue(FEATURE_TOUR_PROGRESS);
+    mockGetDraft.mockResolvedValue({ id: 5, status: 'COMPLETE' });
+
+    render(await DraftLayout({ children: <div />, params: Promise.resolve({ draftId: '5' }) }));
+
     expect(screen.queryByTestId('onboarding-tour')).not.toBeInTheDocument();
   });
 

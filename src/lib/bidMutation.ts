@@ -5,8 +5,7 @@ import {
   withActiveOwnedDraftMutation,
   type DraftMutationResult,
 } from '@/lib/draftMutation';
-
-const ROSTER_POSITIONS = new Set(['QB', 'RB', 'WR', 'TE']);
+import { countsTowardRoster } from '@/lib/rosterPolicy';
 
 interface CreateBidRecordInput {
   userId: string;
@@ -104,10 +103,10 @@ export async function assertBidLegalInTransaction(
 
   const currentSpend = existingResults.reduce((sum, result) => sum + result.price, 0);
   const currentRosterCount = existingResults.reduce(
-    (count, result) => count + (ROSTER_POSITIONS.has(result.position) ? 1 : 0),
+    (count, result) => count + (countsTowardRoster(result.position) ? 1 : 0),
     0,
   );
-  const resultingRosterCount = currentRosterCount + (ROSTER_POSITIONS.has(input.position) ? 1 : 0);
+  const resultingRosterCount = currentRosterCount + (countsTowardRoster(input.position) ? 1 : 0);
   if (resultingRosterCount > draft.rosterSize) {
     throw new DraftMutationFailure('ROSTER_FULL');
   }

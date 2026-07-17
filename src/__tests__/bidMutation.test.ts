@@ -175,6 +175,19 @@ describe('createBidRecord', () => {
     });
   });
 
+  it('ignores PICK and PKG results when checking the final skill roster slot', async () => {
+    mockDraftFindFirst.mockResolvedValue({ ...ACTIVE_DRAFT, rosterSize: 2 });
+    mockAuctionFindMany.mockResolvedValue([
+      { id: 1, price: 100, position: 'RB' },
+      { id: 2, price: 50, position: 'PICK' },
+      { id: 3, price: 50, position: 'PKG' },
+    ]);
+
+    await expect(createBidRecord({ ...CREATE_INPUT, price: 800 })).resolves.toMatchObject({
+      ok: true,
+    });
+  });
+
   it('translates only the draft/player unique conflict', async () => {
     mockAuctionCreate.mockRejectedValue({
       code: 'P2002',

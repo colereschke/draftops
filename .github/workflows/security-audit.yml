@@ -23,10 +23,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: pnpm
 
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile --ignore-scripts
-
+      # `pnpm audit` resolves entirely from package.json + pnpm-lock.yaml
+      # against the registry's advisory DB — no install needed.
       - name: Audit production dependencies
         run: pnpm audit --prod

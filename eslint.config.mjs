@@ -10,6 +10,7 @@ const config = [
       '.claude/worktrees/**',
       '.claire/worktrees/**',
       '.worktrees/**',
+      'coverage/**',
     ],
   },
   ...nextConfig,

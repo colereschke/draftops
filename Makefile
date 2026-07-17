@@ -78,11 +78,11 @@ projections-generate: ## Generate projection CSVs from local raw inputs
 	uv run python scripts/projections/generate_master_csv.py
 
 .PHONY: projections-check
-projections-check: ## Run Python projection checks
-	uv run --extra dev pytest scripts/projections/tests -q
-	uv run --extra dev ruff format --check scripts/projections
-	uv run --extra dev ruff check scripts/projections
-	uv run --extra dev mypy
+projections-check: ## Run Python projection checks (set UV_RUN_ARGS=--no-sync to skip uv's resync check after `uv sync`)
+	uv run $(UV_RUN_ARGS) --extra dev pytest scripts/projections/tests -q
+	uv run $(UV_RUN_ARGS) --extra dev ruff format --check scripts/projections
+	uv run $(UV_RUN_ARGS) --extra dev ruff check scripts/projections
+	uv run $(UV_RUN_ARGS) --extra dev mypy
 
 # ── Database ──────────────────────────────────────────────────────────────────
 

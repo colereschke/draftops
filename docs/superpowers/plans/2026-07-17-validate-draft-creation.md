@@ -1602,9 +1602,17 @@ jest.mock('next/navigation', () => ({ useRouter: () => ({ push: mockPush }) }));
 In the existing `beforeEach`, add:
 
 ```ts
+(createDraft as jest.Mock).mockClear();
 (createDraft as jest.Mock).mockResolvedValue({ ok: true, data: { draftId: 1 } });
 mockPush.mockClear();
 ```
+
+The `mockClear()` on `createDraft` is required, not cosmetic: `jest.config.ts` has no
+`clearMocks`/`resetMocks` set, so `createDraft`'s call history otherwise accumulates across every
+test in this file. Task 4 Step 2 adds a test asserting `expect(createDraft).not.toHaveBeenCalled()`
+after a client-side validation block — without this `mockClear()`, that assertion fails from the
+very first test onward regardless of whether the new implementation is correct, because tests earlier
+in the file already called the mock.
 
 - [ ] **Step 2: Add new tests for the result-handling behavior**
 
@@ -1811,6 +1819,19 @@ note why in the same commit.
 
 - [ ] **Step 2: Write the failing integration test file**
 
+**Why this test needs its own fixture data, not just a fresh migrated schema:** `createDraft`'s
+transaction calls the real (unmocked) `applyProjectionValuesToDraft`, which throws
+`'No projection source found'` if `ProjectionSource` has zero rows, and throws `'No projection
+values could be applied…'` if no seeded `Player` joins a `PlayerProjection` row. `resetTestDatabase`
+(`scripts/testDatabase.ts`) only applies migrations — it seeds nothing. Without seeding a matching
+`SleeperPlayer` + `ProjectionSource` + `PlayerProjection` triple first, **both tests below would fail
+before reaching their own assertions** — proven by `budgetValueBackfill.postgres.test.ts`, which
+seeds exactly this triple for the same reason. `BASE_PLAYERS[0]` is `{ player: 'Drake Maye', team:
+'NE', pos: 'QB' }` (verified against `src/data/players.ts`) — seed one `SleeperPlayer` row matching
+it by name/team/pos so `resolveEtrSleeperMatches` (called inside `createDraft`, before the
+transaction) resolves at least that one match; `applyProjectionValuesToDraft` only requires
+`joined.length > 0`, not full player coverage.
+
 Create `src/__tests__/integration/draft-creation.postgres.test.ts`:
 
 ```ts
@@ -1818,12 +1839,68 @@ import { Client } from 'pg';
 import { prisma } from '@/lib/db';
 import { createDraft } from '@/lib/actions';
 import { players as BASE_PLAYERS } from '@/data/players';
+import { normalizeName } from '@/lib/sleeperNormalize';
 import type { StartingSlot } from '@/types';
 
 jest.mock('@/auth', () => ({ auth: () => Promise.resolve(mockSession) }));
 
 const ownerId = `integration-owner-${Date.now()}`;
 const mockSession = { user: { id: ownerId, name: 'Integration Owner' } };
+const FIXTURE_PREFIX = `draft-creation-integration-${process.pid}`;
+
+interface ProjectionFixture {
+  sleeperPlayerId: string;
+  projectionSourceId: number;
+}
+
+async function seedProjectionFixture(): Promise<ProjectionFixture> {
+  const anchorPlayer = BASE_PLAYERS[0]; // Drake Maye / NE / QB
+  const sleeperPlayer = await prisma.sleeperPlayer.create({
+    data: {
+      id: `${FIXTURE_PREFIX}-sleeper`,
+      name: anchorPlayer.player,
+      normalizedName: normalizeName(anchorPlayer.player),
+      team: anchorPlayer.team,
+      pos: anchorPlayer.pos,
+    },
+  });
+  const projectionSource = await prisma.projectionSource.create({
+    data: {
+      name: FIXTURE_PREFIX,
+      season: 2026,
+      projectionDate: new Date('2026-07-01T00:00:00.000Z'),
+    },
+  });
+  await prisma.playerProjection.create({
+    data: {
+      sleeperId: sleeperPlayer.id,
+      position: 'QB',
+      games: 17,
+      passAtt: 550,
+      passCmp: 360,
+      passYds: 4000,
+      passTd: 28,
+      passInt: 10,
+      passSacks: 30,
+      rushAtt: 70,
+      rushYds: 350,
+      rushTd: 4,
+      targets: 0,
+      receptions: 0,
+      recYds: 0,
+      recTd: 0,
+      baseFantasyPoints: 276,
+      projectionSourceId: projectionSource.id,
+    },
+  });
+  return { sleeperPlayerId: sleeperPlayer.id, projectionSourceId: projectionSource.id };
+}
+
+async function deleteProjectionFixture(fixture: ProjectionFixture): Promise<void> {
+  await prisma.playerProjection.deleteMany({ where: { sleeperId: fixture.sleeperPlayerId } });
+  await prisma.projectionSource.delete({ where: { id: fixture.projectionSourceId } });
+  await prisma.sleeperPlayer.delete({ where: { id: fixture.sleeperPlayerId } });
+}
 
 const VALID_INPUT = {
   name: `Integration Draft ${Date.now()}`,
@@ -1876,6 +1953,11 @@ async function deleteDraftFixture(draftId: number): Promise<void> {
 
 describe('draft creation against PostgreSQL', () => {
   const createdDraftIds: number[] = [];
+  let projectionFixture: ProjectionFixture;
+
+  beforeAll(async () => {
+    projectionFixture = await seedProjectionFixture();
+  });
 
   afterEach(async () => {
     while (createdDraftIds.length > 0) {
@@ -1885,6 +1967,7 @@ describe('draft creation against PostgreSQL', () => {
   });
 
   afterAll(async () => {
+    await deleteProjectionFixture(projectionFixture);
     await prisma.$disconnect();
   });
 
@@ -1973,6 +2056,12 @@ ROW`, which would fail the timeout the test is supposed to verify compliance wit
   stage rather than an earlier one.
 - `deleteDraftFixture` intentionally does not need to run for the second test (nothing should have
   been created), which is exactly what `orphanedDraft` being `null` proves.
+- The shared `projectionFixture` (one `SleeperPlayer`/`ProjectionSource`/`PlayerProjection` triple,
+  seeded once in `beforeAll`) is what lets both tests' `createDraft` calls reach and exercise the
+  `applyProjectionValuesToDraft` stage instead of failing immediately on `'No projection source
+found'` — see the explanation above Step 2's code block. Reusing one fixture across both tests
+  (rather than seeding per-test) is safe here because neither test mutates or depends on isolating
+  the projection data itself, only on it existing.
 
 - [ ] **Step 3: Run the integration tests, adjusting `TRANSACTION_TIMEOUT_MS` per Step 1's measurement**
 
@@ -2059,13 +2148,25 @@ git commit -m "docs: record HARD-007 draft-creation validation in CLAUDE.md"
 - Client form: schema-based validation replacing hand-rolled checks (except the blank-numeric-field
   guard, which must stay separate) + typed-result handling + `router.push` → Task 4.
 - Real-Postgres latency-injection test with correct trigger granularity, and an all-or-nothing test
-  → Task 5.
+  → Task 5, both seeded with a `SleeperPlayer`/`ProjectionSource`/`PlayerProjection` fixture so the
+  real (unmocked) `applyProjectionValuesToDraft` call inside `createDraft`'s transaction has
+  something to join instead of throwing before either test's own assertions run.
 - CLAUDE.md update → Task 6.
 
 **Placeholder scan:** no "TBD"/"handle appropriately"/"similar to Task N" — every step has literal
 code or an exact command. The one place that looks underspecified on a first pass — Task 5 Step 1's
 measurement — is deliberately structured as "read the numbers Task 3 already logs, then decide," not
 a vague "measure it somehow."
+
+**Opus plan review (2026-07-17) fixes incorporated:** (1) Task 5's integration tests originally called
+the real, unmocked `applyProjectionValuesToDraft` against a migrated-but-unseeded test database, which
+throws `'No projection source found'` before either test's assertions could run — fixed by adding
+`seedProjectionFixture`/`deleteProjectionFixture`, modeled on the same seeding pattern
+`budgetValueBackfill.postgres.test.ts` already uses for the identical reason. (2) Task 4's new
+`not.toHaveBeenCalled()` assertion on `createDraft` would fail regardless of correctness because
+`jest.config.ts` has no global `clearMocks` and the mock's call history accumulates across the whole
+file — fixed by adding an explicit `(createDraft as jest.Mock).mockClear()` to that file's
+`beforeEach`.
 
 **Type consistency:** `DraftInput` (Task 2) flows unchanged into `createDraft`'s parameter type
 (Task 3) and the client's `candidate`/`parsed.data` (Task 4). `DraftMutationResult<{ draftId: number

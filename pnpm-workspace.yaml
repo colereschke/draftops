@@ -5,3 +5,14 @@ allowBuilds:
   prisma: true
   sharp: true
   unrs-resolver: true
+
+# Security-advisory pins. Each is capped to its current major so a routine
+# `pnpm install` can't silently jump an untested major version — only widen
+# the range after reviewing the new major's changelog. Both are transitive
+# (pulled in via prisma/@prisma/dev and next); remove once the parent
+# package bumps its own pin past the vulnerable version.
+overrides:
+  # GHSA-92pp-h63x-v22m: middleware bypass via repeated slashes in serveStatic
+  '@hono/node-server@<1.19.13': '>=1.19.13 <2.0.0'
+  # GHSA-qx2v-qp2m-jg93: XSS via unescaped </style> in CSS stringify output
+  'postcss@<8.5.10': '>=8.5.10 <9.0.0'

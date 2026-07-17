@@ -1,0 +1,26 @@
+name: Security Audit
+
+on:
+  schedule:
+    - cron: '0 13 * * 1'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    name: pnpm audit (production dependencies)
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # `pnpm audit` resolves entirely from package.json + pnpm-lock.yaml
+      # against the registry's advisory DB — no install needed.
+      - uses: ./.github/actions/setup-pnpm-node
+        with:
+          install: 'false'
+
+      - name: Audit production dependencies
+        run: pnpm audit --prod

@@ -62,18 +62,18 @@ New file `src/lib/draftInputSchema.ts` exports:
 
 Constraints (bounds below are a judgment call — flagged for your review in the self-review section):
 
-| Field                   | Rule                                                                                                                                                                                                                        |
-| ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `name`                  | trimmed, 1–100 chars                                                                                                                                                                                                        |
-| `budgetPerTeam`         | positive safe integer, ≤ 1,000,000                                                                                                                                                                                          |
-| `rosterSize`            | positive safe integer, ≤ 100                                                                                                                                                                                                |
-| `targetRoster`          | keys restricted to QB/RB/WR/TE, values non-negative integers                                                                                                                                                                |
-| `startingLineup`        | valid `StartingSlot` values only, length 1–`rosterSize`, must include ≥1 QB or SUPER_FLEX slot                                                                                                                              |
-| `scoringSettings`       | all fields finite; `passYdsPerPoint` in (0, 200]; PPR fields (`pprRB`/`pprWR`/`pprTE`) in [0, 5]; all other bonus/TD/INT fields in [-20, 20]                                                                                |
-| `teams`                 | 2–32 entries; `handle` trimmed 1–40 chars, unique **case-insensitively**; `displayName` trimmed ≤60 chars; exactly one `isMine: true`; `sleeperRosterId` (if present) a positive safe integer, unique among submitted teams |
-| `sleeperLeagueId`       | optional, digits only, 5–25 chars                                                                                                                                                                                           |
-| `futurePickAuctionMode` | enum `'packages' \| 'individual' \| 'none'`                                                                                                                                                                                 |
-| `playerSource`          | optional enum `'etr' \| 'custom'`                                                                                                                                                                                           |
+| Field                   | Rule                                                                                                                                                                                                                                                                                                                                                                                     |
+| ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `name`                  | trimmed, 1–100 chars                                                                                                                                                                                                                                                                                                                                                                     |
+| `budgetPerTeam`         | positive safe integer, ≤ 1,000,000                                                                                                                                                                                                                                                                                                                                                       |
+| `rosterSize`            | positive safe integer, ≤ 100                                                                                                                                                                                                                                                                                                                                                             |
+| `targetRoster`          | keys restricted to QB/RB/WR/TE, values non-negative integers, each ≤ `MAX_ROSTER_SIZE`                                                                                                                                                                                                                                                                                                   |
+| `startingLineup`        | valid `StartingSlot` values only, length 1–`rosterSize`, must include ≥1 QB or SUPER_FLEX slot                                                                                                                                                                                                                                                                                           |
+| `scoringSettings`       | all fields finite; `passYdsPerPoint` in (0, 200]; PPR fields (`pprRB`/`pprWR`/`pprTE`) in [0, 5]; all other bonus/TD/INT fields in [-20, 20]                                                                                                                                                                                                                                             |
+| `teams`                 | 2–32 entries; `handle` trimmed 1–40 chars, unique **case-insensitively**; `displayName` trimmed ≤60 chars; exactly one `isMine: true`; `sleeperRosterId` (if present) a positive safe integer ≤ 1,000 (Postgres `Int` is 32-bit — capping well under `2^31` avoids a raw DB error on write; real Sleeper roster IDs are league-sized, so this is generous), unique among submitted teams |
+| `sleeperLeagueId`       | optional, digits only, 5–25 chars                                                                                                                                                                                                                                                                                                                                                        |
+| `futurePickAuctionMode` | enum `'packages' \| 'individual' \| 'none'`                                                                                                                                                                                                                                                                                                                                              |
+| `playerSource`          | optional enum `'etr' \| 'custom'`                                                                                                                                                                                                                                                                                                                                                        |
 
 The case-insensitive handle check and the "exactly one `isMine`" check are expressed as
 `superRefine` steps on the schema, so both client and server reject them identically — this closes
@@ -95,6 +95,22 @@ Two additions to `DraftMutationCode` in `src/lib/draftMutation.ts`:
 - `NO_RANKING_SET` (new) — replaces `throw new Error('No custom ranking set found')` for the
   `playerSource: 'custom'` path when the user has no active `UserRankingSet`.
 
+The typed result only covers _expected_ outcomes (auth, validation, missing ranking set). Genuinely
+unexpected internal failures — most notably `applyProjectionValuesToDraft` throwing a bare `Error`
+(`'No projection source found'` / `'No projection values could be applied'`) — are **not** caught and
+translated to a code; they continue to propagate and reject the `createDraft` promise, the same
+treatment `withActiveOwnedDraftMutation` gives non-`DraftMutationFailure` errors today. This keeps
+"typed result" meaning "an outcome the caller should branch on in the UI," not "every possible
+failure," and preserves the existing `fails loudly when automatic projection application fails` test
+(`rejects.toThrow(...)`) unchanged — it stays in the carry-over list below, not the rewritten set.
+
+As defense in depth, a `P2002` uniqueness violation from the batched `team.createManyAndReturn`
+(against `@@unique([handle, draftId])` or `@@unique([draftId, sleeperRosterId])`) is translated to a
+new `DUPLICATE_TEAM` code rather than left to escape as a raw Prisma error, mirroring how
+`bidMutation.ts` translates `P2002` to `PLAYER_ALREADY_CLAIMED`. In practice the shared Zod schema's
+case-insensitive handle check and per-submission `sleeperRosterId` uniqueness check make this
+unreachable in normal use — it only fires if a crafted request bypasses client validation.
+
 `src/app/drafts/new/page.tsx` changes its submit handler from `try { await createDraft(...) } catch`
 to checking `result.ok`, reading `result.data.draftId` and calling `router.push(`/draft/${draftId}`)`
 itself on success (via `useRouter` from `next/navigation`), and mapping `result.code` to the existing
@@ -114,22 +130,34 @@ Ordering after this change:
    advisory lock, and a ranking-set replace mid-creation is already only weakly protected today),
    `generateFuturePickAssets`, `adjustPlayerValues` → `seededPlayers`. If `playerSource: 'custom'` and
    no ranking set exists, return `NO_RANKING_SET` here, before opening the transaction.
-4. **Inside `prisma.$transaction(..., { timeout: 15_000 })`**: advisory lock on the user (unchanged —
-   this serializes the first-draft/onboarding eligibility check, which must stay inside the lock) →
-   `ownerDraftCount` read → `draft.create` → `team.createManyAndReturn` (one round trip; Prisma 7 on
-   Postgres returns created rows, including `id`, in input order, so the "mine" team's new id is still
-   resolved by index without an extra query) → `draft.update` (`ownerTeamId`) → `player.createMany` →
-   `applyProjectionValuesToDraft` → onboarding transition logic (unchanged).
+4. **Inside `prisma.$transaction(..., { timeout: <measured value, see below> })`**: advisory lock on
+   the user (unchanged — this serializes the first-draft/onboarding eligibility check, which must
+   stay inside the lock) → `ownerDraftCount` read → `draft.create` → `team.createManyAndReturn` (one
+   round trip) → `draft.update` (`ownerTeamId`) → `player.createMany` → `applyProjectionValuesToDraft`
+   → onboarding transition logic (unchanged).
+
+   `createManyAndReturn`'s returned-row order matching input order is not a documented Prisma/Postgres
+   guarantee, so the "mine" team's new id is resolved by building a `Map<handle, id>` from the
+   returned rows and looking up the "mine" team's (schema-guaranteed-unique) handle — not by
+   positional index.
+
 5. Return `{ ok: true, data: { draftId } }`.
 
 Each stage inside the transaction is wrapped with a `performance.now()` delta and a
 `console.info('[createDraft] stage=<name> durationMs=<n>')` line — enough to see where time goes in
 production logs without building new observability infrastructure (HARD-014).
 
-**Timeout value:** 15 seconds. The write-only stages remaining in the transaction (batched team
-insert, ~270-plus-row player insert, projection application) are the ones that need to commit
-atomically; 15s is generous enough to absorb Neon cold-path latency on those specific stages while
-still failing fast instead of hanging indefinitely on, e.g., a stuck connection.
+**Timeout value:** measure first, then set. `applyProjectionValuesToDraft` (called with
+`useBatchTransaction: false`) does roughly one `draftPlayerValue.upsert` round trip per player —
+around 250 sequential writes — which is the dominant cost inside the transaction, not the single
+batched player insert. Before picking a number, capture a real baseline: run `createDraft` against
+local WSL2 Postgres (and note the per-stage `console.info` timings from the same run) to see actual
+wall time for team insert / player insert / projection application. Batching
+`applyProjectionValuesToDraft`'s upserts is explicitly out of scope for this workstream (see
+Non-goals) — its 250-round-trip shape is a known cost this spec works around with an explicit
+timeout, not one it removes. Pick a timeout that's comfortably above the measured baseline plus
+Neon cold-path margin (a starting guess is 15s, but treat that as provisional until the baseline
+measurement confirms or revises it), and record the measured baseline in the PR description.
 
 ## Testing
 
@@ -143,18 +171,25 @@ QB/SF, out-of-range scoring values, case-insensitive duplicate handles, zero/mul
 duplicate `sleeperRosterId`, oversized `teams` array), plus a case for `NO_RANKING_SET`. Existing
 behavioral assertions (team/player payload shape, TE premium, future-pick seeding, custom ranking
 source budget, onboarding transition) carry over with their trigger/assertion style adjusted for the
-new return shape.
+new return shape. Two existing tests carry over **unchanged in intent** and must not be silently
+dropped in the rewrite: `serializes a user's first-draft eligibility check with an advisory
+transaction lock` (the lock ordering assertion) and `fails loudly when automatic projection
+application fails` (still `rejects.toThrow(...)` — see the API Contract Change section on why
+projection-application errors keep throwing rather than becoming a typed code).
 
 ### Integration (`src/__tests__/integration/draft-creation.postgres.test.ts`)
 
 New file, following the existing `draft-integrity.postgres.test.ts` pattern (real Postgres via
 `TEST_DATABASE_URL`, `pg.Client` for out-of-band control). Two cases:
 
-1. **Latency-injected timeout compliance** (the acceptance-criteria case): a `BEFORE INSERT` trigger
-   on `"Player"` that calls `pg_sleep(2)` once per statement, simulating Neon cold-path latency during
-   the bulk player insert. Assert the full `createDraft` flow still resolves `{ ok: true }`, the
-   total wall time is under the 15s timeout, and the draft/teams/players are all present afterward
-   (nothing partially committed).
+1. **Latency-injected timeout compliance** (the acceptance-criteria case): a `BEFORE INSERT ... FOR
+EACH STATEMENT` trigger on `"Player"` that calls `pg_sleep(2)`. This must be statement-level, not
+   row-level — `player.createMany` emits one multi-row `INSERT`, but a `FOR EACH ROW` trigger (the
+   style used elsewhere in `draft-integrity.postgres.test.ts`) would fire once per one of the
+   ~270-plus player rows, sleeping for roughly 540s and failing the timeout it's supposed to verify
+   compliance with. Assert the full `createDraft` flow still resolves `{ ok: true }`, the total wall
+   time is under the chosen timeout, and the draft/teams/players are all present afterward (nothing
+   partially committed).
 2. **All-or-nothing on late failure**: a trigger that raises on the `applyProjectionValuesToDraft`
    write path (or reuses the existing forced-failure trigger style from `draft-integrity.postgres.
 test.ts`) to confirm that when the last stage fails, the earlier `draft`/`team`/`player` rows from
@@ -177,3 +212,13 @@ test.ts`) to confirm that when the last stage fails, the earlier `draft`/`team`/
   constraint (e.g. `citext`) — only the application-level check is added. A future HARD-005 pass may
   want to reconsider whether the DB constraint itself should become case-insensitive; noted but out
   of scope here.
+- Opus-reviewed 2026-07-17. Findings incorporated above: the `FOR EACH ROW`/`FOR EACH STATEMENT`
+  trigger-granularity bug in the latency test (would have failed the sole acceptance-criteria test at
+  ~540s instead of ~2s), `createManyAndReturn` order-by-handle instead of position, explicit handling
+  of `applyProjectionValuesToDraft`'s thrown errors under the new typed-result contract, the
+  measure-before-you-set timeout approach (and correcting which stage actually dominates transaction
+  time), the two carry-over tests that were missing from the rewrite list, `targetRoster`'s missing
+  upper bound, and `sleeperRosterId`'s Postgres `Int` overflow risk. Confirmed decision: batching
+  `applyProjectionValuesToDraft`'s ~250 sequential upserts is deliberately deferred to a follow-up
+  rather than folded into this workstream, even though the audit lists that file as a primary
+  location — see the Timeout Value discussion above.

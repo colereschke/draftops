@@ -4,9 +4,8 @@ import { prisma } from '@/lib/db';
 import { getDraft } from '@/lib/draft';
 import NominationHelper from '@/components/NominationHelper';
 import { DEFAULT_STARTING_LINEUP, type StartingSlot } from '@/types';
-import { applyDynamicPickValues } from '@/lib/dynamicPickValues';
-import { filterFuturePickAssetsForMode, fromPrismaFuturePickMode } from '@/lib/futurePickAssets';
-import { mapPlayersWithDraftValues } from '@/lib/playerValueMapping';
+import { getActiveDraftPlayers } from '@/lib/activeDraftPlayers';
+import { fromPrismaFuturePickMode } from '@/lib/futurePickAssets';
 
 export const metadata = { title: 'Nominate — DraftOps' };
 
@@ -17,46 +16,25 @@ export default async function NominatePage({ params }: { params: Promise<{ draft
   const draft = await getDraft(session.user.id, draftId);
   if (!draft) notFound();
 
-  const [rawBids, dbPlayers, draftValues] = await Promise.all([
-    prisma.auctionResult.findMany({
-      where: { draftId },
-      select: {
-        player: true,
-        price: true,
-        team: { select: { handle: true } },
-      },
-    }),
-    prisma.player.findMany({ where: { draftId }, orderBy: { sfRank: 'asc' } }),
-    prisma.draftPlayerValue.findMany({
-      where: { draftId },
-      select: {
-        playerId: true,
-        projectionSourceId: true,
-        projectedPoints: true,
-        replacementPoints: true,
-        vor: true,
-        projectionAuctionValue: true,
-        fallbackAuctionValue: true,
-        activeAuctionValue: true,
-        valueSource: true,
-        updatedAt: true,
-      },
-      orderBy: { updatedAt: 'desc' },
-    }),
-  ]);
+  const rawBids = await prisma.auctionResult.findMany({
+    where: { draftId },
+    select: {
+      player: true,
+      price: true,
+      team: { select: { handle: true } },
+    },
+  });
 
-  const players = filterFuturePickAssetsForMode(
-    applyDynamicPickValues({
-      players: mapPlayersWithDraftValues(dbPlayers, draftValues),
-      bids: rawBids.map((bid) => ({
-        player: bid.player,
-        price: bid.price,
-        teamHandle: bid.team.handle,
-      })),
-      startingLineup: (draft.startingLineup ?? DEFAULT_STARTING_LINEUP) as StartingSlot[],
-    }),
-    fromPrismaFuturePickMode(draft.futurePickAuctionMode),
-  );
+  const players = await getActiveDraftPlayers({
+    draftId,
+    bids: rawBids.map((bid) => ({
+      player: bid.player,
+      price: bid.price,
+      teamHandle: bid.team.handle,
+    })),
+    startingLineup: (draft.startingLineup ?? DEFAULT_STARTING_LINEUP) as StartingSlot[],
+    futurePickAuctionMode: fromPrismaFuturePickMode(draft.futurePickAuctionMode),
+  });
 
   return (
     <NominationHelper

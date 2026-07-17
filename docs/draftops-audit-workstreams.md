@@ -238,9 +238,27 @@ The current $1,000 league is unaffected; generalized budgets are affected.
 
 ### HARD-004 - Use one canonical active-value and team-statistics service
 
-- **Status:** READY
+- **Status:** READY FOR INTEGRATION - implemented and verified on
+  `hard-004-canonical-draft-stats`
 - **Effort:** Medium to large
 - **Sequence:** After HARD-002 and HARD-003
+
+#### Implementation checkpoint (2026-07-17)
+
+`src/lib/rosterPolicy.ts` now defines the shared QB/RB/WR/TE roster-slot rule used by bid
+legality and `computeDraftTeamStats`. PICK/PKG results reduce budget and remain roster assets, but
+do not use roster slots or influence average roster age. The canonical calculator also accepts an
+optional per-team net budget delta (zero by default), preserving the budget-transfer seam needed by
+feature 10 without modeling trades as auction wins.
+
+`getActiveDraftPlayers` centralizes draft-value mapping, dynamic pick adjustment, and auction-mode
+filtering. The value sheet, teams, budget, nomination page, and nomination-data API now consume it;
+the teams, budget, and API also use the canonical calculator. The old `budget.ts` and
+`computeTeamStats.ts` implementations are removed. A Jest path ignore prevents the shared fixture
+module from being discovered as an empty test suite.
+
+Verification: `make check` passed with 89 suites and 757 tests; typecheck, lint, format check, and
+focused canonical-value/statistics/API suites also passed.
 
 #### Problem
 
@@ -254,9 +272,9 @@ on the page.
 
 #### Primary locations
 
-- `src/lib/budget.ts`
-- `src/lib/computeTeamStats.ts`
-- `src/lib/playerValueMapping.ts`
+- `src/lib/activeDraftPlayers.ts`
+- `src/lib/computeDraftTeamStats.ts`
+- `src/lib/rosterPolicy.ts`
 - `src/app/api/draft/[draftId]/nomination-data/route.ts`
 - `src/app/draft/[draftId]/budget/page.tsx`
 - `src/app/draft/[draftId]/teams/page.tsx`

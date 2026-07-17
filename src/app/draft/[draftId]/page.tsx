@@ -4,9 +4,8 @@ import AuctionSheet from '@/components/AuctionSheet/AuctionSheet';
 import type { ClaimedBid, LeagueTeam } from '@/types';
 import { auth } from '@/auth';
 import { getDraft } from '@/lib/draft';
-import { mapPlayersWithDraftValues } from '@/lib/playerValueMapping';
-import { filterFuturePickAssetsForMode, fromPrismaFuturePickMode } from '@/lib/futurePickAssets';
-import { applyDynamicPickValues } from '@/lib/dynamicPickValues';
+import { getActiveDraftPlayers } from '@/lib/activeDraftPlayers';
+import { fromPrismaFuturePickMode } from '@/lib/futurePickAssets';
 import { computeSpreads } from '@/lib/valueSpread';
 import {
   DEFAULT_STARTING_LINEUP,
@@ -22,7 +21,7 @@ export default async function DraftHomePage({ params }: { params: Promise<{ draf
   const draft = await getDraft(session.user.id, draftId);
   if (!draft) notFound();
 
-  const [rawBids, teams, nominatedEntries, dbPlayers, draftValues] = await Promise.all([
+  const [rawBids, teams, nominatedEntries] = await Promise.all([
     prisma.auctionResult.findMany({
       where: { draftId },
       select: {
@@ -44,23 +43,6 @@ export default async function DraftHomePage({ params }: { params: Promise<{ draf
       where: { draftId },
       select: { playerId: true },
     }),
-    prisma.player.findMany({ where: { draftId }, orderBy: { sfRank: 'asc' } }),
-    prisma.draftPlayerValue.findMany({
-      where: { draftId },
-      select: {
-        playerId: true,
-        projectionSourceId: true,
-        projectedPoints: true,
-        replacementPoints: true,
-        vor: true,
-        projectionAuctionValue: true,
-        fallbackAuctionValue: true,
-        activeAuctionValue: true,
-        valueSource: true,
-        updatedAt: true,
-      },
-      orderBy: { updatedAt: 'desc' },
-    }),
   ]);
 
   const claimedBids: ClaimedBid[] = rawBids.map((r) => ({
@@ -73,22 +55,18 @@ export default async function DraftHomePage({ params }: { params: Promise<{ draf
     teamHandle: r.team.handle,
   }));
 
-  const dynamicPlayers = applyDynamicPickValues({
-    players: mapPlayersWithDraftValues(dbPlayers, draftValues),
+  const activePlayers = await getActiveDraftPlayers({
+    draftId,
     bids: rawBids.map((bid) => ({
       player: bid.player,
       price: bid.price,
       teamHandle: bid.team.handle,
     })),
     startingLineup: (draft.startingLineup ?? DEFAULT_STARTING_LINEUP) as StartingSlot[],
+    futurePickAuctionMode: fromPrismaFuturePickMode(draft.futurePickAuctionMode),
   });
 
-  const players = computeSpreads(
-    filterFuturePickAssetsForMode(
-      dynamicPlayers,
-      fromPrismaFuturePickMode(draft.futurePickAuctionMode),
-    ),
-  );
+  const players = computeSpreads(activePlayers);
   const sleeperRosterIds = teams.map((team) => team.sleeperRosterId);
   const sleeperSyncConfigured =
     Boolean(draft.sleeperLeagueId) &&

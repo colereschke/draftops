@@ -6,9 +6,25 @@ on:
   pull_request:
     branches: [main]
 
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Placeholder values for jobs that only need `next build` to evaluate
+  # config/env-dependent modules, not reach a live provider. Never real secrets.
+  BUILD_AUTH_SECRET: ci-build-placeholder-secret-not-a-real-credential
+  BUILD_AUTH_DISCORD_ID: ci-build-placeholder
+  BUILD_AUTH_DISCORD_SECRET: ci-build-placeholder
+  BUILD_OWNER_DISCORD_ID: '0'
+  BUILD_DATABASE_URL: postgresql://user:pass@localhost:5432/placeholder
+
 jobs:
   quality:
-    name: Lint, Type-check & Test
+    name: Lint, Type-check, Format & Unit Tests
     runs-on: ubuntu-latest
 
     steps:
@@ -40,3 +56,109 @@ jobs:
 
       - name: Test
         run: pnpm test --passWithNoTests
+
+  build:
+    name: Production build
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build
+        run: pnpm build
+        env:
+          DATABASE_URL: ${{ env.BUILD_DATABASE_URL }}
+          AUTH_SECRET: ${{ env.BUILD_AUTH_SECRET }}
+          AUTH_DISCORD_ID: ${{ env.BUILD_AUTH_DISCORD_ID }}
+          AUTH_DISCORD_SECRET: ${{ env.BUILD_AUTH_DISCORD_SECRET }}
+          OWNER_DISCORD_ID: ${{ env.BUILD_OWNER_DISCORD_ID }}
+
+  postgres:
+    name: PostgreSQL migrations & integration tests
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: draftops
+          POSTGRES_PASSWORD: draftops
+          # Must end in _test: scripts/testDatabase.ts refuses to run destructive
+          # resets against a database name that doesn't match this safety pattern.
+          POSTGRES_DB: draftops_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: postgresql://draftops:draftops@localhost:5432/draftops_test
+      DIRECT_URL: postgresql://draftops:draftops@localhost:5432/draftops_test
+      TEST_DATABASE_URL: postgresql://draftops:draftops@localhost:5432/draftops_test
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Deploy migrations against a clean database
+        run: pnpm prisma migrate deploy
+
+      - name: Seed smoke test
+        run: |
+          pnpm db:seed
+          count=$(psql "$DATABASE_URL" -tAc 'SELECT COUNT(*) FROM "Team"')
+          if [ "$count" -eq 0 ]; then
+            echo "::error::Seed script reported success but created zero Team rows"
+            exit 1
+          fi
+          echo "Seeded $count teams"
+
+      - name: Integration tests (real PostgreSQL)
+        run: pnpm test:integration
+
+  projections:
+    name: Python projection checks
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v8.3.2
+        with:
+          enable-cache: true
+
+      - name: Install projection tooling
+        run: uv sync --extra dev
+
+      - name: Projection checks (pytest, ruff, mypy)
+        run: |
+          uv run --extra dev pytest scripts/projections/tests -q
+          uv run --extra dev ruff format --check scripts/projections
+          uv run --extra dev ruff check scripts/projections
+          uv run --extra dev mypy

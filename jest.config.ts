@@ -16,6 +16,7 @@ const config: Config = {
     '<rootDir>/.claude/',
     '<rootDir>/.claire/',
     '<rootDir>/.worktrees/',
+    '<rootDir>/src/__tests__/fixtures/',
     '<rootDir>/src/__tests__/integration/',
   ],
   collectCoverageFrom: ['src/**/*.{ts,tsx}', '!src/**/*.d.ts', '!src/app/layout.tsx'],

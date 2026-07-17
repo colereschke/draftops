@@ -1,6 +1,6 @@
 # HARD-004 Canonical Active Values and Team Statistics Design
 
-**Date:** 2026-07-17  
+**Date:** 2026-07-17
 **Workstream:** HARD-004
 
 ## Purpose

@@ -43,6 +43,12 @@ serialized together.
 - A rich per-field error contract on `DraftMutationResult`. The shared schema means the client never
   submits invalid data in normal use; the server-side check is defense in depth and only needs to
   distinguish a small number of codes (see below), not surface every Zod issue individually.
+- Anticipating roadmap item #10 (budget-for-picks trading). #10 is a runtime mutation on an existing
+  draft (a per-team budget delta, and eventually a first-class pick-asset model separating origin
+  team from current holder) — it does not touch draft-creation input shape or the one-time creation
+  transaction this workstream restructures. The only point of contact is that `createDraft` adopting
+  `DraftMutationResult<T>` here gives #10's future trade-logging action the same typed-outcome
+  contract `logBid` already uses; no other hook is added speculatively.
 
 ## Validation Schema
 

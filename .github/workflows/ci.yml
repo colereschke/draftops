@@ -13,15 +13,6 @@ concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
-env:
-  # Placeholder values for jobs that only need `next build` to evaluate
-  # config/env-dependent modules, not reach a live provider. Never real secrets.
-  BUILD_AUTH_SECRET: ci-build-placeholder-secret-not-a-real-credential
-  BUILD_AUTH_DISCORD_ID: ci-build-placeholder
-  BUILD_AUTH_DISCORD_SECRET: ci-build-placeholder
-  BUILD_OWNER_DISCORD_ID: '0'
-  BUILD_DATABASE_URL: postgresql://user:pass@localhost:5432/placeholder
-
 jobs:
   quality:
     name: Lint, Type-check, Format & Unit Tests
@@ -30,17 +21,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: pnpm/action-setup@v4
+      - uses: ./.github/actions/setup-pnpm-node
         with:
-          version: 11
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: pnpm
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile --ignore-scripts
+          install-args: --ignore-scripts
 
       - name: Generate Prisma client
         run: pnpm prisma generate
@@ -61,29 +44,22 @@ jobs:
     name: Production build
     runs-on: ubuntu-latest
 
+    # Placeholder values so `next build` can evaluate config/env-dependent
+    # modules without reaching a live provider. Never real secrets.
+    env:
+      DATABASE_URL: postgresql://user:pass@localhost:5432/placeholder
+      AUTH_SECRET: ci-build-placeholder-secret-not-a-real-credential
+      AUTH_DISCORD_ID: ci-build-placeholder
+      AUTH_DISCORD_SECRET: ci-build-placeholder
+      OWNER_DISCORD_ID: '0'
+
     steps:
       - uses: actions/checkout@v4
 
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 11
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: pnpm
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+      - uses: ./.github/actions/setup-pnpm-node
 
       - name: Build
         run: pnpm build
-        env:
-          DATABASE_URL: ${{ env.BUILD_DATABASE_URL }}
-          AUTH_SECRET: ${{ env.BUILD_AUTH_SECRET }}
-          AUTH_DISCORD_ID: ${{ env.BUILD_AUTH_DISCORD_ID }}
-          AUTH_DISCORD_SECRET: ${{ env.BUILD_AUTH_DISCORD_SECRET }}
-          OWNER_DISCORD_ID: ${{ env.BUILD_OWNER_DISCORD_ID }}
 
   postgres:
     name: PostgreSQL migrations & integration tests
@@ -106,25 +82,16 @@ jobs:
           --health-timeout 5s
           --health-retries 5
 
+    # DIRECT_URL and TEST_DATABASE_URL are intentionally omitted: prisma.config.ts
+    # falls back to DATABASE_URL when DIRECT_URL is unset, and scripts/testDatabase.ts
+    # derives TEST_DATABASE_URL from DATABASE_URL the same way when unset.
     env:
       DATABASE_URL: postgresql://draftops:draftops@localhost:5432/draftops_test
-      DIRECT_URL: postgresql://draftops:draftops@localhost:5432/draftops_test
-      TEST_DATABASE_URL: postgresql://draftops:draftops@localhost:5432/draftops_test
 
     steps:
       - uses: actions/checkout@v4
 
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 11
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: pnpm
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+      - uses: ./.github/actions/setup-pnpm-node
 
       - name: Deploy migrations against a clean database
         run: pnpm prisma migrate deploy
@@ -133,8 +100,11 @@ jobs:
         run: |
           pnpm db:seed
           count=$(psql "$DATABASE_URL" -tAc 'SELECT COUNT(*) FROM "Team"')
-          if [ "$count" -eq 0 ]; then
-            echo "::error::Seed script reported success but created zero Team rows"
+          # LEAGUE_TEAMS (src/lib/teams.ts) always seeds exactly 12 teams — a
+          # partial count (not just zero) means seed.ts's swallowed error path
+          # (main().catch(console.error), no non-zero exit) was hit.
+          if [ "$count" -ne 12 ]; then
+            echo "::error::Expected 12 seeded teams, got $count (seed.ts may have failed partway through)"
             exit 1
           fi
           echo "Seeded $count teams"
@@ -157,8 +127,4 @@ jobs:
         run: uv sync --extra dev
 
       - name: Projection checks (pytest, ruff, mypy)
-        run: |
-          uv run --extra dev pytest scripts/projections/tests -q
-          uv run --extra dev ruff format --check scripts/projections
-          uv run --extra dev ruff check scripts/projections
-          uv run --extra dev mypy
+        run: make projections-check UV_RUN_ARGS=--no-sync

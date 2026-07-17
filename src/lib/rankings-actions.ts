@@ -5,6 +5,7 @@ import { auth } from '@/auth';
 import { prisma } from '@/lib/db';
 import { parseRankingsCsv } from '@/lib/rankingsImport';
 import { buildSleeperPlayerIndex, matchToSleeperIndexed } from '@/lib/sleeperMatch';
+import { DEFAULT_RANKING_SOURCE_BUDGET } from '@/lib/valuationBudget';
 
 export interface RankingSummary {
   fileName: string | null;
@@ -65,8 +66,17 @@ export async function uploadRankingsCsv(fileName: string, csvText: string): Prom
   await prisma.$transaction(async (tx) => {
     const set = await tx.userRankingSet.upsert({
       where: { userId: session.user.id },
-      create: { userId: session.user.id, fileName, uploadedAt: new Date() },
-      update: { fileName, uploadedAt: new Date() },
+      create: {
+        userId: session.user.id,
+        fileName,
+        sourceBudget: DEFAULT_RANKING_SOURCE_BUDGET,
+        uploadedAt: new Date(),
+      },
+      update: {
+        fileName,
+        sourceBudget: DEFAULT_RANKING_SOURCE_BUDGET,
+        uploadedAt: new Date(),
+      },
     });
     await tx.userRankingPlayer.deleteMany({ where: { rankingSetId: set.id } });
     await tx.userRankingPlayer.createMany({

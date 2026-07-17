@@ -94,6 +94,61 @@ describe('future pick asset generation', () => {
     });
   });
 
+  it('denominates canonical default baselines in the selected source economy', () => {
+    const assets = generateFuturePickAssets({
+      teams,
+      year: 2027,
+      startingRank: 900,
+      sourceBudget: 500,
+    });
+
+    expect(assets.find((asset) => asset.player === "coreschke's 2027 package")).toMatchObject({
+      budget: 55,
+      ceiling: 66,
+      floor: 38,
+      baseBudget: 55,
+      baseCeiling: 66,
+      baseFloor: 38,
+    });
+    expect(assets.find((asset) => asset.player === 'coreschke 2027 1st')).toMatchObject({
+      budget: 38,
+      ceiling: 45,
+      floor: 26,
+      baseBudget: 38,
+      baseCeiling: 45,
+      baseFloor: 26,
+    });
+  });
+
+  it('does not rescale explicit baselines that already use the selected source economy', () => {
+    const assets = generateFuturePickAssets({
+      teams,
+      year: 2027,
+      startingRank: 900,
+      sourceBudget: 500,
+      baselines: {
+        package: { budget: 60, ceiling: 70, floor: 50 },
+        rounds: { 1: { budget: 40, ceiling: 46, floor: 35 } },
+      },
+    });
+
+    expect(assets.find((asset) => asset.player === "coreschke's 2027 package")).toMatchObject({
+      budget: 60,
+      ceiling: 70,
+      floor: 50,
+    });
+    expect(assets.find((asset) => asset.player === 'coreschke 2027 1st')).toMatchObject({
+      budget: 40,
+      ceiling: 46,
+      floor: 35,
+    });
+    expect(assets.find((asset) => asset.player === 'coreschke 2027 2nd')).toMatchObject({
+      budget: 8,
+      ceiling: 9,
+      floor: 5,
+    });
+  });
+
   it.each([
     ['packages', ["coreschke's 2027 package", "chappy72's 2027 package"]],
     [

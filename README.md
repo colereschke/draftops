@@ -66,22 +66,33 @@ Visit any page and you'll be redirected to the Discord sign-in screen.
 The value shown as the active auction target is a draft-specific dynasty value, not a raw one-year
 projection value.
 
-1. `src/data/players.ts` starts from FantasyCalc/ETR-style Superflex dynasty auction values using
-   the `2QBAuction` column on a $200 budget scale.
-2. Those values are scaled by `5x` for a $1,000 auction. Tight ends also receive the legacy
-   position-level TE-premium bump in the base seed data.
-3. When a draft is created, `createDraft` runs `adjustPlayerValues`. This applies the draft's
-   starting lineup, team count, and scoring settings to create draft-specific `Player.budget`,
-   `ceiling`, and `floor` values while preserving the original market values in
-   `baseBudget`, `baseCeiling`, and `baseFloor`.
+1. Raw `2QBAuction` values use a $200 economy. DraftOps normalizes imported values to its explicit
+   $1,000 ranking-source economy, then scales them by `draft budget / source budget` before
+   applying league settings. The default $1,000 path is unchanged because its draft scale is `1`.
+   Tight ends receive the legacy position-level TE-premium bump while the raw values are normalized.
+2. `UserRankingSet.sourceBudget` records the economy of an uploaded ranking set, and
+   `Draft.playerValueSourceBudget` captures the source economy selected when the draft is created.
+   The built-in and currently imported custom rankings both use the explicit $1,000 source economy.
+3. `createDraft` runs `adjustPlayerValues` to apply draft-budget scaling followed by the draft's
+   starting lineup, team count, and scoring settings. This produces draft-denominated fallback
+   values. PICK and PKG assets receive draft-budget scaling but bypass the league-setting
+   multipliers.
 4. Draft creation resolves ETR players to Sleeper IDs, applies the latest stored
    `ProjectionSource` from Postgres, and writes `DraftPlayerValue` rows inside the same
-   transaction. The auction sheet uses `DraftPlayerValue.activeAuctionValue` when available. That
-   value is still anchored to the draft's dynasty market value; projections only shape it by
-   comparing each player's points under the draft scoring settings against baseline scoring and
-   then normalizing that lift against positional peers.
-5. If a player has no row for the active projection source, the sheet falls back to the
-   draft-specific `Player.budget`.
+   transaction. Projections shape the market value by comparing each player's draft-scored points
+   against baseline scoring and normalizing that lift against positional peers.
+
+The persisted value fields have distinct semantics:
+
+- `Player.baseBudget`, `baseCeiling`, and `baseFloor` preserve the source-denominated ranking values.
+  They are not draft-budget-scaled and are the stable input for a deterministic backfill.
+- `Player.budget`, `ceiling`, and `floor` are the draft-denominated, league-adjusted fallback values.
+  A player without a current projection row uses `Player.budget` as the auction target.
+- `DraftPlayerValue.fallbackAuctionValue` records that fallback for the projection source, while
+  `projectionAuctionValue` stores projection/VOR context rather than the surfaced target.
+- `DraftPlayerValue.activeAuctionValue` is the surfaced projection-shaped market target. It remains
+  anchored to `fallbackAuctionValue`; `valueSource` records whether projection shaping or the
+  fallback supplied it.
 
 Projection source data must be imported into Postgres before creating drafts. Draft creation fails
 loudly if no usable projection source exists.
@@ -97,6 +108,28 @@ To refresh/import projection data and reapply it to an existing draft:
 ```bash
 pnpm tsx prisma/apply-projection-values.ts --draft-id <draft-id>
 ```
+
+### Existing-draft budget backfill
+
+Use the budget-value backfill after adding source-budget metadata to existing drafts. It only plans
+drafts whose configured budget differs from `Draft.playerValueSourceBudget`.
+
+```bash
+# Inspect affected drafts without writing
+pnpm db:backfill-budget-values
+
+# Snapshot, update fallback values, and reapply projections
+pnpm db:backfill-budget-values -- --apply
+```
+
+Dry-run mode is the default and neither writes a snapshot nor opens a transaction. Pass
+`--draft-id <id>` after `--` to limit either mode to one draft. In apply mode,
+`--snapshot-dir <dir>` overrides the default `valuation-backfill-snapshots/` directory, which is
+gitignored. Apply mode writes one complete timestamped JSON snapshot before the first database
+transaction, then updates fallback values and reapplies the latest projection source in a separate
+transaction for each draft. It does not rewrite the persisted source budget or `Player.base*`
+values. Retain the snapshots outside version control until the updated fallback and active totals
+have been verified.
 
 ## Make Commands
 

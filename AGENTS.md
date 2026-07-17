@@ -162,24 +162,34 @@ Signature design element: 3px left border on each player row in their position a
 Values start in `src/data/players.ts`, but the surfaced auction target is now a layered,
 draft-specific value.
 
-Base seed logic:
+Source value logic:
 
 - Source: `2QBAuction` column from the FantasyCalc CSV (Superflex format, $200 budget)
-- Scale: `× 5` to convert to $1,000 budget
+- Normalize: `× 5` to convert raw values into the explicit $1,000 ranking-source economy
 - Legacy TE premium seed: `× 1.18` on all TE values (extra PPR + first down scoring)
 - 2027 kicker pick packages: one entry per team (kicker name maps to manager handle); all hardcoded to `budget=109, ceiling=131, floor=75`
 - 2028 pick package: hardcoded to `budget=72, ceiling=86, floor=50`
 - `ceiling = round(budget × 1.15)`, `floor = max(5, round(budget × 0.87))`
 - PKG values live in a `PKG_VALUES` record keyed by player name (kicker name for 2027, `'2028 Pick Package'` for 2028)
+- `UserRankingSet.sourceBudget` records the economy used by the persisted custom-ranking values;
+  built-in and currently imported custom rankings use $1,000.
 
 Draft-specific fallback values:
 
-- `createDraft` runs `adjustPlayerValues(BASE_PLAYERS, settings)` before inserting `Player` rows.
+- `Draft.playerValueSourceBudget` captures the selected ranking source's economy at draft creation.
+- `createDraft` builds the selected built-in or custom ranking-source pool, adds generated future
+  assets in the same source economy, then adjusts the complete pool before inserting `Player` rows.
+- Adjustment scales by `Draft.budget / Draft.playerValueSourceBudget` before applying league
+  multipliers.
+- A $1,000 source feeding a $1,000 draft is unchanged by budget scaling; $200 and $2,000 drafts use
+  the same source values with `0.2` and `2` scales, respectively.
 - `valueAdjustment.ts` computes position-level scoring multipliers, lineup/scarcity multipliers,
   and a concentration factor based on total starters (`teamCount × startingLineup.length`).
 - Stored `Player.budget`/`ceiling`/`floor` are the adjusted fallback values for that draft.
-- Stored `Player.baseBudget`/`baseCeiling`/`baseFloor` preserve the base seed values.
-- PICK/PKG rows pass through the adjustment unchanged.
+- Stored `Player.baseBudget`/`baseCeiling`/`baseFloor` preserve the source-denominated ranking values
+  and are not draft-budget-scaled.
+- PICK/PKG rows receive draft-budget scaling but bypass scoring, scarcity, and concentration
+  multipliers.
 
 Projection-shaped active values:
 
@@ -193,14 +203,27 @@ Projection-shaped active values:
   Passing `--draft-id <draft-id>` additionally reapplies values to an existing draft.
 - Projection application resolves Sleeper IDs, scores projections under both baseline and draft
   scoring settings, stores raw projection/VOR context, and writes `DraftPlayerValue` rows.
+- `DraftPlayerValue.fallbackAuctionValue` is the draft-denominated `Player.budget` captured for that
+  projection source; `projectionAuctionValue` is projection/VOR context, not the surfaced target.
 - The active auction target uses `DraftPlayerValue.activeAuctionValue` only for players with a row
   in the active projection source.
-- `activeAuctionValue` is anchored to `Player.budget`; projections only shape the market value via
-  relative scoring lift within position/value buckets. It is not raw VOR dollars.
+- `activeAuctionValue` is anchored to `fallbackAuctionValue`; projections only shape the market
+  value via relative scoring lift within position/value buckets. It is not raw VOR dollars, and
+  `valueSource` records whether projection shaping or fallback supplied the value.
 - Players without a current projection row, including free agents or missing projection matches,
   fall back to `Player.budget`.
 - Projection VOR/projection auction values are stored for context and future roster-strength work,
   but the strategy lens is intentionally deferred to a follow-up PR.
+
+Existing-draft budget backfill:
+
+- `pnpm db:backfill-budget-values` is a read-only dry run; add `-- --apply` to snapshot affected
+  drafts, update their fallback values, and reapply the latest projections.
+- `--draft-id <id>` limits the operation and `--snapshot-dir <dir>` overrides the default ignored
+  `valuation-backfill-snapshots/` location.
+- Apply writes the complete snapshot before the first mutation and processes each draft in its own
+  fallback-update plus projection-reapplication transaction. It preserves the source-budget and
+  `Player.base*` fields. Retain snapshots until the updated totals are verified.
 
 ## League-Specific Rules
 

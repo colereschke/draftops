@@ -1,7 +1,13 @@
 import { scaleRankingValue } from '@/lib/scaleRankingValue';
+import { DEFAULT_RANKING_SOURCE_BUDGET, RAW_RANKING_BUDGET } from '@/lib/valuationBudget';
 
 describe('scaleRankingValue', () => {
   it('scales a raw value by 5x for non-TE positions', () => {
+    expect(scaleRankingValue('QB', 52)).toEqual({ budget: 260, ceiling: 299, floor: 226 });
+  });
+
+  it('normalizes raw $200 values into the default $1,000 source economy', () => {
+    expect(DEFAULT_RANKING_SOURCE_BUDGET / RAW_RANKING_BUDGET).toBe(5);
     expect(scaleRankingValue('QB', 52)).toEqual({ budget: 260, ceiling: 299, floor: 226 });
   });
 

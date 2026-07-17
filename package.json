@@ -17,7 +17,8 @@
     "test:coverage": "jest --coverage",
     "prepare": "husky",
     "postinstall": "prisma generate",
-    "db:seed": "tsx prisma/seed.ts"
+    "db:seed": "tsx prisma/seed.ts",
+    "db:backfill-budget-values": "tsx prisma/backfill-budget-scaled-values.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

@@ -142,6 +142,8 @@ const DEFAULT_SETTINGS: DraftValueSettings = {
   startingLineup: [...DEFAULT_STARTING_LINEUP],
   scoringSettings: { ...DEFAULT_SCORING_SETTINGS },
   teamCount: 12,
+  sourceBudget: 1000,
+  draftBudget: 1000,
 };
 
 const POOL: Player[] = [
@@ -150,7 +152,7 @@ const POOL: Player[] = [
   A('WR1', 'WR', 3, 45),
   A('TE1', 'TE', 20, 30),
   A('TE2', 'TE', 120, 8),
-  // PKG stores non-formula values on purpose — it must pass through verbatim.
+  // PKG stores non-formula values on purpose — it bypasses league multipliers.
   P({ player: 'Kicker Pkg', pos: 'PKG', sfRank: 999, budget: 109, ceiling: 131, floor: 75 }),
 ];
 
@@ -186,8 +188,9 @@ describe('adjustPlayerValues', () => {
     expect(te1.floor).toBe(Math.max(5, Math.round(te1.budget * 0.87)));
   });
 
-  it('leaves PKG/PICK verbatim even under aggressive settings', () => {
+  it('leaves PKG/PICK unchanged by league multipliers under aggressive settings', () => {
     const out = adjustPlayerValues(POOL, {
+      ...DEFAULT_SETTINGS,
       startingLineup: [...DEFAULT_STARTING_LINEUP, 'TE'],
       scoringSettings: { ...DEFAULT_SCORING_SETTINGS, pprTE: 2 },
       teamCount: 10,
@@ -205,5 +208,68 @@ describe('adjustPlayerValues', () => {
     });
     expect(out[0].budget).toBeGreaterThanOrEqual(1);
     expect(out[0].floor).toBeGreaterThanOrEqual(5);
+  });
+
+  it.each([
+    [200, { budget: 20, ceiling: 23, floor: 17 }],
+    [1000, { budget: 100, ceiling: 115, floor: 87 }],
+    [2000, { budget: 200, ceiling: 230, floor: 174 }],
+  ])('scales skill values into a $%i draft before league adjustment', (draftBudget, expected) => {
+    const [player] = adjustPlayerValues([A('WR1', 'WR', 1, 100)], {
+      ...DEFAULT_SETTINGS,
+      draftBudget,
+    });
+    expect(player).toMatchObject({ ...expected, baseBudget: 100, baseCeiling: 115, baseFloor: 87 });
+  });
+
+  it.each([
+    [200, { budget: 22, ceiling: 26, floor: 15 }],
+    [1000, { budget: 109, ceiling: 131, floor: 75 }],
+    [2000, { budget: 218, ceiling: 262, floor: 150 }],
+  ])('scales packages directly into a $%i draft', (draftBudget, expected) => {
+    const pkg = adjustPlayerValues(POOL, { ...DEFAULT_SETTINGS, draftBudget }).find(
+      (player) => player.pos === 'PKG',
+    );
+    expect(pkg).toMatchObject({
+      ...expected,
+      baseBudget: 109,
+      baseCeiling: 131,
+      baseFloor: 75,
+    });
+  });
+
+  it('scales the source floor minimum with the draft economy', () => {
+    const sourceMinimum = A('Deep', 'WR', 300, 5);
+    expect(
+      adjustPlayerValues([sourceMinimum], { ...DEFAULT_SETTINGS, draftBudget: 200 })[0].floor,
+    ).toBe(1);
+    expect(
+      adjustPlayerValues([sourceMinimum], { ...DEFAULT_SETTINGS, draftBudget: 2000 })[0].floor,
+    ).toBe(10);
+  });
+
+  it('applies budget scaling before multiplying and rounds only the final budget', () => {
+    const settings = {
+      ...DEFAULT_SETTINGS,
+      draftBudget: 200,
+      scoringSettings: { ...DEFAULT_SCORING_SETTINGS, pprTE: 2 },
+    };
+    const scoringMultipliers = computeScoringMultipliers(settings.scoringSettings);
+    const multiplier =
+      scoringMultipliers.TE *
+      computeScarcityMultipliers(settings.startingLineup, scoringMultipliers).TE;
+    const [player] = adjustPlayerValues([A('TE1', 'TE', 1, 31)], settings);
+    expect(player.budget).toBe(Math.round(31 * 0.2 * multiplier));
+  });
+
+  it('keeps aggregate fallback totals proportional within whole-dollar rounding tolerance', () => {
+    const totalFor = (draftBudget: number): number =>
+      adjustPlayerValues(POOL, { ...DEFAULT_SETTINGS, draftBudget }).reduce(
+        (total, player) => total + player.budget,
+        0,
+      );
+    const total1000 = totalFor(1000);
+    expect(Math.abs(totalFor(200) - total1000 * 0.2)).toBeLessThanOrEqual(POOL.length);
+    expect(Math.abs(totalFor(2000) - total1000 * 2)).toBeLessThanOrEqual(POOL.length);
   });
 });

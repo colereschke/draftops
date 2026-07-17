@@ -36,17 +36,9 @@ export function mapPlayersWithDraftValues(
   players: DbPlayerValueRow[],
   draftValues: DraftPlayerValueRow[],
 ): Player[] {
-  const activeProjectionSourceId = getActiveProjectionSourceId(draftValues);
-  const valuesByPlayerId = new Map<number, DraftPlayerValueRow>();
-
-  for (const value of draftValues.filter((draftValue) =>
-    isSelectableDraftValue(draftValue, activeProjectionSourceId),
-  )) {
-    const current = valuesByPlayerId.get(value.playerId);
-    if (!current || compareDraftValueRows(value, current) < 0) {
-      valuesByPlayerId.set(value.playerId, value);
-    }
-  }
+  const valuesByPlayerId = new Map(
+    selectActiveDraftValues(draftValues).map((value) => [value.playerId, value]),
+  );
 
   return players.map((player) => {
     const draftValue = valuesByPlayerId.get(player.id);
@@ -110,7 +102,25 @@ function mapFallbackPlayer(player: DbPlayerValueRow): Player {
   };
 }
 
-function getActiveProjectionSourceId(draftValues: DraftPlayerValueRow[]): number | null {
+export function selectActiveDraftValues<T extends DraftPlayerValueRow>(draftValues: T[]): T[] {
+  const activeProjectionSourceId = getActiveProjectionSourceId(draftValues);
+  const valuesByPlayerId = new Map<number, T>();
+
+  for (const value of draftValues.filter((draftValue) =>
+    isSelectableDraftValue(draftValue, activeProjectionSourceId),
+  )) {
+    const current = valuesByPlayerId.get(value.playerId);
+    if (!current || compareDraftValueRows(value, current) < 0) {
+      valuesByPlayerId.set(value.playerId, value);
+    }
+  }
+
+  return [...valuesByPlayerId.values()];
+}
+
+function getActiveProjectionSourceId<T extends DraftPlayerValueRow>(
+  draftValues: T[],
+): number | null {
   const projectionValues = draftValues.filter((value) => value.projectionSourceId !== null);
   if (projectionValues.length === 0) return null;
 

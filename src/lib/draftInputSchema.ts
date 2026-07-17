@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import type { ScoringSettings, StartingSlot } from '@/types';
 
 export const MIN_TEAMS = 2;
 export const MAX_TEAMS = 32;
@@ -11,7 +12,24 @@ export const MAX_SLEEPER_ROSTER_ID = 1_000_000;
 export const MIN_SLEEPER_LEAGUE_ID_LENGTH = 5;
 export const MAX_SLEEPER_LEAGUE_ID_LENGTH = 25;
 
-const STARTING_SLOTS = ['QB', 'RB', 'WR', 'TE', 'FLEX', 'SUPER_FLEX'] as const;
+const STARTING_SLOTS = [
+  'QB',
+  'RB',
+  'WR',
+  'TE',
+  'FLEX',
+  'SUPER_FLEX',
+] as const satisfies readonly StartingSlot[];
+
+// Compile-time exhaustiveness check: STARTING_SLOTS must contain exactly the members of the
+// StartingSlot union in src/types/index.ts — no more, no fewer. The `satisfies` clause above
+// only rejects extra/bogus entries; this checks the reverse direction (a missing variant) by
+// asserting the union of array elements is *equal to* (not just assignable from) StartingSlot.
+type AssertExactUnion<A, B> =
+  (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
+function assertUnionMatches<T extends true>(_check?: T): void {}
+assertUnionMatches<AssertExactUnion<(typeof STARTING_SLOTS)[number], StartingSlot>>();
+
 const SCORING_BONUS_RANGE = { min: -20, max: 20 } as const;
 const PPR_RANGE = { min: 0, max: 5 } as const;
 
@@ -28,7 +46,7 @@ const scoringSettingsSchema = z.object({
   rbFDBonus: z.number().finite().min(SCORING_BONUS_RANGE.min).max(SCORING_BONUS_RANGE.max),
   wrFDBonus: z.number().finite().min(SCORING_BONUS_RANGE.min).max(SCORING_BONUS_RANGE.max),
   teFDBonus: z.number().finite().min(SCORING_BONUS_RANGE.min).max(SCORING_BONUS_RANGE.max),
-});
+}) satisfies z.ZodType<ScoringSettings>;
 
 const targetRosterSchema = z
   .object({

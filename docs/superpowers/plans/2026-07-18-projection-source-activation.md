@@ -33,7 +33,7 @@ real-PostgreSQL integration tests.
 ## File Structure
 
 - `prisma/schema.prisma`: value-set enum/model, active pointer, compound relations, and indexes.
-- `prisma/migrations/20260718120000_explicit_projection_activation/migration.sql`: additive schema,
+- `prisma/migrations/20260718200000_explicit_projection_activation/migration.sql`: additive schema,
   data backfill, pointer selection, constraints, and partial active-set uniqueness.
 - `src/lib/draftLock.ts`: shared per-draft advisory-lock primitive used by draft mutations and
   projection activation.
@@ -65,7 +65,7 @@ real-PostgreSQL integration tests.
 **Files:**
 
 - Modify: `prisma/schema.prisma`
-- Create: `prisma/migrations/20260718120000_explicit_projection_activation/migration.sql`
+- Create: `prisma/migrations/20260718200000_explicit_projection_activation/migration.sql`
 - Create: `src/__tests__/integration/projectionActivation.postgres.test.ts`
 
 **Interfaces:**
@@ -140,8 +140,8 @@ model DraftProjectionValueSet {
 ```
 
 Add the pointer and collection to `Draft`, the value-set collection to `ProjectionSource`, and
-`valueSetId` plus compound relations to `DraftPlayerValue`. Add `@@unique([id, draftId])` to
-`Player` so `DraftPlayerValue(playerId, draftId)` can reference the player within its draft.
+`valueSetId` plus compound relations to `DraftPlayerValue`. Reuse HARD-005's existing
+`Player(id, draftId)` compound identity and `DraftPlayerValue` player constraint.
 
 - [ ] **Step 4: Write the SQL migration with safe backfill ordering**
 
@@ -191,7 +191,7 @@ Expected: PASS for migration preservation and compound-constraint cases.
 - [ ] **Step 7: Commit the schema unit**
 
 ```bash
-git add prisma/schema.prisma prisma/migrations/20260718120000_explicit_projection_activation/migration.sql src/__tests__/integration/projectionActivation.postgres.test.ts
+git add prisma/schema.prisma prisma/migrations/20260718200000_explicit_projection_activation/migration.sql src/__tests__/integration/projectionActivation.postgres.test.ts
 git commit -m "feat: add versioned projection value sets"
 ```
 

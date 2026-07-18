@@ -6,6 +6,7 @@ import { PrismaClient } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { runBudgetValueBackfill, type BudgetValueBackfillResult } from '@/lib/budgetValueBackfill';
 import { applyProjectionValuesToDraft } from '@/lib/projectionApplication';
+import { pruneProjectionValueSetRows } from '@/lib/projectionValueSet';
 import { DEFAULT_SCORING_SETTINGS, DEFAULT_STARTING_LINEUP, DEFAULT_TARGET_ROSTER } from '@/types';
 import { writeBudgetValueSnapshot } from '../../../prisma/backfill-budget-scaled-values';
 import { runCleanupSteps } from '../../../scripts/testDatabase';
@@ -72,6 +73,30 @@ async function createFixture(): Promise<Fixture> {
       projectionDate: new Date('9999-07-16T00:00:00.000Z'),
     },
   });
+  const historicalValueSet = await prisma.draftProjectionValueSet.create({
+    data: {
+      draftId: draft.id,
+      projectionSourceId: historicalProjectionSource.id,
+      status: 'ARCHIVED',
+      expectedPlayerCount: 1,
+      appliedPlayerCount: 1,
+      activatedAt: new Date('2026-07-15T00:00:00.000Z'),
+    },
+  });
+  const activeValueSet = await prisma.draftProjectionValueSet.create({
+    data: {
+      draftId: draft.id,
+      projectionSourceId: projectionSource.id,
+      status: 'ACTIVE',
+      expectedPlayerCount: 1,
+      appliedPlayerCount: 1,
+      activatedAt: new Date('2026-07-16T00:00:00.000Z'),
+    },
+  });
+  await prisma.draft.update({
+    where: { id: draft.id },
+    data: { activeProjectionValueSetId: activeValueSet.id },
+  });
   await prisma.playerProjection.create({
     data: {
       sleeperId: player.sleeperId!,
@@ -99,6 +124,7 @@ async function createFixture(): Promise<Fixture> {
       draftId: draft.id,
       playerId: player.id,
       projectionSourceId: historicalProjectionSource.id,
+      valueSetId: historicalValueSet.id,
       projectedPoints: 250,
       fallbackAuctionValue: 100,
       activeAuctionValue: 400,
@@ -110,6 +136,7 @@ async function createFixture(): Promise<Fixture> {
       draftId: draft.id,
       playerId: player.id,
       projectionSourceId: projectionSource.id,
+      valueSetId: activeValueSet.id,
       projectedPoints: 276,
       fallbackAuctionValue: 100,
       activeAuctionValue: 100,
@@ -142,8 +169,26 @@ async function runApply(fixture: Fixture): Promise<BudgetValueBackfillResult> {
     {
       writeSnapshot: writeBudgetValueSnapshot,
       applyProjections: applyProjectionValuesToDraft,
+      pruneProjectionRows: (client, draftId) =>
+        pruneProjectionValueSetRows(client as never, draftId),
     },
   );
+}
+
+async function getActiveValue(draftId: number, playerId: number) {
+  const draft = await prisma.draft.findUniqueOrThrow({
+    where: { id: draftId },
+    select: { activeProjectionValueSetId: true },
+  });
+  return prisma.draftPlayerValue.findUniqueOrThrow({
+    where: {
+      valueSetId_playerId: {
+        valueSetId: draft.activeProjectionValueSetId!,
+        playerId,
+      },
+    },
+    select: { fallbackAuctionValue: true, activeAuctionValue: true },
+  });
 }
 
 async function dropFailureTrigger(): Promise<void> {
@@ -161,7 +206,12 @@ async function deleteFixtures(): Promise<void> {
   });
   const draftIds = drafts.map((draft) => draft.id);
   if (draftIds.length > 0) {
+    await prisma.draft.updateMany({
+      where: { id: { in: draftIds } },
+      data: { activeProjectionValueSetId: null },
+    });
     await prisma.draftPlayerValue.deleteMany({ where: { draftId: { in: draftIds } } });
+    await prisma.draftProjectionValueSet.deleteMany({ where: { draftId: { in: draftIds } } });
     await prisma.player.deleteMany({ where: { draftId: { in: draftIds } } });
     await prisma.draft.deleteMany({ where: { id: { in: draftIds } } });
   }
@@ -211,7 +261,7 @@ describe('budget value backfill against PostgreSQL', () => {
     ]);
   });
 
-  it('scales fallback and active values once without duplicating projection values', async () => {
+  it('scales fallback values idempotently while versioning each projection activation', async () => {
     const fixture = await createFixture();
 
     const firstResult = await runApply(fixture);
@@ -227,16 +277,10 @@ describe('budget value backfill against PostgreSQL', () => {
         select: { budget: true, ceiling: true, floor: true, baseBudget: true },
       }),
     ).resolves.toEqual({ budget: 20, ceiling: 23, floor: 17, baseBudget: 100 });
-    await expect(
-      prisma.draftPlayerValue.findFirst({
-        where: {
-          draftId: fixture.draftId,
-          playerId: fixture.playerId,
-          projectionSourceId: fixture.projectionSourceId,
-        },
-        select: { fallbackAuctionValue: true, activeAuctionValue: true },
-      }),
-    ).resolves.toEqual({ fallbackAuctionValue: 20, activeAuctionValue: 20 });
+    await expect(getActiveValue(fixture.draftId, fixture.playerId)).resolves.toEqual({
+      fallbackAuctionValue: 20,
+      activeAuctionValue: 20,
+    });
 
     await runApply(fixture);
 
@@ -246,16 +290,10 @@ describe('budget value backfill against PostgreSQL', () => {
         select: { budget: true, ceiling: true, floor: true, baseBudget: true },
       }),
     ).resolves.toEqual({ budget: 20, ceiling: 23, floor: 17, baseBudget: 100 });
-    await expect(
-      prisma.draftPlayerValue.findFirst({
-        where: {
-          draftId: fixture.draftId,
-          playerId: fixture.playerId,
-          projectionSourceId: fixture.projectionSourceId,
-        },
-        select: { fallbackAuctionValue: true, activeAuctionValue: true },
-      }),
-    ).resolves.toEqual({ fallbackAuctionValue: 20, activeAuctionValue: 20 });
+    await expect(getActiveValue(fixture.draftId, fixture.playerId)).resolves.toEqual({
+      fallbackAuctionValue: 20,
+      activeAuctionValue: 20,
+    });
     await expect(
       prisma.draftPlayerValue.count({
         where: {
@@ -264,7 +302,7 @@ describe('budget value backfill against PostgreSQL', () => {
           projectionSourceId: fixture.projectionSourceId,
         },
       }),
-    ).resolves.toBe(1);
+    ).resolves.toBe(3);
     await expect(
       prisma.draftPlayerValue.count({
         where: {
@@ -299,15 +337,9 @@ describe('budget value backfill against PostgreSQL', () => {
         select: { budget: true, ceiling: true, floor: true },
       }),
     ).resolves.toEqual({ budget: 100, ceiling: 115, floor: 87 });
-    await expect(
-      prisma.draftPlayerValue.findFirst({
-        where: {
-          draftId: fixture.draftId,
-          playerId: fixture.playerId,
-          projectionSourceId: fixture.projectionSourceId,
-        },
-        select: { fallbackAuctionValue: true, activeAuctionValue: true },
-      }),
-    ).resolves.toEqual({ fallbackAuctionValue: 100, activeAuctionValue: 100 });
+    await expect(getActiveValue(fixture.draftId, fixture.playerId)).resolves.toEqual({
+      fallbackAuctionValue: 100,
+      activeAuctionValue: 100,
+    });
   });
 });

@@ -53,8 +53,7 @@ Each implementation session should:
 
 ### HARD-001 - Make completed drafts transactionally immutable
 
-- **Status:** READY FOR INTEGRATION - implemented and verified on
-  `hard-001-002-draft-integrity`
+- **Status:** COMPLETE - merged to `main` via PR #53 (`231b869`)
 - **Effort:** Medium
 - **Sequence:** Implement before HARD-002 and HARD-010
 
@@ -128,8 +127,7 @@ that has already checked the draft.
 
 ### HARD-002 - Enforce bid legality and make bid logging atomic
 
-- **Status:** READY FOR INTEGRATION - implemented and verified on
-  `hard-001-002-draft-integrity`
+- **Status:** COMPLETE - merged to `main` via PR #53 (`231b869`)
 - **Effort:** Medium to large
 - **Sequence:** After HARD-001; before HARD-004 and HARD-010
 
@@ -197,7 +195,7 @@ outcome and the application must handle lifecycle and team-budget races.
 
 ### HARD-003 - Scale valuations to the configured draft budget
 
-- **Status:** READY
+- **Status:** COMPLETE - merged to `main` via PR #56 (`dfd5eac`)
 - **Effort:** Large
 - **Sequence:** Before HARD-006 and HARD-016
 
@@ -238,8 +236,7 @@ The current $1,000 league is unaffected; generalized budgets are affected.
 
 ### HARD-004 - Use one canonical active-value and team-statistics service
 
-- **Status:** READY FOR INTEGRATION - implemented and verified on
-  `hard-004-canonical-draft-stats`
+- **Status:** COMPLETE - merged to `main` via PR #57 (`807a509`)
 - **Effort:** Medium to large
 - **Sequence:** After HARD-002 and HARD-003
 
@@ -474,7 +471,7 @@ incomplete settings.
 
 ### HARD-010 - Make optimistic mutations resilient and accessible
 
-- **Status:** READY
+- **Status:** IN PROGRESS
 - **Effort:** Medium
 - **Sequence:** After HARD-001/HARD-002 typed outcomes
 
@@ -542,7 +539,11 @@ snapshot or restore workflow.
 
 ### HARD-012 - Expand CI to production-shaped checks
 
-- **Status:** PARTIAL - prior Workstream C is COMPLETE; broader CI work remains
+- **Status:** PARTIAL - prior Workstream C is COMPLETE; production-shaped checks (build, ephemeral
+  PostgreSQL + `prisma migrate deploy` + integration tests, `make projections-check`, coverage/
+  lint exclusion) merged to `main` via PR #59 (`aaf5103`). Scheduled dependency scanning landed
+  separately via HARD-013's `security-audit.yml`. Still open: Playwright browser smoke coverage
+  with a test-auth mechanism, and automated accessibility scanning.
 - **Effort:** Medium
 
 #### Problem
@@ -580,7 +581,7 @@ warning after `pnpm test:coverage`.
 
 ### HARD-013 - Resolve known production dependency advisories
 
-- **Status:** READY
+- **Status:** COMPLETE - merged to `main` via PR #58 (`a5afff3`)
 - **Effort:** Small to medium
 
 #### Problem
@@ -923,17 +924,18 @@ behavior is still moving would increase conflict and regression risk.
 
 Do not assign overlapping items to concurrent sessions without explicit coordination.
 
-1. **Mutation foundation:** HARD-001 -> HARD-002 -> HARD-004 -> HARD-005
-2. **Valuation:** HARD-003 -> HARD-006 -> HARD-016
+1. **Mutation foundation:** ~~HARD-001~~ -> ~~HARD-002~~ -> ~~HARD-004~~ -> HARD-005
+2. **Valuation:** ~~HARD-003~~ -> HARD-006 -> HARD-016
 3. **Draft/input boundaries:** HARD-007, then HARD-008 and HARD-009 may run independently
 4. **Mutation UX/recovery:** HARD-010 -> HARD-011
-5. **Safety net:** HARD-012 and HARD-013 can begin early
+5. **Safety net:** HARD-012 and ~~HARD-013~~ can begin early
 6. **Production operations:** HARD-014, HARD-019, HARD-020
 7. **UX/performance:** HARD-015, HARD-017, HARD-018
 8. **Cleanup:** HARD-021 -> HARD-022
 
-The P0 gate is HARD-001 through HARD-004. HARD-003 is specifically a release blocker for
-non-$1,000 drafts; it does not change the current $1,000 league's scale.
+The P0 gate is ~~HARD-001 through HARD-004~~ — all four are merged to `main` (PRs #53, #56, #57).
+HARD-005 is the remaining P0 item. HARD-003 was specifically a release blocker for non-$1,000
+drafts; it did not change the prior $1,000 league's scale.
 
 ## Model assignment guidance
 
@@ -946,16 +948,17 @@ to reasoning risk rather than raw implementation size.
 Use the strongest available model for work where a locally plausible implementation can still be
 subtly wrong across concurrency, migrations, or valuation semantics:
 
-| Items              | Reason                                                                                   |
-| ------------------ | ---------------------------------------------------------------------------------------- |
-| HARD-001, HARD-002 | Shared lifecycle, locking, retry, budget, roster, and worktree-reconciliation invariants |
-| HARD-003           | Auction-economy scaling across fallback values, projections, and future-pick assets      |
-| HARD-005           | Production data audit plus composite relational constraints and migration safety         |
-| HARD-006           | Staging and atomic activation without exposing partial projection value sets             |
+| Items                  | Reason                                                                                   |
+| ---------------------- | ---------------------------------------------------------------------------------------- |
+| ~~HARD-001, HARD-002~~ | Shared lifecycle, locking, retry, budget, roster, and worktree-reconciliation invariants |
+| ~~HARD-003~~           | Auction-economy scaling across fallback values, projections, and future-pick assets      |
+| HARD-005               | Production data audit plus composite relational constraints and migration safety         |
+| HARD-006               | Staging and atomic activation without exposing partial projection value sets             |
 
-HARD-001 and HARD-002 should preferably be handled sequentially by the same strongest-model
+~~HARD-001 and HARD-002 should preferably be handled sequentially by the same strongest-model
 session. They overlap in mutation boundaries and transaction policy, and the session must reconcile
-the useful parts of the existing A/B work without importing their stale branch history.
+the useful parts of the existing A/B work without importing their stale branch history.~~ (merged
+via PR #53.)
 
 ### Default model as implementer, strongest-model review required
 
@@ -963,7 +966,7 @@ The following items are reasonable default-model assignments when scoped to one 
 their required tests, but their architecture or final diff should be reviewed by the strongest
 available model before merge:
 
-- HARD-004 - canonical statistics and active-value service
+- ~~HARD-004~~ - canonical statistics and active-value service
 - HARD-007 - draft validation and transaction shortening
 - HARD-009 - Sleeper service and settings hardening
 - HARD-011 - bid audit, export, and recovery design
@@ -980,8 +983,9 @@ a mandatory strongest-model review beyond the repository's normal PR process:
 
 - HARD-008 - rankings and CSV validation
 - HARD-010 - optimistic mutation UX
-- HARD-012 - CI expansion
-- HARD-013 - dependency remediation
+- HARD-012 - CI expansion (partial: production-shaped checks merged in PR #59; Playwright smoke,
+  accessibility scans, and scheduled advisory scans still open)
+- ~~HARD-013~~ - dependency remediation
 - HARD-015 - accessibility and contrast
 - HARD-016 - truthful settings labels
 - HARD-018 - URL state and route loading states
@@ -1084,16 +1088,16 @@ Workstream C failed.
 
 ## Legacy A-H mapping
 
-| Prior workstream                             | Current disposition                           | Replacement items                      |
-| -------------------------------------------- | --------------------------------------------- | -------------------------------------- |
-| A - Auction Data Integrity                   | Partial branch; manually port and extend      | HARD-002, HARD-005                     |
-| B - Draft Lifecycle Enforcement              | Partial branches; reimplement on current main | HARD-001                               |
-| C - Trustworthy Quality Gate                 | Merged and complete; broader CI remains       | HARD-012                               |
-| D - Mutation Failure & Concurrency UX        | Not implemented                               | HARD-010, HARD-011                     |
-| E - Settings Truthfulness & Navigation State | Not implemented; expanded valuation finding   | HARD-003, HARD-016, HARD-018           |
-| F - Accessibility & Responsive Performance   | Not implemented; expanded                     | HARD-015, HARD-017                     |
-| G - Error, API & External-Service Hardening  | Not implemented; expanded                     | HARD-009, HARD-014, HARD-019           |
-| H - Codebase Simplification                  | Not implemented; split by risk/domain         | HARD-004, HARD-007, HARD-020, HARD-022 |
+| Prior workstream                             | Current disposition                     | Replacement items                          |
+| -------------------------------------------- | --------------------------------------- | ------------------------------------------ |
+| A - Auction Data Integrity                   | HARD-002 merged (PR #53); HARD-005 open | ~~HARD-002~~, HARD-005                     |
+| B - Draft Lifecycle Enforcement              | Merged (PR #53)                         | ~~HARD-001~~                               |
+| C - Trustworthy Quality Gate                 | Merged and complete; broader CI remains | HARD-012                                   |
+| D - Mutation Failure & Concurrency UX        | Not implemented                         | HARD-010, HARD-011                         |
+| E - Settings Truthfulness & Navigation State | HARD-003 merged (PR #56); others open   | ~~HARD-003~~, HARD-016, HARD-018           |
+| F - Accessibility & Responsive Performance   | Not implemented; expanded               | HARD-015, HARD-017                         |
+| G - Error, API & External-Service Hardening  | Not implemented; expanded               | HARD-009, HARD-014, HARD-019               |
+| H - Codebase Simplification                  | HARD-004 merged (PR #57); others open   | ~~HARD-004~~, HARD-007, HARD-020, HARD-022 |
 
 New findings without a direct prior-workstream equivalent are HARD-006, HARD-008, HARD-013, and
 HARD-021.

@@ -96,7 +96,13 @@ async function resolveEtrSleeperMatches(): Promise<Map<string, string>> {
   return matches;
 }
 
-const TRANSACTION_TIMEOUT_MS = 15_000; // provisional — Task 5 measures a real baseline and revises
+// Measured baseline against local Postgres (2026-07-18, draft-creation.postgres.test.ts): the full
+// no-injected-latency stage sequence (advisory-lock + owner-draft-count + draft-create + team-insert
+// + owner-team-update + player-insert + projection-application) totaled ~99ms; with an injected 2s
+// AFTER INSERT ... FOR EACH STATEMENT sleep on the player-insert stage, total wall time was ~2.2s.
+// 15s leaves >100x headroom above the unloaded local baseline and comfortably covers Neon cold-path
+// latency on top of it, so the provisional value stands unchanged.
+const TRANSACTION_TIMEOUT_MS = 15_000;
 
 function logStage(previousMark: number, stage: string): number {
   const now = performance.now();

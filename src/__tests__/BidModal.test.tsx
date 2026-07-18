@@ -201,7 +201,7 @@ describe('BidModal — edit mode', () => {
     expect(screen.getByRole('button', { name: /remove/i })).toBeInTheDocument();
   });
 
-  it('calls onDelete when Remove is clicked', async () => {
+  it('arms a confirmation instead of calling onDelete on the first Remove click', async () => {
     const user = userEvent.setup();
     const onDelete = jest.fn();
     render(
@@ -215,9 +215,51 @@ describe('BidModal — edit mode', () => {
       />,
     );
 
-    await user.click(screen.getByRole('button', { name: /remove/i }));
+    await user.click(screen.getByRole('button', { name: /^remove$/i }));
 
-    expect(onDelete).toHaveBeenCalled();
+    expect(onDelete).not.toHaveBeenCalled();
+    expect(screen.getByRole('button', { name: /confirm remove/i })).toBeInTheDocument();
+  });
+
+  it('calls onDelete after confirming Remove a second time', async () => {
+    const user = userEvent.setup();
+    const onDelete = jest.fn();
+    render(
+      <BidModal
+        player={mockPlayer}
+        teams={mockTeams}
+        existingBid={mockExistingBid}
+        onClose={jest.fn()}
+        onSubmit={jest.fn()}
+        onDelete={onDelete}
+      />,
+    );
+
+    await user.click(screen.getByRole('button', { name: /^remove$/i }));
+    await user.click(screen.getByRole('button', { name: /confirm remove/i }));
+
+    expect(onDelete).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not call onDelete when Keep is clicked after arming Remove', async () => {
+    const user = userEvent.setup();
+    const onDelete = jest.fn();
+    render(
+      <BidModal
+        player={mockPlayer}
+        teams={mockTeams}
+        existingBid={mockExistingBid}
+        onClose={jest.fn()}
+        onSubmit={jest.fn()}
+        onDelete={onDelete}
+      />,
+    );
+
+    await user.click(screen.getByRole('button', { name: /^remove$/i }));
+    await user.click(screen.getByRole('button', { name: /^keep$/i }));
+
+    expect(onDelete).not.toHaveBeenCalled();
+    expect(screen.getByRole('button', { name: /^remove$/i })).toBeInTheDocument();
   });
 
   it('shows "Update Bid" as the submit label in edit mode', () => {

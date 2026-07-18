@@ -249,6 +249,7 @@ describe('AuctionSheet with claimed bids', () => {
 
     await user.click(screen.getAllByText('Josh Allen')[0]);
     await user.click(screen.getByRole('button', { name: /^remove$/i }));
+    await user.click(screen.getByRole('button', { name: /confirm remove/i }));
 
     await waitFor(() => {
       expect(screen.getByText(/draft is complete and now read-only/i)).toBeInTheDocument();

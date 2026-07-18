@@ -44,6 +44,7 @@ export default function BidModal({
   const [price, setPrice] = useState<string>(existingBid ? String(existingBid.price) : '');
   const [teamId, setTeamId] = useState<number>(existingBid?.teamId ?? teams[0]?.id ?? 0);
   const [error, setError] = useState<string>('');
+  const [deleteArmed, setDeleteArmed] = useState<boolean>(false);
   const selectedTeam = teams.find((team) => team.id === teamId);
   const hasProjectionContext =
     player.projectionAuctionValue !== null && player.projectionAuctionValue !== undefined;
@@ -241,16 +242,38 @@ export default function BidModal({
           {/* Actions */}
           <div className="gap-sm flex items-center justify-end">
             <div className="mr-auto flex items-center gap-sm">
-              {isEdit && onDelete && (
+              {isEdit && onDelete && !deleteArmed && (
                 <Button
                   variant="destructive"
                   size="sm"
                   type="button"
                   disabled={isSubmitting}
-                  onClick={onDelete}
+                  onClick={() => setDeleteArmed(true)}
                 >
                   Remove
                 </Button>
+              )}
+              {isEdit && onDelete && deleteArmed && (
+                <>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    type="button"
+                    disabled={isSubmitting}
+                    onClick={() => setDeleteArmed(false)}
+                  >
+                    Keep
+                  </Button>
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    type="button"
+                    disabled={isSubmitting}
+                    onClick={onDelete}
+                  >
+                    Confirm Remove
+                  </Button>
+                </>
               )}
               {onNominate && !isNominated && (
                 <Button

@@ -13,6 +13,20 @@ interface RelationshipFixture {
   projectionSourceId: number;
 }
 
+interface QueryPlanNode {
+  'Index Name'?: string;
+  Plans?: QueryPlanNode[];
+}
+
+interface QueryPlanRow {
+  'QUERY PLAN': Array<{ Plan: QueryPlanNode }>;
+}
+
+function usesIndex(plan: QueryPlanNode, indexName: string): boolean {
+  if (plan['Index Name'] === indexName) return true;
+  return plan.Plans?.some((child) => usesIndex(child, indexName)) ?? false;
+}
+
 async function createDraftFixture(label: string): Promise<DraftFixture> {
   const draft = await prisma.draft.create({
     data: { name: `${label} ${crypto.randomUUID()}`, budget: 1000, rosterSize: 30 },
@@ -264,5 +278,47 @@ describe('same-draft relationships against PostgreSQL', () => {
         data: { draftId: fixture.second.draftId },
       }),
     ).rejects.toMatchObject({ code: 'P2003' });
+  });
+
+  it('provides a draft-leading index for every common child query', async () => {
+    const indexes = await prisma.$queryRaw<Array<{ indexname: string; tablename: string }>>`
+      SELECT indexname, tablename
+      FROM pg_indexes
+      WHERE schemaname = current_schema()
+        AND indexname = ANY(ARRAY[
+          'Team_draftId_sleeperRosterId_key',
+          'AuctionResult_draftId_playerId_key',
+          'Player_draftId_futurePickOriginHandle_idx',
+          'PlayerWatchlist_draftId_idx',
+          'NominatedPlayer_draftId_idx',
+          'DraftPlayerValue_draftId_idx'
+        ])
+    `;
+
+    expect(new Set(indexes.map((index) => index.indexname))).toEqual(
+      new Set([
+        'Team_draftId_sleeperRosterId_key',
+        'AuctionResult_draftId_playerId_key',
+        'Player_draftId_futurePickOriginHandle_idx',
+        'PlayerWatchlist_draftId_idx',
+        'NominatedPlayer_draftId_idx',
+        'DraftPlayerValue_draftId_idx',
+      ]),
+    );
+  });
+
+  it.each([
+    ['PlayerWatchlist', 'PlayerWatchlist_draftId_idx'],
+    ['NominatedPlayer', 'NominatedPlayer_draftId_idx'],
+  ])('offers an index plan for %s draft lookups', async (tableName, indexName) => {
+    const rows = await prisma.$transaction(async (tx) => {
+      await tx.$executeRawUnsafe('SET LOCAL enable_seqscan = off');
+      return tx.$queryRawUnsafe<QueryPlanRow[]>(
+        `EXPLAIN (FORMAT JSON) SELECT id FROM "${tableName}" WHERE "draftId" = $1`,
+        fixture.first.draftId,
+      );
+    });
+
+    expect(usesIndex(rows[0]['QUERY PLAN'][0].Plan, indexName)).toBe(true);
   });
 });

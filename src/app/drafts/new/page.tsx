@@ -2,13 +2,25 @@
 
 import Link from 'next/link';
 import { useEffect, useState, useTransition } from 'react';
+import { useRouter } from 'next/navigation';
 import { createDraft } from '@/lib/actions';
 import { importFromSleeper } from '@/lib/sleeper-actions';
 import { getRankingSummary, type RankingSummary } from '@/lib/rankings-actions';
 import { useNumericField } from '@/lib/useNumericField';
+import { draftInputSchema, MIN_TEAMS, MAX_TEAMS, type DraftInput } from '@/lib/draftInputSchema';
+import type { DraftMutationCode } from '@/lib/draftMutation';
 import type { SleeperImportResult } from '@/lib/sleeper';
-import type { FuturePickAuctionMode, StartingSlot, ScoringSettings } from '@/types';
+import type { FuturePickAuctionMode, StartingSlot } from '@/types';
 import { DEFAULT_STARTING_LINEUP, DEFAULT_TARGET_ROSTER, DEFAULT_SCORING_SETTINGS } from '@/types';
+
+function describeCreateDraftError(code: DraftMutationCode): string {
+  if (code === 'UNAUTHORIZED') return 'You must be signed in to create a draft.';
+  if (code === 'NO_RANKING_SET') {
+    return 'No custom ranking set found — upload one on the Rankings page first.';
+  }
+  if (code === 'DUPLICATE_TEAM') return 'Two teams share a handle or Sleeper roster ID.';
+  return 'Something went wrong. Check your draft settings and try again.';
+}
 
 interface TeamRow {
   handle: string;
@@ -83,6 +95,7 @@ export default function NewDraftPage() {
   const [rankingSummary, setRankingSummary] = useState<RankingSummary | null>(null);
   const [rankingSummaryError, setRankingSummaryError] = useState(false);
   const [playerSource, setPlayerSource] = useState<'etr' | 'custom'>('etr');
+  const router = useRouter();
 
   useEffect(() => {
     getRankingSummary()
@@ -99,7 +112,7 @@ export default function NewDraftPage() {
   // React-documented pattern for "state derived from a changed value while preserving prior
   // state") rather than in a useEffect, since a synchronous setState in an effect body here
   // would trigger a needless extra commit/render pass.
-  const safeTeamCount = Math.max(2, Math.min(32, teamCountField.numericValue));
+  const safeTeamCount = Math.max(MIN_TEAMS, Math.min(MAX_TEAMS, teamCountField.numericValue));
   if (safeTeamCount !== syncedTeamCount) {
     setSyncedTeamCount(safeTeamCount);
     setTeams((prev) => {
@@ -220,60 +233,50 @@ export default function NewDraftPage() {
       return;
     }
 
-    const handles = teams.map((t) => t.handle.trim());
-    if (!name.trim()) {
-      setError('Draft name is required.');
-      return;
-    }
-    if (handles.some((h) => !h)) {
-      setError('All team handles are required.');
-      return;
-    }
-    if (new Set(handles).size !== handles.length) {
-      setError('Team handles must be unique.');
-      return;
-    }
+    const candidate: DraftInput = {
+      name,
+      budgetPerTeam: budgetField.numericValue,
+      rosterSize: rosterSizeField.numericValue,
+      futurePickAuctionMode,
+      targetRoster: {
+        QB: targetRosterFields.QB.numericValue,
+        RB: targetRosterFields.RB.numericValue,
+        WR: targetRosterFields.WR.numericValue,
+        TE: targetRosterFields.TE.numericValue,
+      },
+      startingLineup,
+      scoringSettings: {
+        passYdsPerPoint: passYdsPerPointField.numericValue,
+        passTD: passTDField.numericValue,
+        passInt: passIntField.numericValue,
+        rushAtt: rushAttField.numericValue,
+        rushFD: rushFDField.numericValue,
+        pprRB: pprRBField.numericValue,
+        pprWR: pprWRField.numericValue,
+        pprTE: pprTEField.numericValue,
+        recFD: recFDField.numericValue,
+        rbFDBonus: rbFDBonusField.numericValue,
+        wrFDBonus: wrFDBonusField.numericValue,
+        teFDBonus: teFDBonusField.numericValue,
+      },
+      teams,
+      playerSource,
+      sleeperLeagueId: importedLeagueId ?? undefined,
+    };
 
-    if (!startingLineup.some((s) => s === 'QB' || s === 'SUPER_FLEX')) {
-      setError('Starting lineup must include at least one QB or SUPER_FLEX slot.');
+    const parsed = draftInputSchema.safeParse(candidate);
+    if (!parsed.success) {
+      setError(parsed.error.issues[0]?.message ?? 'Invalid draft settings.');
       return;
     }
 
     startTransition(async () => {
-      try {
-        await createDraft({
-          name: name.trim(),
-          budgetPerTeam: budgetField.numericValue,
-          rosterSize: rosterSizeField.numericValue,
-          futurePickAuctionMode,
-          targetRoster: {
-            QB: targetRosterFields.QB.numericValue,
-            RB: targetRosterFields.RB.numericValue,
-            WR: targetRosterFields.WR.numericValue,
-            TE: targetRosterFields.TE.numericValue,
-          },
-          startingLineup,
-          scoringSettings: {
-            passYdsPerPoint: passYdsPerPointField.numericValue,
-            passTD: passTDField.numericValue,
-            passInt: passIntField.numericValue,
-            rushAtt: rushAttField.numericValue,
-            rushFD: rushFDField.numericValue,
-            pprRB: pprRBField.numericValue,
-            pprWR: pprWRField.numericValue,
-            pprTE: pprTEField.numericValue,
-            recFD: recFDField.numericValue,
-            rbFDBonus: rbFDBonusField.numericValue,
-            wrFDBonus: wrFDBonusField.numericValue,
-            teFDBonus: teFDBonusField.numericValue,
-          } satisfies ScoringSettings,
-          teams,
-          playerSource,
-          sleeperLeagueId: importedLeagueId ?? undefined,
-        });
-      } catch (err) {
-        setError((err as Error).message ?? 'Something went wrong.');
+      const result = await createDraft(parsed.data);
+      if (!result.ok) {
+        setError(describeCreateDraftError(result.code));
+        return;
       }
+      router.push(`/draft/${result.data.draftId}`);
     });
   }
 
@@ -437,8 +440,8 @@ export default function NewDraftPage() {
               <input
                 data-testid="team-count-input"
                 type="number"
-                min={2}
-                max={32}
+                min={MIN_TEAMS}
+                max={MAX_TEAMS}
                 value={teamCountField.value}
                 onChange={teamCountField.onChange}
                 style={inputStyle}

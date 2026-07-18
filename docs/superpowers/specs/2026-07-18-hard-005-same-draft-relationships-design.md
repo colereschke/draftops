@@ -83,8 +83,9 @@ equals the draft's own `id`.
 
 The direct child-to-draft foreign keys remain. The old single-column team, player, and owner-team
 foreign keys are replaced by compound equivalents rather than retained as duplicates. Compound
-relations use `ON DELETE RESTRICT` and `ON UPDATE CASCADE`. Deleting a referenced player or team is
-therefore forbidden until its historical children are handled intentionally.
+relations use `ON DELETE RESTRICT` and `ON UPDATE RESTRICT`. Deleting a referenced player or team,
+or changing a referenced ID/draft-membership pair, is therefore forbidden until its historical
+children are handled intentionally.
 
 `AuctionResult.player` and the `playerName` columns remain as immutable display/history snapshots.
 They no longer serve as runtime identity fallbacks after the migration.

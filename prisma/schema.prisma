@@ -222,7 +222,8 @@ model DraftProjectionValueSet {
 
   draft            Draft              @relation("DraftProjectionValueSets", fields: [draftId], references: [id])
   projectionSource ProjectionSource?  @relation(fields: [projectionSourceId], references: [id])
-  values           DraftPlayerValue[]
+  values           DraftPlayerValue[] @relation("DraftValueSet")
+  sourcedValues    DraftPlayerValue[] @relation("DraftValueSetSource")
   activeForDraft   Draft?             @relation("ActiveDraftProjectionValueSet")
 
   @@unique([id, draftId])
@@ -279,7 +280,8 @@ model DraftPlayerValue {
   draft            Draft                   @relation(fields: [draftId], references: [id])
   player           Player                  @relation(fields: [playerId, draftId], references: [id, draftId], onDelete: Restrict, onUpdate: Restrict)
   projectionSource ProjectionSource?       @relation(fields: [projectionSourceId], references: [id])
-  valueSet         DraftProjectionValueSet @relation(fields: [valueSetId, draftId], references: [id, draftId])
+  valueSet         DraftProjectionValueSet  @relation("DraftValueSet", fields: [valueSetId, draftId], references: [id, draftId], onDelete: Restrict, onUpdate: Cascade)
+  sourceValueSet   DraftProjectionValueSet? @relation("DraftValueSetSource", fields: [valueSetId, draftId, projectionSourceId], references: [id, draftId, projectionSourceId], onDelete: Restrict, onUpdate: Cascade)
 
   @@unique([valueSetId, playerId])
   @@index([draftId])

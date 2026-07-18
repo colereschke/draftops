@@ -109,9 +109,7 @@ async function getPreview(
     rosters,
     teams,
     players,
-    loggedPlayerIds: new Set(
-      loggedResults.flatMap((result) => (result.playerId === null ? [] : [result.playerId])),
-    ),
+    loggedPlayerIds: new Set(loggedResults.map((result) => result.playerId)),
   });
 }
 
@@ -276,9 +274,7 @@ export async function saveSleeperRosterMapping(input: {
       rosters,
       teams: mappedTeams,
       players,
-      loggedPlayerIds: new Set(
-        loggedResults.flatMap((result) => (result.playerId === null ? [] : [result.playerId])),
-      ),
+      loggedPlayerIds: new Set(loggedResults.map((result) => result.playerId)),
     }),
   };
 }
@@ -341,9 +337,7 @@ export async function logSleeperRosterCatchUp(input: {
       ]);
       const teamById = new Map(teams.map((team) => [team.id, team]));
       const playerById = new Map(players.map((player) => [player.id, player]));
-      const loggedPlayerIds = new Set(
-        existingResults.flatMap((entry) => (entry.playerId === null ? [] : [entry.playerId])),
-      );
+      const loggedPlayerIds = new Set(existingResults.map((entry) => entry.playerId));
       const sleeperRosterByPlayerId = new Map<string, number>();
       for (const roster of rosters) {
         for (const sleeperId of roster.players ?? [])

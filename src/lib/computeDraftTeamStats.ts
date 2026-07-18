@@ -3,7 +3,7 @@ import type { Player, RosterEntry, TeamWithRoster } from '@/types';
 
 export interface DraftTeamResultInput {
   id: number;
-  playerId?: number | null;
+  playerId: number;
   player: string;
   position: string;
   nflTeam: string;
@@ -36,8 +36,6 @@ export function computeDraftTeamStats({
   const playersById = new Map(
     players.flatMap((player) => (player.id === undefined ? [] : [[player.id, player] as const])),
   );
-  const playersByName = new Map(players.map((player) => [player.player, player]));
-
   return teams.map((team) => {
     const spent = team.results.reduce((sum, result) => sum + result.price, 0);
     const remaining = team.budget + (budgetDeltaByTeamId?.get(team.id) ?? 0) - spent;
@@ -47,10 +45,7 @@ export function computeDraftTeamStats({
     const knownAges: number[] = [];
 
     for (const result of team.results) {
-      const player =
-        result.playerId === undefined || result.playerId === null
-          ? playersByName.get(result.player)
-          : playersById.get(result.playerId);
+      const player = playersById.get(result.playerId);
 
       results.push({
         ...result,

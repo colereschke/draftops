@@ -1,10 +1,11 @@
 'use client';
 
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import type { Player, Position, TeamStats, AuctionResultEntry } from '@/types';
 import { computeNominationScores, type ScoredPlayer } from '@/lib/nominationScoring';
 import { useOnboarding } from '@/components/Onboarding/OnboardingContext';
+import MutationStatus from '@/components/MutationStatus';
 import WatchlistSidebar from './WatchlistSidebar';
 import NominationTable from './NominationTable';
 import DraftReadOnlyBanner from '@/components/DraftReadOnlyBanner';
@@ -24,6 +25,15 @@ interface NominationHelperProps {
   isReadOnly?: boolean;
 }
 
+interface PlayerMutationConfig {
+  playerId: number;
+  pendingLabel: string;
+  successLabel: string;
+  failureLabel: string;
+  applyOptimistic: (prev: NomData) => NomData;
+  request: () => Promise<Response>;
+}
+
 export default function NominationHelper({
   draftId,
   players,
@@ -34,33 +44,38 @@ export default function NominationHelper({
   const [data, setData] = useState<NomData | null>(null);
   const [draftError, setDraftError] = useState<string | null>(null);
   const [posFilter, setPosFilter] = useState<'ALL' | Position>('ALL');
+  const [pendingIds, setPendingIds] = useState<Set<number>>(new Set());
+  const [mutationStatus, setMutationStatus] = useState<string>('');
+
+  const fetchData = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/draft/${draftId}/nomination-data`);
+      if (res.status === 401) {
+        router.replace('/sign-in');
+        return;
+      }
+      if (res.status === 404) {
+        setDraftError('No draft configured');
+        return;
+      }
+      if (!res.ok) {
+        setDraftError('Unable to load nomination data');
+        return;
+      }
+      setData(await res.json());
+      setDraftError(null);
+    } catch {
+      setDraftError('Unable to load nomination data');
+    }
+  }, [draftId, router]);
 
   useEffect(() => {
-    async function fetchData() {
-      try {
-        const res = await fetch(`/api/draft/${draftId}/nomination-data`);
-        if (res.status === 401) {
-          router.replace('/sign-in');
-          return;
-        }
-        if (res.status === 404) {
-          setDraftError('No draft configured');
-          return;
-        }
-        if (!res.ok) {
-          setDraftError('Unable to load nomination data');
-          return;
-        }
-        setData(await res.json());
-        setDraftError(null);
-      } catch {
-        setDraftError('Unable to load nomination data');
-      }
-    }
-    void fetchData();
+    // queueMicrotask: fetchData sets state before its first await; calling it directly
+    // here trips react-hooks/set-state-in-effect.
+    queueMicrotask(() => void fetchData());
     const interval = setInterval(() => void fetchData(), 30_000);
     return () => clearInterval(interval);
-  }, [router, draftId]);
+  }, [fetchData]);
 
   const wonIds = useMemo(
     () =>
@@ -86,88 +101,123 @@ export default function NominationHelper({
     );
   }, [data, players]);
 
-  const addToWatchlist = async (player: Player) => {
+  const runPlayerMutation = useCallback(
+    async ({
+      playerId,
+      pendingLabel,
+      successLabel,
+      failureLabel,
+      applyOptimistic,
+      request,
+    }: PlayerMutationConfig): Promise<boolean> => {
+      if (pendingIds.has(playerId)) return false;
+      const snapshot = data;
+      setPendingIds((prev) => new Set(prev).add(playerId));
+      setData((prev) => (prev ? applyOptimistic(prev) : prev));
+      setMutationStatus(pendingLabel);
+      try {
+        const res = await request();
+        if (res.status === 401) {
+          router.replace('/sign-in');
+          return false;
+        }
+        if (!res.ok) {
+          setData(snapshot);
+          setMutationStatus(failureLabel);
+          void fetchData();
+          return false;
+        }
+        setMutationStatus(successLabel);
+        return true;
+      } catch {
+        setData(snapshot);
+        setMutationStatus(failureLabel);
+        void fetchData();
+        return false;
+      } finally {
+        setPendingIds((prev) => {
+          const next = new Set(prev);
+          next.delete(playerId);
+          return next;
+        });
+      }
+    },
+    [pendingIds, data, fetchData, router],
+  );
+
+  const addToWatchlist = (player: Player) => {
     const playerId = player.id;
     if (playerId === undefined) return;
-    const snapshot = data;
-    setData((prev) => (prev ? { ...prev, watchlist: [...prev.watchlist, playerId] } : prev));
-    const res = await fetch(`/api/draft/${draftId}/watchlist`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ playerId }),
+    void runPlayerMutation({
+      playerId,
+      pendingLabel: `Adding ${player.player} to watchlist…`,
+      successLabel: `${player.player} added to watchlist.`,
+      failureLabel: `Failed to add ${player.player} to watchlist. Please try again.`,
+      applyOptimistic: (prev) => ({ ...prev, watchlist: [...prev.watchlist, playerId] }),
+      request: () =>
+        fetch(`/api/draft/${draftId}/watchlist`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ playerId }),
+        }),
     });
-    if (!res.ok) {
-      if (res.status === 401) {
-        router.replace('/sign-in');
-        return;
-      }
-      setData(snapshot);
-    }
   };
 
-  const removeFromWatchlist = async (playerId: number) => {
-    const snapshot = data;
-    setData((prev) =>
-      prev ? { ...prev, watchlist: prev.watchlist.filter((id) => id !== playerId) } : prev,
-    );
-    const res = await fetch(`/api/draft/${draftId}/watchlist`, {
-      method: 'DELETE',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ playerId }),
+  const removeFromWatchlist = (playerId: number) => {
+    void runPlayerMutation({
+      playerId,
+      pendingLabel: 'Removing from watchlist…',
+      successLabel: 'Removed from watchlist.',
+      failureLabel: 'Failed to remove from watchlist. Please try again.',
+      applyOptimistic: (prev) => ({
+        ...prev,
+        watchlist: prev.watchlist.filter((id) => id !== playerId),
+      }),
+      request: () =>
+        fetch(`/api/draft/${draftId}/watchlist`, {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ playerId }),
+        }),
     });
-    if (!res.ok) {
-      if (res.status === 401) {
-        router.replace('/sign-in');
-        return;
-      }
-      setData(snapshot);
-    }
   };
 
   const nominatePlayer = async (player: Player) => {
     const playerId = player.id;
     if (playerId === undefined) return;
-    const snapshot = data;
-    setData((prev) => (prev ? { ...prev, nominated: [...prev.nominated, playerId] } : prev));
-    let res: Response;
-    try {
-      res = await fetch(`/api/draft/${draftId}/nominated`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ playerId }),
-      });
-    } catch {
-      setData(snapshot);
-      return;
-    }
-    if (!res.ok) {
-      if (res.status === 401) {
-        router.replace('/sign-in');
-        return;
-      }
-      setData(snapshot);
-      return;
-    }
-    await recordPlayerNominated(player.player);
+    const ok = await runPlayerMutation({
+      playerId,
+      pendingLabel: `Nominating ${player.player}…`,
+      successLabel: `${player.player} nominated.`,
+      failureLabel: `Failed to nominate ${player.player}. Please try again.`,
+      applyOptimistic: (prev) => ({ ...prev, nominated: [...prev.nominated, playerId] }),
+      request: () =>
+        fetch(`/api/draft/${draftId}/nominated`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ playerId }),
+        }),
+    });
+    if (ok) await recordPlayerNominated(player.player);
   };
 
-  const unNominatePlayer = async (playerId: number) => {
-    const snapshot = data;
-    setData((prev) =>
-      prev ? { ...prev, nominated: prev.nominated.filter((id) => id !== playerId) } : prev,
-    );
-    const res = await fetch(`/api/draft/${draftId}/nominated`, {
-      method: 'DELETE',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ playerId }),
+  const unNominatePlayer = (playerId: number) => {
+    void runPlayerMutation({
+      playerId,
+      pendingLabel: 'Removing from in auction…',
+      successLabel: 'Removed from in auction.',
+      failureLabel: 'Failed to remove from in auction. Please try again.',
+      applyOptimistic: (prev) => ({
+        ...prev,
+        nominated: prev.nominated.filter((id) => id !== playerId),
+      }),
+      request: () =>
+        fetch(`/api/draft/${draftId}/nominated`, {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ playerId }),
+        }),
     });
-    if (!res.ok) {
-      if (res.status === 401) {
-        router.replace('/sign-in');
-        return;
-      }
-      setData(snapshot);
-    }
   };
 
   if (!data) {
@@ -195,17 +245,19 @@ export default function NominationHelper({
       data-onboarding-nomination-state="ready"
       className="flex min-h-screen flex-col bg-background text-foreground md:flex-row"
     >
+      <MutationStatus message={mutationStatus} />
       <WatchlistSidebar
         players={players}
         nominated={data.nominated}
         watchlist={data.watchlist}
         wonIds={wonIds}
+        pendingIds={pendingIds}
         onAddToWatchlist={addToWatchlist}
         onRemoveFromWatchlist={(playerId) => {
-          if (typeof playerId === 'number') void removeFromWatchlist(playerId);
+          if (typeof playerId === 'number') removeFromWatchlist(playerId);
         }}
         onUnNominate={(playerId) => {
-          if (typeof playerId === 'number') void unNominatePlayer(playerId);
+          if (typeof playerId === 'number') unNominatePlayer(playerId);
         }}
         onboardingSubjectPlayerName={isReadOnly ? null : (progress?.subjectPlayerName ?? null)}
         isReadOnly={isReadOnly}
@@ -257,6 +309,7 @@ export default function NominationHelper({
           posFilter={posFilter}
           onPosFilterChange={setPosFilter}
           hasAuctionData={hasAuctionData}
+          pendingIds={pendingIds}
           onWatch={addToWatchlist}
           onNominate={nominatePlayer}
           isReadOnly={isReadOnly}

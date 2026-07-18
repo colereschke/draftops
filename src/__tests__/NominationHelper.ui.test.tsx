@@ -1,20 +1,22 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import NominationHelper from '@/components/NominationHelper/NominationHelper';
 import WatchlistSidebar from '@/components/NominationHelper/WatchlistSidebar';
 import type { Player } from '@/types';
 
+const mockRouter = { replace: jest.fn() };
+
 jest.mock('next/navigation', () => ({
-  useRouter: () => ({
-    replace: jest.fn(),
-  }),
+  useRouter: () => mockRouter,
 }));
+
+const mockRecordPlayerNominated = jest.fn().mockResolvedValue(undefined);
 
 jest.mock('@/components/Onboarding/OnboardingContext', () => ({
   useOnboarding: () => ({
     progress: null,
     recordBidLogged: jest.fn(),
-    recordPlayerNominated: jest.fn(),
+    recordPlayerNominated: (name: string) => mockRecordPlayerNominated(name),
   }),
 }));
 
@@ -134,5 +136,137 @@ describe('WatchlistSidebar', () => {
 
     expect(onUnNominate).toHaveBeenCalledWith(10);
     expect(onRemoveFromWatchlist).toHaveBeenCalledWith(11);
+  });
+});
+
+describe('NominationHelper mutations', () => {
+  const dataWithAuction = {
+    // A rival team with buying power and no roster fill is required so
+    // computeNominationScores produces a positive nominationScore for QB/WR —
+    // it filters out every player scoring 0, which is what an empty teamStats
+    // fixture (fine for the other tests in this file) would otherwise produce.
+    teamStats: [
+      {
+        id: 2,
+        handle: 'rival',
+        displayName: 'Rival',
+        budget: 1000,
+        spent: 0,
+        remaining: 1000,
+        rosterCount: 0,
+        rosterRemaining: 30,
+        buyingPower: 1000,
+        pkgCount: 0,
+        avgAge: null,
+      },
+    ],
+    auctionResults: [
+      { playerId: 999, player: 'Prior Winner', position: 'RB', price: 50, teamId: 1 },
+    ],
+    watchlist: [],
+    nominated: [],
+    ownerHandle: null,
+    targetRoster: { QB: 4, RB: 9, WR: 11, TE: 3 },
+  };
+
+  beforeEach(() => {
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => dataWithAuction,
+    } as Response);
+    mockRecordPlayerNominated.mockClear();
+  });
+
+  afterEach(() => {
+    jest.resetAllMocks();
+  });
+
+  async function renderReady() {
+    const user = userEvent.setup();
+    render(<NominationHelper draftId={1} players={PLAYERS} />);
+    await waitFor(() => expect(screen.getByText('Nomination Helper')).toBeInTheDocument());
+    return user;
+  }
+
+  function rowFor(playerName: string) {
+    const table = screen.getByRole('table');
+    const row = within(table).getByText(playerName).closest('tr');
+    if (!row) throw new Error(`row for ${playerName} not found`);
+    return row;
+  }
+
+  function watchButtonFor(playerName: string) {
+    return within(rowFor(playerName)).getByRole('button', { name: /^watch$/i });
+  }
+
+  function nominateButtonFor(playerName: string) {
+    return within(rowFor(playerName)).getByRole('button', { name: /^nominate$/i });
+  }
+
+  it('rolls back an optimistic watchlist add and announces failure when the request throws', async () => {
+    const user = await renderReady();
+    (global.fetch as jest.Mock).mockImplementationOnce(() =>
+      Promise.reject(new Error('network down')),
+    );
+
+    await user.click(watchButtonFor('Josh Allen'));
+
+    await waitFor(() =>
+      expect(screen.getByTestId('mutation-status')).toHaveTextContent(
+        /failed to add josh allen to watchlist/i,
+      ),
+    );
+    expect(
+      screen.queryByRole('button', { name: /remove josh allen from watchlist/i }),
+    ).not.toBeInTheDocument();
+  });
+
+  it('rolls back an optimistic watchlist add and refetches canonical data on a non-2xx response', async () => {
+    const user = await renderReady();
+    const callsBeforeMutation = (global.fetch as jest.Mock).mock.calls.length;
+    (global.fetch as jest.Mock).mockResolvedValueOnce({ ok: false, status: 409 } as Response);
+
+    await user.click(watchButtonFor('Josh Allen'));
+
+    await waitFor(() =>
+      expect(screen.getByTestId('mutation-status')).toHaveTextContent(
+        /failed to add josh allen to watchlist/i,
+      ),
+    );
+    // The failed POST plus a follow-up GET to resync canonical state.
+    await waitFor(() =>
+      expect((global.fetch as jest.Mock).mock.calls.length).toBe(callsBeforeMutation + 2),
+    );
+  });
+
+  it('removes the Watch control immediately on click, making a duplicate click on the same player impossible', async () => {
+    // computeNominationScores excludes watchlisted players from nomination targets, and the
+    // optimistic update in runPlayerMutation applies that exclusion in the same render as the
+    // click — so there is no intermediate "visible but disabled" frame to assert on. The row
+    // (and its Watch button) is simply gone, which is the actual duplicate-click protection
+    // for this control; this test verifies that guarantee and that only one request fired.
+    const user = await renderReady();
+    const callsBeforeClick = (global.fetch as jest.Mock).mock.calls.length;
+
+    const watchButton = watchButtonFor('Josh Allen');
+    await user.click(watchButton);
+
+    expect(watchButton).not.toBeInTheDocument();
+    expect((global.fetch as jest.Mock).mock.calls.length).toBe(callsBeforeClick + 1);
+  });
+
+  it('does not record onboarding progress when a nomination request fails', async () => {
+    const user = await renderReady();
+    (global.fetch as jest.Mock).mockResolvedValueOnce({ ok: false, status: 409 } as Response);
+
+    await user.click(nominateButtonFor('Josh Allen'));
+
+    await waitFor(() =>
+      expect(screen.getByTestId('mutation-status')).toHaveTextContent(
+        /failed to nominate josh allen/i,
+      ),
+    );
+    expect(mockRecordPlayerNominated).not.toHaveBeenCalled();
   });
 });

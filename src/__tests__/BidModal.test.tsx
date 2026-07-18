@@ -116,6 +116,34 @@ describe('BidModal — add mode', () => {
     );
   });
 
+  it('submits via Enter key in the price field (keyboard-only logging)', async () => {
+    const user = userEvent.setup();
+    const onSubmit = jest.fn();
+    render(
+      <BidModal player={mockPlayer} teams={mockTeams} onClose={jest.fn()} onSubmit={onSubmit} />,
+    );
+
+    await user.clear(screen.getByLabelText('Price'));
+    await user.type(screen.getByLabelText('Price'), '110{Enter}');
+
+    expect(onSubmit).toHaveBeenCalledWith({ price: 110, teamId: 1 });
+  });
+
+  it('disables the price field and shows a saving label on the submit button while isSubmitting', () => {
+    render(
+      <BidModal
+        player={mockPlayer}
+        teams={mockTeams}
+        onClose={jest.fn()}
+        onSubmit={jest.fn()}
+        isSubmitting
+      />,
+    );
+
+    expect(screen.getByLabelText('Price')).toBeDisabled();
+    expect(screen.getByRole('button', { name: /saving/i })).toBeDisabled();
+  });
+
   it('shows projection price context when available', () => {
     render(
       <BidModal

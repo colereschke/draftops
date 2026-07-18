@@ -51,6 +51,12 @@ jest.mock('@/components/Onboarding/OnboardingContext', () => ({
   }),
 }));
 
+const mockRouterRefresh = jest.fn();
+
+jest.mock('next/navigation', () => ({
+  useRouter: () => ({ refresh: mockRouterRefresh }),
+}));
+
 const mockTeams: LeagueTeam[] = [
   { id: 1, handle: 'coreschke', displayName: 'Cole' },
   { id: 2, handle: 'chappy72', displayName: null },
@@ -71,6 +77,7 @@ beforeEach(() => {
   mockLogBid.mockResolvedValue({ ok: true, data: { bidId: 99 } });
   mockUpdateBid.mockResolvedValue({ ok: true, data: { bidId: 1 } });
   mockDeleteBid.mockResolvedValue({ ok: true, data: null });
+  mockRouterRefresh.mockClear();
 });
 
 afterEach(() => {
@@ -235,9 +242,9 @@ describe('AuctionSheet with claimed bids', () => {
     await user.click(screen.getByTestId('bid-submit'));
 
     await waitFor(() => {
-      expect(
-        screen.getByText(/leave at least \$1 for every open roster spot/i),
-      ).toBeInTheDocument();
+      expect(screen.getByTestId('bid-server-error')).toHaveTextContent(
+        /leave at least \$1 for every open roster spot/i,
+      );
     });
     expect(screen.getByRole('dialog')).toBeInTheDocument();
   });
@@ -252,7 +259,9 @@ describe('AuctionSheet with claimed bids', () => {
     await user.click(screen.getByRole('button', { name: /confirm remove/i }));
 
     await waitFor(() => {
-      expect(screen.getByText(/draft is complete and now read-only/i)).toBeInTheDocument();
+      expect(screen.getByTestId('bid-server-error')).toHaveTextContent(
+        /draft is complete and now read-only/i,
+      );
     });
     expect(screen.getByRole('dialog')).toBeInTheDocument();
   });
@@ -423,6 +432,84 @@ describe('AuctionSheet with claimed bids', () => {
       // Ascending: Allen ($110), Jefferson ($200), then unclaimed by budget asc.
       expect(order).toEqual(['player-row-1', 'player-row-5', 'player-row-8', 'player-row-9']);
     });
+  });
+
+  it('disables the bid submit button while a save is pending, blocking duplicate submissions', async () => {
+    const user = userEvent.setup();
+    let resolveLogBid: (value: { ok: true; data: { bidId: number } }) => void = () => {};
+    mockLogBid.mockReturnValue(
+      new Promise((resolve) => {
+        resolveLogBid = resolve;
+      }),
+    );
+    renderSheet();
+
+    await user.click(screen.getByText('Josh Allen'));
+    await user.type(screen.getByTestId('bid-price'), '110');
+    const callsBeforeSubmit = mockLogBid.mock.calls.length;
+    await user.click(screen.getByTestId('bid-submit'));
+
+    await waitFor(() => expect(screen.getByTestId('bid-submit')).toBeDisabled());
+    await user.click(screen.getByTestId('bid-submit'));
+    expect(mockLogBid.mock.calls.length).toBe(callsBeforeSubmit + 1);
+
+    resolveLogBid({ ok: true, data: { bidId: 99 } });
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+  });
+
+  it('announces bid save progress and outcome through the mutation status live region', async () => {
+    const user = userEvent.setup();
+    renderSheet();
+
+    await user.click(screen.getByText('Josh Allen'));
+    await user.type(screen.getByTestId('bid-price'), '110');
+    await user.click(screen.getByTestId('bid-submit'));
+
+    await waitFor(() =>
+      expect(screen.getByTestId('mutation-status')).toHaveTextContent('Bid saved.'),
+    );
+  });
+
+  it('refreshes canonical draft state when a bid save is rejected as a conflict', async () => {
+    const user = userEvent.setup();
+    mockLogBid.mockResolvedValue({ ok: false, code: 'PLAYER_ALREADY_CLAIMED' });
+    renderSheet();
+
+    await user.click(screen.getByText('Josh Allen'));
+    await user.type(screen.getByTestId('bid-price'), '110');
+    await user.click(screen.getByTestId('bid-submit'));
+
+    await waitFor(() => expect(mockRouterRefresh).toHaveBeenCalled());
+  });
+
+  it('rolls back the optimistic LIVE badge and refreshes canonical state when the nomination request throws', async () => {
+    const user = userEvent.setup();
+    (global.fetch as jest.Mock).mockImplementationOnce(() =>
+      Promise.reject(new Error('network down')),
+    );
+    renderSheet();
+
+    await user.click(screen.getByText('Josh Allen'));
+    await user.click(screen.getByRole('button', { name: /^nom$/i }));
+
+    // Don't assert the optimistic LIVE badge synchronously here: the rejected fetch's
+    // rollback runs as a microtask that can already have resolved by the time control
+    // returns from `await user.click(...)`, making a synchronous `getByText('LIVE')` racy.
+    // The rollback (badge absent) and the canonical-refresh call are what this test verifies.
+    await waitFor(() => expect(screen.queryByText('LIVE')).not.toBeInTheDocument());
+    expect(mockRouterRefresh).toHaveBeenCalled();
+  });
+
+  it('rolls back the optimistic LIVE badge and refreshes canonical state when the nomination request is rejected', async () => {
+    const user = userEvent.setup();
+    (global.fetch as jest.Mock).mockResolvedValueOnce({ ok: false, status: 409 } as Response);
+    renderSheet();
+
+    await user.click(screen.getByText('Josh Allen'));
+    await user.click(screen.getByRole('button', { name: /^nom$/i }));
+
+    await waitFor(() => expect(screen.queryByText('LIVE')).not.toBeInTheDocument());
+    expect(mockRouterRefresh).toHaveBeenCalled();
   });
 
   it('breaks a tie in the sorted column using SF rank ascending', () => {

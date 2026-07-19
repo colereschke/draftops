@@ -3,14 +3,19 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import NewDraftPage from '@/app/drafts/new/page';
 import { createDraft } from '@/lib/actions';
+import { reportClientError } from '@/lib/reportClientError';
 import type { SleeperImportResult } from '@/lib/sleeper';
 import { DEFAULT_SCORING_SETTINGS } from '@/types';
 
 jest.mock('@/lib/actions', () => ({
   createDraft: jest.fn(),
 }));
+jest.mock('@/lib/reportClientError', () => ({
+  reportClientError: jest.fn(),
+}));
 
 const mockPush = jest.fn();
+const mockReportClientError = jest.mocked(reportClientError);
 jest.mock('next/navigation', () => ({ useRouter: () => ({ push: mockPush }) }));
 
 const mockImportFromSleeper = jest.fn();
@@ -29,6 +34,7 @@ beforeEach(() => {
   (createDraft as jest.Mock).mockClear();
   (createDraft as jest.Mock).mockResolvedValue({ ok: true, data: { draftId: 1 } });
   mockPush.mockClear();
+  mockReportClientError.mockClear();
 });
 
 const MOCK_IMPORT_RESULT: SleeperImportResult = {
@@ -188,7 +194,9 @@ describe('NewDraftPage — roster settings and lineup', () => {
 
     fireEvent.submit(screen.getByTestId('new-draft-form'));
 
-    expect(screen.getByText(/Budget per team is required/i)).toBeInTheDocument();
+    expect(screen.getByTestId('draft-form-error')).toHaveTextContent(
+      /Budget per team is required/i,
+    );
     expect(createDraft).not.toHaveBeenCalled();
   });
 
@@ -255,7 +263,9 @@ describe('NewDraftPage — lineup validation', () => {
       target: { value: 'Test Draft' },
     });
     fireEvent.submit(screen.getByTestId('new-draft-form'));
-    expect(screen.getByText(/at least one QB or SUPER_FLEX/i)).toBeInTheDocument();
+    expect(screen.getByTestId('draft-form-error')).toHaveTextContent(
+      /at least one QB or SUPER_FLEX/i,
+    );
   });
 });
 
@@ -494,8 +504,24 @@ describe('NewDraftPage — createDraft result handling', () => {
     fireEvent.change(screen.getByTestId('draft-name-input'), { target: { value: 'Test Draft' } });
     fireEvent.submit(screen.getByTestId('new-draft-form'));
     await waitFor(() => {
-      expect(screen.getByText(/custom ranking set/i)).toBeInTheDocument();
+      expect(screen.getByTestId('draft-form-error')).toHaveTextContent(/custom ranking set/i);
     });
+    expect(mockPush).not.toHaveBeenCalled();
+  });
+
+  it('reports an unexpected createDraft rejection and shows an inline fallback', async () => {
+    const error = new Error('database unavailable');
+    (createDraft as jest.Mock).mockRejectedValue(error);
+    render(<NewDraftPage />);
+    fireEvent.change(screen.getByTestId('draft-name-input'), { target: { value: 'Test Draft' } });
+    fireEvent.submit(screen.getByTestId('new-draft-form'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('draft-form-error')).toHaveTextContent(
+        'Draft creation failed. Please try again.',
+      );
+    });
+    expect(mockReportClientError).toHaveBeenCalledWith(error);
     expect(mockPush).not.toHaveBeenCalled();
   });
 
@@ -505,7 +531,7 @@ describe('NewDraftPage — createDraft result handling', () => {
     const teamHandleInputs = screen.getAllByDisplayValue(/^team-\d+$/);
     fireEvent.change(teamHandleInputs[1], { target: { value: 'TEAM-1' } });
     fireEvent.submit(screen.getByTestId('new-draft-form'));
-    expect(screen.getByText(/handles must be unique/i)).toBeInTheDocument();
+    expect(screen.getByTestId('draft-form-error')).toHaveTextContent(/handles must be unique/i);
     expect(createDraft).not.toHaveBeenCalled();
   });
 });

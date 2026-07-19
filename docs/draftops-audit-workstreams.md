@@ -2,6 +2,8 @@
 
 Audit date: 2026-07-16
 
+Status reconciliation: 2026-07-19, through merged PR #72.
+
 This is the authoritative engineering-hardening backlog for DraftOps. It replaces the
 2026-07-14 Workstreams A-H audit while preserving a mapping to that work and recording the
 disposition of the existing A/B worktrees.
@@ -33,6 +35,10 @@ draft lifecycle races, cross-view value consistency, and production browser flow
 - **READY** means no known branch is implementing the item.
 - **COMPLETE** means the change is already on `main` and verified.
 
+The `Problem`, `Implementation direction`, and `Acceptance criteria` sections preserve the original
+audit context. For completed items, the status and implementation checkpoint describe the current
+state on `main` and supersede that historical wording.
+
 ## Required workflow for every item
 
 Each implementation session should:
@@ -53,8 +59,7 @@ Each implementation session should:
 
 ### HARD-001 - Make completed drafts transactionally immutable
 
-- **Status:** READY FOR INTEGRATION - implemented and verified on
-  `hard-001-002-draft-integrity`
+- **Status:** COMPLETE - merged in PR #53 (`231b869`)
 - **Effort:** Medium
 - **Sequence:** Implement before HARD-002 and HARD-010
 
@@ -128,8 +133,7 @@ that has already checked the draft.
 
 ### HARD-002 - Enforce bid legality and make bid logging atomic
 
-- **Status:** READY FOR INTEGRATION - implemented and verified on
-  `hard-001-002-draft-integrity`
+- **Status:** COMPLETE - merged in PR #53 (`231b869`)
 - **Effort:** Medium to large
 - **Sequence:** After HARD-001; before HARD-004 and HARD-010
 
@@ -197,9 +201,21 @@ outcome and the application must handle lifecycle and team-budget races.
 
 ### HARD-003 - Scale valuations to the configured draft budget
 
-- **Status:** READY
+- **Status:** COMPLETE - merged in PR #56 (`dfd5eac`)
 - **Effort:** Large
 - **Sequence:** Before HARD-006 and HARD-016
+
+#### Implementation checkpoint (2026-07-17)
+
+PR #56 made the ranking-source economy explicit on `UserRankingSet` and `Draft`, scaled skill
+players and future-pick assets into each draft budget before league adjustments, preserved source
+values in `Player.base*`, and kept projection-shaped values anchored to the corrected fallback.
+It also added a dry-run-first, snapshot-backed existing-draft backfill with per-draft transactions
+and projection reapplication.
+
+Verification: `make check` passed 84 suites / 702 tests; two real-PostgreSQL integration tests
+covered apply idempotency and rollback; independent whole-branch review found no remaining
+critical or important findings.
 
 #### Problem
 
@@ -238,8 +254,7 @@ The current $1,000 league is unaffected; generalized budgets are affected.
 
 ### HARD-004 - Use one canonical active-value and team-statistics service
 
-- **Status:** READY FOR INTEGRATION - implemented and verified on
-  `hard-004-canonical-draft-stats`
+- **Status:** COMPLETE - merged in PR #57 (`807a509`)
 - **Effort:** Medium to large
 - **Sequence:** After HARD-002 and HARD-003
 
@@ -302,9 +317,21 @@ on the page.
 
 ### HARD-005 - Enforce same-draft relationships in PostgreSQL
 
-- **Status:** READY
+- **Status:** COMPLETE - merged in PR #67 (`d271d78`)
 - **Effort:** Large
 - **Sequence:** After HARD-001 and a production data audit
+
+#### Implementation checkpoint (2026-07-19)
+
+PR #67 audited production, deterministically backfilled the one safe null player identity, and
+added guarded compound relationships for all six protected team/player/owner paths. The migration
+runs in one transaction, locks relationship writes during preflight and backfill, validates every
+new constraint, and aborts with relationship-specific aggregate failures instead of leaving a
+partial schema.
+
+Verification: the pre- and post-migration production audits found zero orphaned or cross-draft
+relationships; `make check` passed 89 suites / 758 tests; 25 real-PostgreSQL integration tests and a
+clean schema-drift check passed.
 
 #### Problem
 
@@ -335,9 +362,20 @@ draft if application checks are bypassed.
 
 ### HARD-006 - Make projection-source activation explicit and atomic
 
-- **Status:** READY
+- **Status:** COMPLETE - merged in PR #70 (`c6a9701`)
 - **Effort:** Large
 - **Sequence:** After HARD-003
+
+#### Implementation checkpoint (2026-07-19)
+
+PR #70 added versioned `DraftProjectionValueSet` records and an explicit active-set pointer.
+Projection refreshes now stage and validate a complete candidate before atomically archiving the
+prior set and activating the new one under the shared draft advisory lock. Failed batches leave the
+current set untouched, and retention keeps the active set plus three archived row sets.
+
+Verification: `make check` passed 91 suites / 767 tests and 29 real-PostgreSQL integration tests
+covered migration backfill, failed/same-source isolation, concurrent activation, retention, budget
+rollback, and the HARD-005 compound relationships.
 
 #### Problem
 
@@ -371,8 +409,37 @@ values that cannot be active.
 
 ### HARD-007 - Validate draft creation and shorten its transaction
 
-- **Status:** READY
+- **Status:** READY FOR INTEGRATION - implemented and verified on
+  `worktree-hard-007-validate-draft-creation`
 - **Effort:** Large
+
+#### Implementation checkpoint (2026-07-19)
+
+The current branch adds one shared Zod schema for client/server draft input, typed mutation results,
+case-insensitive handle validation, exactly-one-owner validation, bounded numeric/settings checks,
+batched team insertion, pre-transaction player preparation, a justified 15-second transaction
+timeout, and per-stage duration logging. Draft creation remains atomic with automatic projection
+application. Review follow-ups tie future-pick years to an explicitly persisted creation timestamp,
+make first-draft onboarding initialization conflict-safe, and keep unexpected action failures in the
+inline draft form while reporting them.
+
+Verification: TypeScript, ESLint, Prettier, and 90 Jest suites / 799 tests pass. A dedicated
+real-PostgreSQL latency test covers the full transaction stage sequence and a two-second injected
+player-insert delay.
+
+#### Deferred follow-up after integration
+
+Measure and, if worthwhile, remove projection application's redundant read-back of the newly
+inserted player pool. The likely shape is `player.createManyAndReturn` plus an explicit seeded-player
+input to projection application, eliminating the roughly 270-row `findMany` and guaranteed no-op
+Sleeper-ID update loop without duplicating projection logic. Keep this as a focused performance
+follow-up with real-PostgreSQL timing and rollback coverage.
+
+The custom-ranking read intentionally represents the ranking snapshot captured when submission
+begins; changing that to commit-time freshness requires an explicit product/versioning contract.
+Case-insensitive handle uniqueness remains enforced at the draft-creation boundary; add a database
+normalization migration only if it becomes a required invariant for additional write paths. Do not
+extract the one-line duplicate-value check or P2002 parsing until reuse materially improves coupling.
 
 #### Problem
 
@@ -474,9 +541,20 @@ incomplete settings.
 
 ### HARD-010 - Make optimistic mutations resilient and accessible
 
-- **Status:** READY
+- **Status:** COMPLETE - merged in PR #66 (`3d581b6`)
 - **Effort:** Medium
 - **Sequence:** After HARD-001/HARD-002 typed outcomes
+
+#### Implementation checkpoint (2026-07-19)
+
+PR #66 made bid entry a semantic form, blocked duplicate submissions, added two-step bid removal,
+and made watchlist/nomination optimistic mutations restore snapshots and refresh canonical state on
+thrown or non-2xx failures. Per-player pending state and a shared `aria-live` status surface make
+mutation progress and outcomes accessible.
+
+Verification: `make check` passed 90 suites / 772 tests. Focused coverage includes thrown-fetch and
+non-2xx rollback, canonical refetch, duplicate-submit blocking, Enter-key bid submission, guarded
+deletion, and live-region announcements.
 
 #### Problem
 
@@ -542,8 +620,22 @@ snapshot or restore workflow.
 
 ### HARD-012 - Expand CI to production-shaped checks
 
-- **Status:** PARTIAL - prior Workstream C is COMPLETE; broader CI work remains
+- **Status:** COMPLETE - merged across PR #59 (`aaf5103`) and PR #72 (`817e7df`)
 - **Effort:** Medium
+
+#### Implementation checkpoint (2026-07-19)
+
+PR #59 split CI into quality, production build, PostgreSQL migration/integration, and projection
+jobs; added minimal permissions and concurrency cancellation; and excluded generated coverage from
+quality discovery. PR #72 completed the remaining browser gap with signed-cookie test auth,
+dedicated E2E fixtures, and Playwright smoke tests for auth redirect, bid logging, nomination, and
+teams/budget rendering against a production build. PR #58 supplies the scheduled production audit
+backstop tracked by HARD-013.
+
+Verification included clean-database migration/seed checks, the real-PostgreSQL integration suite,
+production build, 49 projection-tooling tests plus Ruff/mypy, and four Chromium smoke specs.
+Accessibility-specific regression coverage remains owned by HARD-015 rather than keeping this CI
+and production-smoke ticket open.
 
 #### Problem
 
@@ -580,8 +672,17 @@ warning after `pnpm test:coverage`.
 
 ### HARD-013 - Resolve known production dependency advisories
 
-- **Status:** READY
+- **Status:** COMPLETE - merged in PR #58 (`a5afff3`)
 - **Effort:** Small to medium
+
+#### Implementation checkpoint (2026-07-17)
+
+PR #58 moved the CLI-only `shadcn` package to development dependencies, pinned patched transitive
+versions of `@hono/node-server` and PostCSS, added grouped Dependabot updates, and added a weekly
+production audit workflow.
+
+Verification: `pnpm audit --prod` reported no known vulnerabilities; `make check` and the production
+build passed; repository inspection confirmed `shadcn` has no runtime imports.
 
 #### Problem
 
@@ -923,17 +1024,18 @@ behavior is still moving would increase conflict and regression risk.
 
 Do not assign overlapping items to concurrent sessions without explicit coordination.
 
-1. **Mutation foundation:** HARD-001 -> HARD-002 -> HARD-004 -> HARD-005
-2. **Valuation:** HARD-003 -> HARD-006 -> HARD-016
-3. **Draft/input boundaries:** HARD-007, then HARD-008 and HARD-009 may run independently
-4. **Mutation UX/recovery:** HARD-010 -> HARD-011
-5. **Safety net:** HARD-012 and HARD-013 can begin early
-6. **Production operations:** HARD-014, HARD-019, HARD-020
-7. **UX/performance:** HARD-015, HARD-017, HARD-018
-8. **Cleanup:** HARD-021 -> HARD-022
+Completed on `main`: HARD-001 through HARD-006, HARD-010, HARD-012, and HARD-013.
 
-The P0 gate is HARD-001 through HARD-004. HARD-003 is specifically a release blocker for
-non-$1,000 drafts; it does not change the current $1,000 league's scale.
+1. **Integrate current draft/input work:** HARD-007
+2. **Input/service boundaries:** HARD-008 and HARD-009 may then run independently
+3. **Mutation recovery:** HARD-011
+4. **Settings truthfulness:** HARD-016
+5. **Production operations:** HARD-014, HARD-019, HARD-020
+6. **UX/performance:** HARD-015, HARD-017, HARD-018
+7. **Cleanup:** HARD-021 -> HARD-022
+
+The original P0 gate, HARD-001 through HARD-004, is complete on `main`. The next integration target
+is HARD-007; its deferred player read-back optimization is not a correctness blocker.
 
 ## Model assignment guidance
 
@@ -946,16 +1048,11 @@ to reasoning risk rather than raw implementation size.
 Use the strongest available model for work where a locally plausible implementation can still be
 subtly wrong across concurrency, migrations, or valuation semantics:
 
-| Items              | Reason                                                                                   |
-| ------------------ | ---------------------------------------------------------------------------------------- |
-| HARD-001, HARD-002 | Shared lifecycle, locking, retry, budget, roster, and worktree-reconciliation invariants |
-| HARD-003           | Auction-economy scaling across fallback values, projections, and future-pick assets      |
-| HARD-005           | Production data audit plus composite relational constraints and migration safety         |
-| HARD-006           | Staging and atomic activation without exposing partial projection value sets             |
-
-HARD-001 and HARD-002 should preferably be handled sequentially by the same strongest-model
-session. They overlap in mutation boundaries and transaction policy, and the session must reconcile
-the useful parts of the existing A/B work without importing their stale branch history.
+The original strongest-model items (HARD-001, HARD-002, HARD-003, HARD-005, and HARD-006) are
+complete and are no longer assignments. Use the strongest model as primary for remaining work only
+when HARD-011 introduces recovery schema/restore semantics, when HARD-007's deferred optimization
+changes projection transaction boundaries, or when a new production migration/concurrency design
+is added to an existing ticket.
 
 ### Default model as implementer, strongest-model review required
 
@@ -963,7 +1060,6 @@ The following items are reasonable default-model assignments when scoped to one 
 their required tests, but their architecture or final diff should be reviewed by the strongest
 available model before merge:
 
-- HARD-004 - canonical statistics and active-value service
 - HARD-007 - draft validation and transaction shortening
 - HARD-009 - Sleeper service and settings hardening
 - HARD-011 - bid audit, export, and recovery design
@@ -979,9 +1075,6 @@ These are sufficiently bounded for a capable default-model session to implement 
 a mandatory strongest-model review beyond the repository's normal PR process:
 
 - HARD-008 - rankings and CSV validation
-- HARD-010 - optimistic mutation UX
-- HARD-012 - CI expansion
-- HARD-013 - dependency remediation
 - HARD-015 - accessibility and contrast
 - HARD-016 - truthful settings labels
 - HARD-018 - URL state and route loading states
@@ -996,8 +1089,10 @@ authentication/security boundaries.
 ## Existing worktree and branch disposition
 
 These findings are based on the branch state observed on 2026-07-16. All three worktrees passed
-their own TypeScript, ESLint, and Jest suites, but that does not make them safe to merge into current
-`main`.
+their own TypeScript, ESLint, and Jest suites, but were not safe to merge into the then-current
+`main`. This section is historical: PR #53 superseded Workstreams A and B, PR #67 completed the
+remaining same-draft constraints associated with A, and PRs #59/#72 completed the broader CI work
+that followed Workstream C.
 
 ### Prior Workstream A - Auction Data Integrity
 
@@ -1006,8 +1101,9 @@ their own TypeScript, ESLint, and Jest suites, but that does not make them safe 
 - **Observed head:** `998828d`
 - **Merge base with main:** `5336269`
 - **Verification:** 73 suites / 584 tests, typecheck, and lint passed
-- **Disposition:** Do not merge or rebase wholesale. Port the useful behavior/tests onto a fresh
-  branch from current `main`.
+- **Disposition:** SUPERSEDED. Do not merge or rebase this branch; its useful behavior was
+  reimplemented and merged through PR #53, with database relationship hardening completed by PR
+  #67.
 
 #### Keep as implementation reference
 
@@ -1029,19 +1125,15 @@ their own TypeScript, ESLint, and Jest suites, but that does not make them safe 
   query-plan reason.
 - The 1,116-line generated re-hardening plan unless it remains useful outside the final PR.
 
-#### Missing work before HARD-001/HARD-002 are complete
+#### Resolution on `main`
 
-- `Number.isSafeInteger` and ID validation.
-- Affordability and roster-capacity enforcement.
-- Transactional status recheck/locking to prevent completion races.
-- ACTIVE gating for nomination/watchlist DELETE and POST routes.
-- ACTIVE gating for Sleeper mapping/catch-up actions added after A's merge base.
-- Typed results instead of message-string coupling.
-- Real-PostgreSQL concurrency tests.
+- PR #53 added safe-integer/ID validation, affordability and roster-capacity enforcement,
+  transactional lifecycle locking, ACTIVE gating across all mutation paths, typed results, and
+  real-PostgreSQL concurrency/rollback tests.
+- PR #67 added the database-level same-draft team/player/owner constraints.
 
-Recommended integration method: create a new branch from freshly pulled `main`, manually port and
-squash the relevant application/test changes, omit the migration, then extend the implementation to
-the full HARD-001/HARD-002 acceptance criteria.
+No integration action remains for this historical worktree; it may be removed after confirming it
+contains no private scratch data worth retaining.
 
 ### Prior Workstream B - Draft Lifecycle Enforcement
 
@@ -1051,8 +1143,8 @@ the full HARD-001/HARD-002 acceptance criteria.
 - **Clean branch/head:** `workstream-b-draft-lifecycle-clean` at `826d2c4`
 - **Merge base with main:** `2bae0dc` for both
 - **Verification:** each passed 65 suites / 531 tests, typecheck, and lint
-- **Disposition:** Use the clean branch only as a UX/test reference. Reimplement on current `main`;
-  do not merge, rebase, or cherry-pick the branch as a unit.
+- **Disposition:** SUPERSEDED. PR #53 reimplemented and merged the lifecycle behavior. Do not merge,
+  rebase, or cherry-pick either historical branch as a unit.
 
 The clean branch is the better historical reference because it removes extraneous generated docs,
 the duplicate migration, and unrelated quality-gate changes. Its useful lifecycle commits are:
@@ -1068,8 +1160,8 @@ Sleeper roster sync/catch-up, and later AuctionSheet/NominationHelper changes. I
 routes are name-based and incompatible with the current identity model. A current implementation
 must also hide/block the newer Sleeper and onboarding mutation paths.
 
-After HARD-001 is reimplemented and verified on current `main`, both B worktrees can be removed.
-Do not remove them before confirming no test scenario or copy detail was missed.
+HARD-001 is complete on `main`; both B worktrees may be removed after confirming they contain no
+private scratch data worth retaining.
 
 ### Prior Workstream C - Quality Gate
 
@@ -1077,23 +1169,23 @@ Do not remove them before confirming no test scenario or copy detail was missed.
 - **Merged commit:** `316c59f` (`Exclude local worktrees from quality checks (#44)`)
 - **Disposition:** COMPLETE. Do not redo it.
 
-The remaining generated `coverage/` lint warning belongs to HARD-012 and is not evidence that
-Workstream C failed.
+PR #59 removed the generated `coverage/` lint warning and expanded the quality gate; PR #72 added
+the remaining browser smoke coverage. No Workstream C follow-up remains.
 
 ---
 
 ## Legacy A-H mapping
 
-| Prior workstream                             | Current disposition                           | Replacement items                      |
-| -------------------------------------------- | --------------------------------------------- | -------------------------------------- |
-| A - Auction Data Integrity                   | Partial branch; manually port and extend      | HARD-002, HARD-005                     |
-| B - Draft Lifecycle Enforcement              | Partial branches; reimplement on current main | HARD-001                               |
-| C - Trustworthy Quality Gate                 | Merged and complete; broader CI remains       | HARD-012                               |
-| D - Mutation Failure & Concurrency UX        | Not implemented                               | HARD-010, HARD-011                     |
-| E - Settings Truthfulness & Navigation State | Not implemented; expanded valuation finding   | HARD-003, HARD-016, HARD-018           |
-| F - Accessibility & Responsive Performance   | Not implemented; expanded                     | HARD-015, HARD-017                     |
-| G - Error, API & External-Service Hardening  | Not implemented; expanded                     | HARD-009, HARD-014, HARD-019           |
-| H - Codebase Simplification                  | Not implemented; split by risk/domain         | HARD-004, HARD-007, HARD-020, HARD-022 |
+| Prior workstream                             | Current disposition                                          | Replacement items                      |
+| -------------------------------------------- | ------------------------------------------------------------ | -------------------------------------- |
+| A - Auction Data Integrity                   | Superseded; replacement work complete on `main`              | HARD-002, HARD-005                     |
+| B - Draft Lifecycle Enforcement              | Superseded; replacement work complete on `main`              | HARD-001                               |
+| C - Trustworthy Quality Gate                 | Complete, including broader CI and browser coverage          | HARD-012                               |
+| D - Mutation Failure & Concurrency UX        | Mutation UX complete; bid recovery remains                   | HARD-010, HARD-011                     |
+| E - Settings Truthfulness & Navigation State | Valuation complete; settings/navigation work remains         | HARD-003, HARD-016, HARD-018           |
+| F - Accessibility & Responsive Performance   | Not implemented; expanded                                    | HARD-015, HARD-017                     |
+| G - Error, API & External-Service Hardening  | Not implemented; expanded                                    | HARD-009, HARD-014, HARD-019           |
+| H - Codebase Simplification                  | Canonical stats complete; HARD-007 ready; other work remains | HARD-004, HARD-007, HARD-020, HARD-022 |
 
-New findings without a direct prior-workstream equivalent are HARD-006, HARD-008, HARD-013, and
-HARD-021.
+New findings without a direct prior-workstream equivalent are HARD-006 (complete), HARD-008
+(ready), HARD-013 (complete), and HARD-021 (ready).

@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { createDraft } from '@/lib/actions';
 import { importFromSleeper } from '@/lib/sleeper-actions';
 import { getRankingSummary, type RankingSummary } from '@/lib/rankings-actions';
+import { reportClientError } from '@/lib/reportClientError';
 import { useNumericField } from '@/lib/useNumericField';
 import { draftInputSchema, MIN_TEAMS, MAX_TEAMS, type DraftInput } from '@/lib/draftInputSchema';
 import type { DraftMutationCode } from '@/lib/draftMutation';
@@ -271,12 +272,19 @@ export default function NewDraftPage() {
     }
 
     startTransition(async () => {
-      const result = await createDraft(parsed.data);
-      if (!result.ok) {
-        setError(describeCreateDraftError(result.code));
-        return;
+      try {
+        const result = await createDraft(parsed.data);
+        if (!result.ok) {
+          setError(describeCreateDraftError(result.code));
+          return;
+        }
+        router.push(`/draft/${result.data.draftId}`);
+      } catch (error) {
+        const reportedError =
+          error instanceof Error ? error : new Error('Unknown draft creation error');
+        reportClientError(reportedError);
+        setError('Draft creation failed. Please try again.');
       }
-      router.push(`/draft/${result.data.draftId}`);
     });
   }
 
@@ -887,6 +895,7 @@ export default function NewDraftPage() {
 
         {error && (
           <p
+            data-testid="draft-form-error"
             style={{
               color: '#e05050',
               fontFamily: 'var(--font-barlow)',

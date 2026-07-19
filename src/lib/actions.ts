@@ -168,7 +168,8 @@ export async function createDraft(
       }))
     : BASE_PLAYERS;
 
-  const nextPickYear = getNextFuturePickYear(new Date());
+  const creationTimestamp = new Date();
+  const nextPickYear = getNextFuturePickYear(creationTimestamp);
   const futurePickAssets = generateFuturePickAssets({
     teams: coerced,
     year: nextPickYear,
@@ -200,6 +201,7 @@ export async function createDraft(
           data: {
             name: input.name,
             ownerId: session.user.id,
+            createdAt: creationTimestamp,
             status: 'ACTIVE',
             teamCount: input.teams.length,
             rosterSize: input.rosterSize,
@@ -271,7 +273,16 @@ export async function createDraft(
         stageMark = logStage(stageMark, 'projection-application');
 
         if (ownerDraftCount === 0) {
-          const transition = await tx.onboardingProgress.updateMany({
+          await tx.onboardingProgress.createMany({
+            data: {
+              userId: session.user.id,
+              phase: 'FEATURE_TOUR',
+              draftId: draft.id,
+              step: 'VALUE_SHEET_INTRO',
+            },
+            skipDuplicates: true,
+          });
+          await tx.onboardingProgress.updateMany({
             where: { userId: session.user.id, phase: 'DRAFT_SETUP' },
             data: {
               phase: 'FEATURE_TOUR',
@@ -280,21 +291,6 @@ export async function createDraft(
               subjectPlayerName: null,
             },
           });
-          if (transition.count === 0) {
-            const onboarding = await tx.onboardingProgress.findUnique({
-              where: { userId: session.user.id },
-            });
-            if (!onboarding) {
-              await tx.onboardingProgress.create({
-                data: {
-                  userId: session.user.id,
-                  phase: 'FEATURE_TOUR',
-                  draftId: draft.id,
-                  step: 'VALUE_SHEET_INTRO',
-                },
-              });
-            }
-          }
         }
         logStage(stageMark, 'onboarding-transition');
 

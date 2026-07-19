@@ -1,6 +1,6 @@
 import { createDraft } from '@/lib/actions';
-import type { StartingSlot } from '@/types';
 import { players as BASE_PLAYERS } from '@/data/players';
+import type { DraftInput } from '@/lib/draftInputSchema';
 import { normalizeName } from '@/lib/sleeperNormalize';
 
 const mockAuth = jest.fn();
@@ -15,8 +15,7 @@ const mockTxDraftCount = jest.fn();
 const mockTxDraftUpdate = jest.fn();
 const mockTxTeamCreateManyAndReturn = jest.fn();
 const mockTxPlayerCreateMany = jest.fn().mockResolvedValue({ count: 270 });
-const mockTxOnboardingFindUnique = jest.fn();
-const mockTxOnboardingCreate = jest.fn();
+const mockTxOnboardingCreateMany = jest.fn();
 const mockTxOnboardingUpdateMany = jest.fn();
 const mockTxExecuteRaw = jest.fn();
 const mockTx = {
@@ -25,8 +24,7 @@ const mockTx = {
   team: { createManyAndReturn: (...args: unknown[]) => mockTxTeamCreateManyAndReturn(...args) },
   player: { createMany: mockTxPlayerCreateMany },
   onboardingProgress: {
-    create: mockTxOnboardingCreate,
-    findUnique: mockTxOnboardingFindUnique,
+    createMany: mockTxOnboardingCreateMany,
     updateMany: mockTxOnboardingUpdateMany,
   },
 };
@@ -49,24 +47,13 @@ jest.mock('@/lib/projectionApplication', () => ({
 const MOCK_SESSION = { user: { id: '123456789', name: 'Cole' } };
 const MOCK_DRAFT_CREATED_AT = new Date('2026-07-10T12:00:00.000Z');
 
-const VALID_INPUT = {
+const VALID_INPUT: DraftInput = {
   name: "Cole's Draft 2025",
   budgetPerTeam: 1000,
   rosterSize: 30,
-  futurePickAuctionMode: 'packages' as const,
+  futurePickAuctionMode: 'packages',
   targetRoster: { QB: 4, RB: 9, WR: 11, TE: 3 },
-  startingLineup: [
-    'QB',
-    'RB',
-    'RB',
-    'WR',
-    'WR',
-    'TE',
-    'FLEX',
-    'FLEX',
-    'FLEX',
-    'SUPER_FLEX',
-  ] as StartingSlot[],
+  startingLineup: ['QB', 'RB', 'RB', 'WR', 'WR', 'TE', 'FLEX', 'FLEX', 'FLEX', 'SUPER_FLEX'],
   scoringSettings: {
     passYdsPerPoint: 25,
     passTD: 4,
@@ -102,8 +89,7 @@ beforeEach(() => {
   mockTxDraftUpdate.mockResolvedValue({});
   mockApplyProjectionValuesToDraft.mockResolvedValue({ projectionSourceId: 7, appliedCount: 250 });
   mockTxExecuteRaw.mockResolvedValue(1);
-  mockTxOnboardingCreate.mockResolvedValue({});
-  mockTxOnboardingFindUnique.mockResolvedValue(null);
+  mockTxOnboardingCreateMany.mockResolvedValue({ count: 1 });
   mockTxOnboardingUpdateMany.mockResolvedValue({ count: 0 });
   mockRankingSetFindUnique.mockResolvedValue(null);
   mockSleeperPlayerFindMany.mockResolvedValue([
@@ -209,6 +195,27 @@ describe('createDraft — auth and validation gate', () => {
 });
 
 describe('createDraft — happy path', () => {
+  it('persists the timestamp used to derive future-pick years', async () => {
+    const creationTimestamp = new Date('2026-12-31T23:59:59.999Z');
+    jest.setSystemTime(creationTimestamp);
+    mockTxDraftCreate.mockResolvedValue({
+      id: 5,
+      createdAt: new Date('2027-01-01T00:00:00.001Z'),
+    });
+
+    await createDraft(VALID_INPUT);
+
+    expect(mockTxDraftCreate).toHaveBeenCalledWith({
+      data: expect.objectContaining({ createdAt: creationTimestamp }),
+    });
+    const playerRows = mockTxPlayerCreateMany.mock.calls[0][0].data as Array<{
+      futurePickYear: number | null;
+    }>;
+    expect(playerRows.filter((player) => player.futurePickYear !== null)).toEqual(
+      expect.arrayContaining([expect.objectContaining({ futurePickYear: 2027 })]),
+    );
+  });
+
   it('creates the draft inside the transaction and returns its id', async () => {
     const result = await createDraft(VALID_INPUT);
     expect(result).toEqual({ ok: true, data: { draftId: 5 } });
@@ -216,6 +223,7 @@ describe('createDraft — happy path', () => {
       data: {
         name: "Cole's Draft 2025",
         ownerId: '123456789',
+        createdAt: MOCK_DRAFT_CREATED_AT,
         status: 'ACTIVE',
         teamCount: 2,
         rosterSize: 30,
@@ -338,6 +346,15 @@ describe('createDraft — happy path', () => {
     mockTxOnboardingUpdateMany.mockResolvedValue({ count: 1 });
     await createDraft(VALID_INPUT);
     expect(mockTxDraftCount).toHaveBeenCalledWith({ where: { ownerId: '123456789' } });
+    expect(mockTxOnboardingCreateMany).toHaveBeenCalledWith({
+      data: {
+        userId: '123456789',
+        phase: 'FEATURE_TOUR',
+        draftId: 5,
+        step: 'VALUE_SHEET_INTRO',
+      },
+      skipDuplicates: true,
+    });
     expect(mockTxOnboardingUpdateMany).toHaveBeenCalledWith({
       where: { userId: '123456789', phase: 'DRAFT_SETUP' },
       data: {
@@ -347,30 +364,9 @@ describe('createDraft — happy path', () => {
         subjectPlayerName: null,
       },
     });
-  });
-
-  it('creates a feature tour when the first-draft owner has no onboarding progress', async () => {
-    await createDraft(VALID_INPUT);
-    expect(mockTxOnboardingCreate).toHaveBeenCalledWith({
-      data: {
-        userId: '123456789',
-        phase: 'FEATURE_TOUR',
-        draftId: 5,
-        step: 'VALUE_SHEET_INTRO',
-      },
-    });
-  });
-
-  it('preserves an existing feature tour for the first draft', async () => {
-    mockTxOnboardingFindUnique.mockResolvedValue({ phase: 'FEATURE_TOUR', draftId: 4 });
-    await createDraft(VALID_INPUT);
-    expect(mockTxOnboardingCreate).not.toHaveBeenCalled();
-  });
-
-  it('preserves completed onboarding for the first draft', async () => {
-    mockTxOnboardingFindUnique.mockResolvedValue({ phase: 'COMPLETED' });
-    await createDraft(VALID_INPUT);
-    expect(mockTxOnboardingCreate).not.toHaveBeenCalled();
+    expect(mockTxOnboardingCreateMany.mock.invocationCallOrder[0]).toBeLessThan(
+      mockTxOnboardingUpdateMany.mock.invocationCallOrder[0],
+    );
   });
 
   it('serializes a user’s first-draft eligibility check with an advisory transaction lock', async () => {

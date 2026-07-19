@@ -19,6 +19,7 @@ const makeTeam = (over: Partial<TeamWithRoster> = {}): TeamWithRoster => ({
   results: [
     {
       id: 1,
+      playerId: 1,
       player: 'Patrick Mahomes',
       position: 'QB',
       nflTeam: 'KC',
@@ -30,6 +31,7 @@ const makeTeam = (over: Partial<TeamWithRoster> = {}): TeamWithRoster => ({
     },
     {
       id: 2,
+      playerId: 2,
       player: 'Matt Gay',
       position: 'PKG',
       nflTeam: 'MIN',

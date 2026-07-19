@@ -12,6 +12,12 @@ import {
 } from '@/lib/projectionMarketValue';
 import { calculateProjectedPoints, type ProjectionStats } from '@/lib/projectionScoring';
 import { calculateProjectionValues, type ProjectionValueInput } from '@/lib/projectionVor';
+import {
+  activateProjectionValueSet,
+  markProjectionValueSetFailed,
+  ProjectionApplicationFailure,
+  pruneProjectionValueSetRows,
+} from '@/lib/projectionValueSet';
 
 export type VorPosition = 'QB' | 'RB' | 'WR' | 'TE';
 
@@ -70,6 +76,7 @@ interface DraftPlayerValueWrite extends DraftPlayerValueData {
   draftId: number;
   playerId: number;
   projectionSourceId: number;
+  valueSetId: number;
 }
 
 interface StoredProjectionRow {
@@ -116,6 +123,10 @@ export interface ProjectionApplyPrisma {
       scoringSettings: unknown;
       targetRoster: unknown;
     } | null>;
+    update(args: {
+      where: { id: number };
+      data: { activeProjectionValueSetId: number };
+    }): Promise<unknown>;
   };
   projectionSource: {
     findFirst(args: {
@@ -127,38 +138,48 @@ export interface ProjectionApplyPrisma {
       where: { draftId: number };
       select: { id: true; name: true; pos: true; sleeperId: true; budget: true };
     }): Promise<PlayerJoinRow[]>;
-    update(args: { where: { id: number }; data: { sleeperId: string } }): unknown;
+    update(args: { where: { id: number }; data: { sleeperId: string } }): Promise<unknown>;
   };
   playerProjection: {
     findMany(args: { where: { projectionSourceId: number } }): Promise<StoredProjectionRow[]>;
   };
-  draftPlayerValue: {
-    deleteMany(args: { where: DraftPlayerValueDeleteWhere }): unknown;
-    upsert(args: {
-      where: {
-        draftId_playerId_projectionSourceId: {
-          draftId: number;
-          playerId: number;
-          projectionSourceId: number;
-        };
+  draftProjectionValueSet: {
+    create(args: {
+      data: {
+        draftId: number;
+        projectionSourceId: number;
+        status: 'STAGING';
+        expectedPlayerCount: number;
       };
-      create: DraftPlayerValueWrite;
-      update: DraftPlayerValueData;
-    }): unknown;
+      select: { id: true };
+    }): Promise<{ id: number }>;
+    findUnique: (...args: never[]) => Promise<unknown>;
+    findMany: (...args: never[]) => Promise<unknown>;
+    updateMany: (...args: never[]) => Promise<unknown>;
   };
-  $transaction?(operations: unknown[], options?: { timeout: number }): Promise<unknown[]>;
+  draftPlayerValue: {
+    createMany(args: { data: DraftPlayerValueWrite[] }): Promise<{ count: number }>;
+    deleteMany: (...args: never[]) => Promise<unknown>;
+    count: (...args: never[]) => Promise<number>;
+  };
+  $transaction?<T>(
+    operation: (tx: ProjectionApplyPrisma) => Promise<T>,
+    options?: { timeout: number },
+  ): Promise<T>;
 }
 
 export interface ApplyProjectionValuesOptions {
   draftId: number;
   projectionSourceId?: number;
   etrMatches?: Map<string, string>;
-  useBatchTransaction?: boolean;
+  mode?: 'staged' | 'transaction';
 }
 
 export interface ApplyProjectionValuesResult {
+  valueSetId: number;
   projectionSourceId: number;
   appliedCount: number;
+  activatedAt: Date;
 }
 
 const WRITE_BATCH_SIZE = 50;
@@ -184,7 +205,9 @@ export async function applyProjectionValuesToDraft(
 
   const projectionSourceId =
     options.projectionSourceId ?? (await getLatestProjectionSourceId(prisma));
-  if (projectionSourceId === null) throw new Error('No projection source found');
+  if (projectionSourceId === null) {
+    throw new ProjectionApplicationFailure('NO_PROJECTION_SOURCE', 'No projection source found');
+  }
 
   const scoringSettings = toScoringSettings(draft.scoringSettings);
   const players = await prisma.player.findMany({
@@ -194,15 +217,13 @@ export async function applyProjectionValuesToDraft(
   const playersWithSleeperIds = resolvePlayerSleeperIds(players, options.etrMatches ?? new Map());
 
   for (const batch of chunk(getSleeperIdUpdates(playersWithSleeperIds), WRITE_BATCH_SIZE)) {
-    await runWriteBatch(
-      prisma,
+    await Promise.all(
       batch.map((player) =>
         prisma.player.update({
           where: { id: player.id },
           data: { sleeperId: player.sleeperId },
         }),
       ),
-      options.useBatchTransaction,
     );
   }
 
@@ -215,7 +236,10 @@ export async function applyProjectionValuesToDraft(
     scoringSettings,
   );
   if (joined.length === 0) {
-    throw new Error(`No projection values could be applied to draft ${draft.id}`);
+    throw new ProjectionApplicationFailure(
+      'NO_JOINED_PLAYERS',
+      `No projection values could be applied to draft ${draft.id}`,
+    );
   }
 
   const projectionInputs: ProjectionValueInput[] = joined.map((row) => ({
@@ -249,57 +273,131 @@ export async function applyProjectionValuesToDraft(
   });
   const marketValuesBySleeperId = new Map(marketValues.map((value) => [value.sleeperId, value]));
 
-  const writes = joined.flatMap((row) => {
+  const candidateRows = joined.flatMap((row) => {
     const value = valuesBySleeperId.get(row.sleeperId);
     const marketValue = marketValuesBySleeperId.get(row.sleeperId);
     if (!value || !marketValue) return [];
     const data = buildDraftPlayerValueData(row, value, marketValue);
-    return [
-      prisma.draftPlayerValue.upsert({
-        where: {
-          draftId_playerId_projectionSourceId: {
-            draftId: draft.id,
-            playerId: row.playerId,
-            projectionSourceId,
-          },
-        },
-        create: {
-          draftId: draft.id,
-          playerId: row.playerId,
-          projectionSourceId,
-          ...data,
-        },
-        update: data,
-      }),
-    ];
+    return [{ draftId: draft.id, playerId: row.playerId, projectionSourceId, ...data }];
   });
 
-  if (writes.length === 0) {
-    throw new Error(`No projection values could be applied to draft ${draft.id}`);
+  if (candidateRows.length === 0) {
+    throw new ProjectionApplicationFailure(
+      'NO_JOINED_PLAYERS',
+      `No projection values could be applied to draft ${draft.id}`,
+    );
+  }
+  assertFiniteCandidateRows(candidateRows);
+
+  let valueSet: { id: number };
+  try {
+    valueSet = await prisma.draftProjectionValueSet.create({
+      data: {
+        draftId: draft.id,
+        projectionSourceId,
+        status: 'STAGING',
+        expectedPlayerCount: candidateRows.length,
+      },
+      select: { id: true },
+    });
+  } catch (error) {
+    throw new ProjectionApplicationFailure(
+      'PERSISTENCE_FAILURE',
+      `Failed to create a projection value set for draft ${draft.id}: ${toErrorMessage(error)}`,
+      { cause: error },
+    );
   }
 
-  await prisma.draftPlayerValue.deleteMany({
-    where: buildStaleDraftPlayerValueDeleteWhere(draft.id, projectionSourceId, joined),
-  });
+  try {
+    for (const batch of chunk(candidateRows, WRITE_BATCH_SIZE)) {
+      await prisma.draftPlayerValue.createMany({
+        data: batch.map((row) => ({ ...row, valueSetId: valueSet.id })),
+      });
+    }
 
-  for (const batch of chunk(writes, WRITE_BATCH_SIZE)) {
-    await runWriteBatch(prisma, batch, options.useBatchTransaction);
+    const activationInput = {
+      draftId: draft.id,
+      valueSetId: valueSet.id,
+      projectionSourceId,
+    };
+    const activated =
+      options.mode === 'transaction'
+        ? await activateProjectionValueSet(prisma as never, activationInput)
+        : await requireProjectionTransaction(prisma)(
+            (tx) => activateProjectionValueSet(tx as never, activationInput),
+            { timeout: WRITE_TRANSACTION_TIMEOUT_MS },
+          );
+
+    if (options.mode !== 'transaction') {
+      try {
+        await pruneProjectionValueSetRows(prisma as never, draft.id);
+      } catch (error) {
+        console.error(`Failed to prune projection value rows for draft ${draft.id}`, error);
+      }
+    }
+    return activated;
+  } catch (error) {
+    const failure =
+      error instanceof ProjectionApplicationFailure
+        ? error
+        : new ProjectionApplicationFailure(
+            'PERSISTENCE_FAILURE',
+            `Failed to persist projection values for draft ${draft.id}: ${toErrorMessage(error)}`,
+            { cause: error },
+          );
+    if (options.mode !== 'transaction') {
+      try {
+        await requireProjectionTransaction(prisma)(
+          (tx) =>
+            markProjectionValueSetFailed(tx as never, {
+              draftId: draft.id,
+              valueSetId: valueSet.id,
+              code: failure.code,
+              message: failure.message,
+            }),
+          { timeout: WRITE_TRANSACTION_TIMEOUT_MS },
+        );
+      } catch (cleanupError) {
+        console.error(`Failed to clean projection value set ${valueSet.id}`, cleanupError);
+      }
+    }
+    throw failure;
   }
-
-  return { projectionSourceId, appliedCount: joined.length };
 }
 
-async function runWriteBatch(
+function toErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function requireProjectionTransaction(
   prisma: ProjectionApplyPrisma,
-  operations: unknown[],
-  useBatchTransaction = true,
-): Promise<void> {
-  if (operations.length === 0) return;
-  if (useBatchTransaction && prisma.$transaction) {
-    await prisma.$transaction(operations, { timeout: WRITE_TRANSACTION_TIMEOUT_MS });
-    return;
+): NonNullable<ProjectionApplyPrisma['$transaction']> {
+  if (!prisma.$transaction) {
+    throw new ProjectionApplicationFailure(
+      'PERSISTENCE_FAILURE',
+      'Staged projection application requires a transaction-capable Prisma client',
+    );
   }
-  await Promise.all(operations);
+  return prisma.$transaction.bind(prisma);
+}
+
+function assertFiniteCandidateRows(rows: Array<Omit<DraftPlayerValueWrite, 'valueSetId'>>): void {
+  for (const row of rows) {
+    const numericValues = [
+      row.projectedPoints,
+      row.replacementPoints,
+      row.vor,
+      row.projectionAuctionValue,
+      row.fallbackAuctionValue,
+      row.activeAuctionValue,
+    ].filter((value): value is number => value !== null);
+    if (numericValues.some((value) => !Number.isFinite(value))) {
+      throw new ProjectionApplicationFailure(
+        'INVALID_CALCULATION',
+        `Projection calculation produced an invalid value for player ${row.playerId}`,
+      );
+    }
+  }
 }
 
 async function getLatestProjectionSourceId(prisma: ProjectionApplyPrisma): Promise<number | null> {

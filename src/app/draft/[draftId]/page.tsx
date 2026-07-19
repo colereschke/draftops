@@ -78,7 +78,7 @@ export default async function DraftHomePage({ params }: { params: Promise<{ draf
       players={players}
       claimedBids={claimedBids}
       teams={teams as LeagueTeam[]}
-      nominatedPlayers={nominatedEntries.flatMap((e) => (e.playerId === null ? [] : [e.playerId]))}
+      nominatedPlayers={nominatedEntries.map((entry) => entry.playerId)}
       draftId={draftId}
       ownerHandle={draft.ownerTeam?.handle ?? null}
       ownerBudget={draft.ownerTeam?.budget ?? 1000}

@@ -66,7 +66,7 @@ export interface TeamStats {
 
 export interface AuctionResultEntry {
   id: number;
-  playerId?: number | null;
+  playerId: number;
   player: string;
   position: string;
   nflTeam: string;
@@ -79,7 +79,7 @@ export interface AuctionResultEntry {
 
 export interface RosterEntry {
   id: number;
-  playerId?: number | null;
+  playerId: number;
   player: string;
   position: string;
   nflTeam: string;
@@ -96,7 +96,7 @@ export interface TeamWithRoster extends TeamStats {
 
 export interface ClaimedBid {
   id: number;
-  playerId?: number | null;
+  playerId: number;
   player: string;
   position: string;
   price: number;

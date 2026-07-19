@@ -2,6 +2,7 @@ import { computeNominationScores } from '@/lib/nominationScoring';
 import type { Player, TeamStats, AuctionResultEntry } from '@/types';
 
 const makePlayer = (overrides: Partial<Player> = {}): Player => ({
+  id: 1000,
   player: 'Test Player',
   team: 'TST',
   pos: 'WR',
@@ -31,6 +32,7 @@ const makeTeamStat = (overrides: Partial<TeamStats> = {}): TeamStats => ({
 
 const makeResult = (overrides: Partial<AuctionResultEntry> = {}): AuctionResultEntry => ({
   id: 1,
+  playerId: 1,
   player: 'Won Player',
   position: 'WR',
   nflTeam: 'TST',
@@ -45,7 +47,7 @@ const makeResult = (overrides: Partial<AuctionResultEntry> = {}): AuctionResultE
 describe('computeNominationScores', () => {
   it('excludes players already won at auction', () => {
     const player = makePlayer({ player: 'Already Won' });
-    const result = makeResult({ player: 'Already Won' });
+    const result = makeResult({ playerId: 1000, player: 'Already Won' });
     const scores = computeNominationScores(
       [player],
       [makeTeamStat()],
@@ -168,7 +170,7 @@ describe('computeNominationScores', () => {
     const player = makePlayer({ player: 'QB5', pos: 'QB', ceiling: 50 });
     const rival = makeTeamStat({ id: 2, handle: 'rival1' });
     const wonQBs = [1, 2, 3, 4].map((n) =>
-      makeResult({ id: n, player: `QB${n}`, position: 'QB', teamId: 2 }),
+      makeResult({ id: n, playerId: n, player: `QB${n}`, position: 'QB', teamId: 2 }),
     );
     const scores = computeNominationScores([player], [rival], wonQBs, [], [], 'coreschke', {
       QB: 4,
@@ -184,7 +186,7 @@ describe('computeNominationScores', () => {
     const player = makePlayer({ player: 'Target QB', pos: 'QB', ceiling: 100 });
     const rival = makeTeamStat({ id: 3, handle: 'rival1', buyingPower: 400 });
     const wonQBs = [1, 2].map((n) =>
-      makeResult({ id: n, player: `QB${n}`, position: 'QB', teamId: 3 }),
+      makeResult({ id: n, playerId: n, player: `QB${n}`, position: 'QB', teamId: 3 }),
     );
     const scores = computeNominationScores([player], [rival], wonQBs, [], [], 'coreschke', {
       QB: 4,
@@ -231,7 +233,7 @@ describe('computeNominationScores', () => {
     // rival2 has met QB target — contributes 0
     const rival2 = makeTeamStat({ id: 2, handle: 'rival2', buyingPower: 500 });
     const wonQBs = [1, 2, 3, 4].map((n) =>
-      makeResult({ id: n, player: `QB${n}`, position: 'QB', teamId: 2 }),
+      makeResult({ id: n, playerId: n, player: `QB${n}`, position: 'QB', teamId: 2 }),
     );
     const scores = computeNominationScores(
       [player],

@@ -11,6 +11,7 @@ interface RelationshipFixture {
   first: DraftFixture;
   second: DraftFixture;
   projectionSourceId: number;
+  valueSetId: number;
 }
 
 interface QueryPlanNode {
@@ -64,7 +65,19 @@ async function createFixture(): Promise<RelationshipFixture> {
       data: { name: `hard-005-${crypto.randomUUID()}`, season: 2026 },
     }),
   ]);
-  return { first, second, projectionSourceId: projectionSource.id };
+  const valueSet = await prisma.draftProjectionValueSet.create({
+    data: {
+      draftId: first.draftId,
+      projectionSourceId: projectionSource.id,
+      expectedPlayerCount: 1,
+    },
+  });
+  return {
+    first,
+    second,
+    projectionSourceId: projectionSource.id,
+    valueSetId: valueSet.id,
+  };
 }
 
 function bidData(input: { draftId: number; teamId: number; playerId: number; playerName: string }) {
@@ -103,6 +116,7 @@ async function deleteFixture(fixture: RelationshipFixture): Promise<void> {
   await prisma.draftPlayerValue.deleteMany({
     where: { OR: [{ draftId: { in: draftIds } }, { playerId: { in: playerIds } }] },
   });
+  await prisma.draftProjectionValueSet.deleteMany({ where: { id: fixture.valueSetId } });
   await prisma.draft.updateMany({
     where: { id: { in: draftIds } },
     data: { ownerTeamId: null },
@@ -194,6 +208,7 @@ describe('same-draft relationships against PostgreSQL', () => {
           draftId: fixture.first.draftId,
           playerId: fixture.second.playerId,
           projectionSourceId: fixture.projectionSourceId,
+          valueSetId: fixture.valueSetId,
           fallbackAuctionValue: 10,
           activeAuctionValue: 10,
         },
@@ -242,6 +257,7 @@ describe('same-draft relationships against PostgreSQL', () => {
           draftId: fixture.first.draftId,
           playerId: fixture.first.playerId,
           projectionSourceId: fixture.projectionSourceId,
+          valueSetId: fixture.valueSetId,
           fallbackAuctionValue: 10,
           activeAuctionValue: 10,
         },

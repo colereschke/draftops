@@ -1,22 +1,37 @@
 import { applyProjectionValuesToDraft } from '@/lib/projectionApplication';
 
+jest.mock('@/lib/draftLock', () => ({ lockDraftForMutation: jest.fn() }));
+
 const mockDraftFindUnique = jest.fn();
+const mockDraftUpdate = jest.fn();
 const mockProjectionSourceFindFirst = jest.fn();
 const mockPlayerFindMany = jest.fn();
 const mockPlayerUpdate = jest.fn();
 const mockPlayerProjectionFindMany = jest.fn();
+const mockValueSetCreate = jest.fn();
+const mockValueSetFindUnique = jest.fn();
+const mockValueSetFindMany = jest.fn();
+const mockValueSetUpdateMany = jest.fn();
+const mockDraftPlayerValueCreateMany = jest.fn();
 const mockDraftPlayerValueDeleteMany = jest.fn();
-const mockDraftPlayerValueUpsert = jest.fn();
+const mockDraftPlayerValueCount = jest.fn();
 const mockTransaction = jest.fn();
 
 const prisma = {
-  draft: { findUnique: mockDraftFindUnique },
+  draft: { findUnique: mockDraftFindUnique, update: mockDraftUpdate },
   projectionSource: { findFirst: mockProjectionSourceFindFirst },
   player: { findMany: mockPlayerFindMany, update: mockPlayerUpdate },
   playerProjection: { findMany: mockPlayerProjectionFindMany },
+  draftProjectionValueSet: {
+    create: mockValueSetCreate,
+    findUnique: mockValueSetFindUnique,
+    findMany: mockValueSetFindMany,
+    updateMany: mockValueSetUpdateMany,
+  },
   draftPlayerValue: {
+    createMany: mockDraftPlayerValueCreateMany,
     deleteMany: mockDraftPlayerValueDeleteMany,
-    upsert: mockDraftPlayerValueUpsert,
+    count: mockDraftPlayerValueCount,
   },
   $transaction: mockTransaction,
 };
@@ -46,13 +61,10 @@ const draft = {
 
 beforeEach(() => {
   jest.clearAllMocks();
-  mockDraftFindUnique.mockResolvedValue(draft);
-  mockProjectionSourceFindFirst.mockResolvedValue({
-    id: 7,
-    name: 'mike_clay',
-    season: 2026,
-    projectionDate: new Date('2026-06-01T00:00:00.000Z'),
-  });
+  mockDraftFindUnique.mockImplementation(async (args) =>
+    args.select.activeProjectionValueSetId ? { activeProjectionValueSetId: 10 } : draft,
+  );
+  mockProjectionSourceFindFirst.mockResolvedValue({ id: 7 });
   mockPlayerFindMany.mockResolvedValue([
     { id: 1, name: 'Josh Allen', pos: 'QB', sleeperId: '10', budget: 255 },
     { id: 2, name: 'Missing Projection', pos: 'WR', sleeperId: null, budget: 20 },
@@ -80,94 +92,139 @@ beforeEach(() => {
       isRookie: false,
     },
   ]);
-  mockTransaction.mockImplementation(async (operations) => Promise.all(operations));
+  mockValueSetCreate.mockResolvedValue({ id: 11 });
+  mockValueSetFindUnique.mockResolvedValue({
+    id: 11,
+    draftId: 5,
+    projectionSourceId: 7,
+    status: 'STAGING',
+    expectedPlayerCount: 1,
+  });
+  mockValueSetFindMany.mockResolvedValue([]);
+  mockValueSetUpdateMany.mockResolvedValue({ count: 1 });
+  mockDraftPlayerValueCreateMany.mockResolvedValue({ count: 1 });
   mockDraftPlayerValueDeleteMany.mockResolvedValue({ count: 0 });
-  mockDraftPlayerValueUpsert.mockResolvedValue({});
+  mockDraftPlayerValueCount.mockResolvedValue(1);
+  mockDraftUpdate.mockResolvedValue({});
+  mockPlayerUpdate.mockResolvedValue({});
+  mockTransaction.mockImplementation(async (operation) => operation(prisma));
 });
 
-it('applies the latest stored projection source to a draft', async () => {
+it('stages and activates the latest stored projection source', async () => {
   const result = await applyProjectionValuesToDraft(prisma, { draftId: 5 });
 
-  expect(result).toEqual({ projectionSourceId: 7, appliedCount: 1 });
-  expect(mockProjectionSourceFindFirst).toHaveBeenCalledWith({
-    orderBy: [{ projectionDate: 'desc' }, { updatedAt: 'desc' }, { id: 'desc' }],
+  expect(mockValueSetCreate).toHaveBeenCalledWith({
+    data: {
+      draftId: 5,
+      projectionSourceId: 7,
+      status: 'STAGING',
+      expectedPlayerCount: 1,
+    },
+    select: { id: true },
   });
-  expect(mockPlayerProjectionFindMany).toHaveBeenCalledWith({
-    where: { projectionSourceId: 7 },
+  expect(mockDraftPlayerValueCreateMany).toHaveBeenCalledWith({
+    data: [
+      expect.objectContaining({
+        draftId: 5,
+        playerId: 1,
+        projectionSourceId: 7,
+        valueSetId: 11,
+      }),
+    ],
   });
-  expect(mockDraftPlayerValueDeleteMany).toHaveBeenCalledWith({
-    where: { draftId: 5, projectionSourceId: 7, playerId: { notIn: [1] } },
+  expect(result).toEqual({
+    valueSetId: 11,
+    projectionSourceId: 7,
+    appliedCount: 1,
+    activatedAt: expect.any(Date),
   });
-  expect(mockDraftPlayerValueUpsert).toHaveBeenCalledWith(
-    expect.objectContaining({
-      where: {
-        draftId_playerId_projectionSourceId: {
-          draftId: 5,
-          playerId: 1,
-          projectionSourceId: 7,
-        },
-      },
-    }),
-  );
+  expect(mockTransaction).toHaveBeenCalledTimes(1);
+});
 
-  mockPlayerFindMany.mockResolvedValue([
-    { id: 1, name: 'Josh Allen', pos: 'QB', sleeperId: '10', budget: 51 },
-  ]);
+it('creates a distinct immutable set when reapplying the same source', async () => {
+  mockValueSetCreate.mockResolvedValueOnce({ id: 11 }).mockResolvedValueOnce({ id: 12 });
+  mockValueSetFindUnique
+    .mockResolvedValueOnce({
+      id: 11,
+      draftId: 5,
+      projectionSourceId: 7,
+      status: 'STAGING',
+      expectedPlayerCount: 1,
+    })
+    .mockResolvedValueOnce({
+      id: 12,
+      draftId: 5,
+      projectionSourceId: 7,
+      status: 'STAGING',
+      expectedPlayerCount: 1,
+    });
+
+  await applyProjectionValuesToDraft(prisma, { draftId: 5 });
   await applyProjectionValuesToDraft(prisma, { draftId: 5 });
 
-  expect(mockDraftPlayerValueUpsert).toHaveBeenLastCalledWith(
-    expect.objectContaining({
-      create: expect.objectContaining({
-        fallbackAuctionValue: 51,
-        activeAuctionValue: 51,
-      }),
-      update: expect.objectContaining({
-        fallbackAuctionValue: 51,
-        activeAuctionValue: 51,
-      }),
-    }),
+  expect(mockValueSetCreate).toHaveBeenCalledTimes(2);
+  expect(mockDraftPlayerValueCreateMany).toHaveBeenNthCalledWith(
+    1,
+    expect.objectContaining({ data: [expect.objectContaining({ valueSetId: 11 })] }),
+  );
+  expect(mockDraftPlayerValueCreateMany).toHaveBeenNthCalledWith(
+    2,
+    expect.objectContaining({ data: [expect.objectContaining({ valueSetId: 12 })] }),
   );
 });
 
-it('applies values when called with a transaction client', async () => {
-  const transactionPrisma = {
-    draft: prisma.draft,
-    projectionSource: prisma.projectionSource,
-    player: prisma.player,
-    playerProjection: prisma.playerProjection,
-    draftPlayerValue: prisma.draftPlayerValue,
-  };
-
-  const result = await applyProjectionValuesToDraft(transactionPrisma, { draftId: 5 });
-
-  expect(result).toEqual({ projectionSourceId: 7, appliedCount: 1 });
-  expect(mockDraftPlayerValueUpsert).toHaveBeenCalledTimes(1);
-  expect(mockTransaction).not.toHaveBeenCalled();
-});
-
-it('can skip batch transactions when running inside an outer transaction', async () => {
+it('activates inside a caller-owned transaction without opening a nested transaction', async () => {
   const result = await applyProjectionValuesToDraft(prisma, {
     draftId: 5,
-    useBatchTransaction: false,
+    mode: 'transaction',
   });
 
-  expect(result).toEqual({ projectionSourceId: 7, appliedCount: 1 });
-  expect(mockDraftPlayerValueUpsert).toHaveBeenCalledTimes(1);
+  expect(result).toMatchObject({ valueSetId: 11, projectionSourceId: 7, appliedCount: 1 });
   expect(mockTransaction).not.toHaveBeenCalled();
 });
 
-it('throws when no projection source exists', async () => {
+it('throws a typed failure when no projection source exists', async () => {
   mockProjectionSourceFindFirst.mockResolvedValue(null);
 
-  await expect(applyProjectionValuesToDraft(prisma, { draftId: 5 })).rejects.toThrow(
-    'No projection source found',
-  );
+  await expect(applyProjectionValuesToDraft(prisma, { draftId: 5 })).rejects.toMatchObject({
+    code: 'NO_PROJECTION_SOURCE',
+  });
 });
 
-it('throws when no draft players can be joined to projections', async () => {
+it('throws a typed failure before staging when no players join the source', async () => {
   mockPlayerProjectionFindMany.mockResolvedValue([]);
 
-  await expect(applyProjectionValuesToDraft(prisma, { draftId: 5 })).rejects.toThrow(
-    'No projection values could be applied to draft 5',
+  await expect(applyProjectionValuesToDraft(prisma, { draftId: 5 })).rejects.toMatchObject({
+    code: 'NO_JOINED_PLAYERS',
+  });
+  expect(mockValueSetCreate).not.toHaveBeenCalled();
+});
+
+it('marks a staged root-client candidate failed when persistence rejects', async () => {
+  mockDraftPlayerValueCreateMany.mockRejectedValue(new Error('write failed'));
+
+  await expect(applyProjectionValuesToDraft(prisma, { draftId: 5 })).rejects.toMatchObject({
+    code: 'PERSISTENCE_FAILURE',
+  });
+  expect(mockDraftPlayerValueDeleteMany).toHaveBeenCalledWith({
+    where: { draftId: 5, valueSetId: 11 },
+  });
+  expect(mockValueSetUpdateMany).toHaveBeenCalledWith(
+    expect.objectContaining({
+      where: { id: 11, draftId: 5, status: 'STAGING' },
+      data: expect.objectContaining({ status: 'FAILED', failureCode: 'PERSISTENCE_FAILURE' }),
+    }),
   );
+  expect(mockTransaction).toHaveBeenCalledTimes(1);
+});
+
+it('returns a typed persistence failure when candidate creation rejects', async () => {
+  mockValueSetCreate.mockRejectedValue(new Error('set create failed'));
+
+  await expect(applyProjectionValuesToDraft(prisma, { draftId: 5 })).rejects.toMatchObject({
+    code: 'PERSISTENCE_FAILURE',
+    message: expect.stringContaining('set create failed'),
+  });
+  expect(mockDraftPlayerValueDeleteMany).not.toHaveBeenCalled();
+  expect(mockTransaction).not.toHaveBeenCalled();
 });

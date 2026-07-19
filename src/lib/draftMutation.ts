@@ -1,7 +1,6 @@
 import type { Draft, Prisma } from '@prisma/client';
 import { prisma } from '@/lib/db';
-
-const DRAFT_MUTATION_LOCK_NAMESPACE = 1_144_002_001;
+import { lockDraftForMutation } from '@/lib/draftLock';
 
 export type DraftMutationCode =
   | 'UNAUTHORIZED'
@@ -31,10 +30,6 @@ export function isPositiveSafeInteger(value: unknown): value is number {
   return typeof value === 'number' && Number.isSafeInteger(value) && value > 0;
 }
 
-async function lockDraftMutation(tx: Prisma.TransactionClient, draftId: number): Promise<void> {
-  await tx.$executeRaw`SELECT pg_advisory_xact_lock(${DRAFT_MUTATION_LOCK_NAMESPACE}, ${draftId})`;
-}
-
 export async function withActiveOwnedDraftMutation<T>(
   userId: string,
   draftId: number,
@@ -44,7 +39,7 @@ export async function withActiveOwnedDraftMutation<T>(
 
   try {
     return await prisma.$transaction(async (tx) => {
-      await lockDraftMutation(tx, draftId);
+      await lockDraftForMutation(tx, draftId);
       const draft = await tx.draft.findFirst({ where: { id: draftId, ownerId: userId } });
       if (!draft) throw new DraftMutationFailure('NOT_FOUND');
       if (draft.status !== 'ACTIVE') throw new DraftMutationFailure('DRAFT_COMPLETE');
@@ -65,7 +60,7 @@ export async function completeOwnedDraft(
 
   try {
     return await prisma.$transaction(async (tx) => {
-      await lockDraftMutation(tx, draftId);
+      await lockDraftForMutation(tx, draftId);
       const draft = await tx.draft.findFirst({ where: { id: draftId, ownerId: userId } });
       if (!draft) throw new DraftMutationFailure('NOT_FOUND');
 

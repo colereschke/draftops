@@ -357,9 +357,32 @@ draft if application checks are bypassed.
 
 ### HARD-006 - Make projection-source activation explicit and atomic
 
-- **Status:** READY
+- **Status:** READY FOR INTEGRATION
 - **Effort:** Large
 - **Sequence:** After HARD-003
+
+#### Implementation checkpoint (2026-07-18)
+
+The implementation is stacked on HARD-005 so it reuses that workstream's same-draft player
+constraint and migration tooling. Each projection application now creates an immutable
+`DraftProjectionValueSet`, stages and validates its complete `DraftPlayerValue` collection, and
+atomically archives the previous set and flips `Draft.activeProjectionValueSetId` under the shared
+per-draft PostgreSQL advisory lock. Reapplying the same source creates a new version instead of
+mutating active rows. Failed root-client applications remove partial rows, retain typed failure
+metadata, and leave the previous pointer unchanged; caller-owned draft-creation and budget-backfill
+transactions roll back as a unit.
+
+The canonical active-player service queries only the explicit active set. Activation metadata is
+retained indefinitely, while full value rows are bounded to the active set plus three archived
+sets. The projection CLI reports set/source/count/time, and budget-backfill snapshots include the
+active pointer and value-set audit records.
+
+Verification on the branch:
+
+- `make check`: 91 suites and 767 tests passed with TypeScript, ESLint, and Prettier clean.
+- `pnpm test:integration`: 5 real-PostgreSQL suites and 29 tests passed, including legacy migration
+  backfill, mid-batch failure isolation, same-source preservation, concurrent activation,
+  retention, budget rollback, and HARD-005 compound relationships.
 
 #### Problem
 

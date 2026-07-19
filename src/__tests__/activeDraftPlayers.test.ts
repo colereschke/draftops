@@ -6,9 +6,11 @@ import type { StartingSlot } from '@/types';
 
 const mockPlayerFindMany = jest.fn();
 const mockDraftPlayerValueFindMany = jest.fn();
+const mockDraftFindUnique = jest.fn();
 
 jest.mock('@/lib/db', () => ({
   prisma: {
+    draft: { findUnique: (...args: unknown[]) => mockDraftFindUnique(...args) },
     player: { findMany: (...args: unknown[]) => mockPlayerFindMany(...args) },
     draftPlayerValue: {
       findMany: (...args: unknown[]) => mockDraftPlayerValueFindMany(...args),
@@ -48,6 +50,7 @@ const input = {
 
 beforeEach(() => {
   jest.clearAllMocks();
+  mockDraftFindUnique.mockResolvedValue({ activeProjectionValueSetId: 11 });
 });
 
 describe('getActiveDraftPlayers', () => {
@@ -77,7 +80,31 @@ describe('getActiveDraftPlayers', () => {
       where: { draftId: 44 },
       orderBy: { sfRank: 'asc' },
     });
+    expect(mockDraftPlayerValueFindMany).toHaveBeenCalledWith({
+      where: { draftId: 44, valueSetId: 11 },
+      select: {
+        playerId: true,
+        projectedPoints: true,
+        replacementPoints: true,
+        vor: true,
+        projectionAuctionValue: true,
+        fallbackAuctionValue: true,
+        activeAuctionValue: true,
+        valueSource: true,
+      },
+    });
     expect(players.map((player) => player.budget)).toEqual([165, 90]);
+  });
+
+  it('uses fallback values without loading value rows when no set is active', async () => {
+    mockDraftFindUnique.mockResolvedValue({ activeProjectionValueSetId: null });
+    mockPlayerFindMany.mockResolvedValue([dbPlayer()]);
+
+    const players = await getActiveDraftPlayers(input);
+
+    expect(mockDraftPlayerValueFindMany).not.toHaveBeenCalled();
+    expect(players[0].budget).toBe(150);
+    expect(players[0].valueSource).toBe('fallback');
   });
 
   it('applies dynamic pick values before auction-mode filtering', async () => {

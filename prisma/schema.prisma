@@ -34,6 +34,13 @@ enum OnboardingStep {
   NOMINATE_UNDO
 }
 
+enum DraftProjectionValueSetStatus {
+  STAGING
+  ACTIVE
+  ARCHIVED
+  FAILED
+}
+
 // A draft is the top-level container for a single auction. One owner, all data scoped here.
 model Draft {
   id          Int         @id @default(autoincrement())
@@ -43,24 +50,29 @@ model Draft {
   status      DraftStatus @default(ACTIVE)
   createdAt   DateTime    @default(now())
 
-  teamCount               Int                   @default(12)
-  rosterSize              Int                   @default(30)
-  budget                  Int                   @default(1000)
-  playerValueSourceBudget Int                   @default(1000)
-  startingLineup          Json?
-  scoringSettings         Json?
-  targetRoster            Json?
-  futurePickAuctionMode   FuturePickAuctionMode @default(PACKAGES)
-  sleeperLeagueId         String?
-  players                 Player[]
-  playerValues            DraftPlayerValue[]
-  onboardingProgress      OnboardingProgress?
+  teamCount                  Int                       @default(12)
+  rosterSize                 Int                       @default(30)
+  budget                     Int                       @default(1000)
+  playerValueSourceBudget    Int                       @default(1000)
+  startingLineup             Json?
+  scoringSettings            Json?
+  targetRoster               Json?
+  futurePickAuctionMode      FuturePickAuctionMode     @default(PACKAGES)
+  sleeperLeagueId            String?
+  activeProjectionValueSetId Int?                      @unique
+  players                    Player[]
+  playerValues               DraftPlayerValue[]
+  projectionValueSets        DraftProjectionValueSet[] @relation("DraftProjectionValueSets")
+  activeProjectionValueSet   DraftProjectionValueSet?  @relation("ActiveDraftProjectionValueSet", fields: [activeProjectionValueSetId, id], references: [id, draftId])
+  onboardingProgress         OnboardingProgress?
 
   teams            Team[]            @relation("DraftTeams")
   ownerTeam        Team?             @relation("DraftOwnerTeam", fields: [ownerTeamId, id], references: [id, draftId], onDelete: Restrict, onUpdate: Restrict)
   auctionResults   AuctionResult[]
   watchlistEntries PlayerWatchlist[]
   nominatedPlayers NominatedPlayer[]
+
+  @@unique([activeProjectionValueSetId, id])
 }
 
 model OnboardingProgress {
@@ -188,10 +200,36 @@ model ProjectionSource {
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
 
-  projections PlayerProjection[]
-  draftValues DraftPlayerValue[]
+  projections    PlayerProjection[]
+  draftValues    DraftPlayerValue[]
+  draftValueSets DraftProjectionValueSet[]
 
   @@unique([name, season, projectionDate])
+}
+
+model DraftProjectionValueSet {
+  id                  Int                           @id @default(autoincrement())
+  draftId             Int
+  projectionSourceId  Int?
+  status              DraftProjectionValueSetStatus @default(STAGING)
+  expectedPlayerCount Int
+  appliedPlayerCount  Int                           @default(0)
+  createdAt           DateTime                      @default(now())
+  activatedAt         DateTime?
+  failedAt            DateTime?
+  failureCode         String?
+  failureMessage      String?
+
+  draft            Draft              @relation("DraftProjectionValueSets", fields: [draftId], references: [id])
+  projectionSource ProjectionSource?  @relation(fields: [projectionSourceId], references: [id])
+  values           DraftPlayerValue[] @relation("DraftValueSet")
+  sourcedValues    DraftPlayerValue[] @relation("DraftValueSetSource")
+  activeForDraft   Draft?             @relation("ActiveDraftProjectionValueSet")
+
+  @@unique([id, draftId])
+  @@unique([id, draftId, projectionSourceId])
+  @@index([draftId, activatedAt])
+  @@index([projectionSourceId])
 }
 
 model PlayerProjection {
@@ -228,6 +266,7 @@ model DraftPlayerValue {
   draftId                Int
   playerId               Int
   projectionSourceId     Int?
+  valueSetId             Int
   projectedPoints        Float?
   replacementPoints      Float?
   vor                    Float?
@@ -238,11 +277,13 @@ model DraftPlayerValue {
   createdAt              DateTime @default(now())
   updatedAt              DateTime @updatedAt
 
-  draft            Draft             @relation(fields: [draftId], references: [id])
-  player           Player            @relation(fields: [playerId, draftId], references: [id, draftId], onDelete: Restrict, onUpdate: Restrict)
-  projectionSource ProjectionSource? @relation(fields: [projectionSourceId], references: [id])
+  draft            Draft                   @relation(fields: [draftId], references: [id])
+  player           Player                  @relation(fields: [playerId, draftId], references: [id, draftId], onDelete: Restrict, onUpdate: Restrict)
+  projectionSource ProjectionSource?       @relation(fields: [projectionSourceId], references: [id])
+  valueSet         DraftProjectionValueSet  @relation("DraftValueSet", fields: [valueSetId, draftId], references: [id, draftId], onDelete: Restrict, onUpdate: Cascade)
+  sourceValueSet   DraftProjectionValueSet? @relation("DraftValueSetSource", fields: [valueSetId, draftId, projectionSourceId], references: [id, draftId, projectionSourceId], onDelete: Restrict, onUpdate: Cascade)
 
-  @@unique([draftId, playerId, projectionSourceId])
+  @@unique([valueSetId, playerId])
   @@index([draftId])
   @@index([playerId])
 }

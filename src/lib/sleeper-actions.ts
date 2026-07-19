@@ -7,6 +7,7 @@ import {
   fetchSleeperLeagueRosters,
   mapSleeperLeague,
   SleeperClientError,
+  validateSleeperLeagueId,
 } from '@/lib/sleeper';
 import type { SleeperImportResult } from '@/lib/sleeper';
 
@@ -22,12 +23,13 @@ export async function importFromSleeper(
       return { ok: false, error: 'Sign in to import a Sleeper league.' };
     }
 
+    const validLeagueId = validateSleeperLeagueId(leagueId);
     const [league, users, rosters] = await Promise.all([
-      fetchSleeperLeague(leagueId),
-      fetchSleeperLeagueUsers(leagueId),
-      fetchSleeperLeagueRosters(leagueId),
+      fetchSleeperLeague(validLeagueId),
+      fetchSleeperLeagueUsers(validLeagueId),
+      fetchSleeperLeagueRosters(validLeagueId),
     ]);
-    const data = mapSleeperLeague(league, users, rosters, ownerUsername, leagueId);
+    const data = mapSleeperLeague(league, users, rosters, ownerUsername, validLeagueId);
     return { ok: true, data };
   } catch (err) {
     if (err instanceof SleeperClientError) {

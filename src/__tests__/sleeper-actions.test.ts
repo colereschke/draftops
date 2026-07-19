@@ -64,6 +64,16 @@ describe('importFromSleeper', () => {
     expect(mockFetchRosters).not.toHaveBeenCalled();
   });
 
+  it('rejects a non-string league ID without contacting Sleeper', async () => {
+    await expect(importFromSleeper(null as unknown as string)).resolves.toEqual({
+      ok: false,
+      error: 'Enter a valid Sleeper league ID.',
+    });
+    expect(mockFetchLeague).not.toHaveBeenCalled();
+    expect(mockFetchUsers).not.toHaveBeenCalled();
+    expect(mockFetchRosters).not.toHaveBeenCalled();
+  });
+
   it('returns the generic error when authentication rejects', async () => {
     mockAuth.mockRejectedValue(new Error('Auth provider unavailable'));
 
@@ -108,7 +118,7 @@ describe('importFromSleeper', () => {
 
   it('returns generic error on unexpected failure', async () => {
     mockFetchLeague.mockRejectedValue(new Error('Network error'));
-    const result = await importFromSleeper('valid-id');
+    const result = await importFromSleeper('1360707683916734464');
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.error).toBe("Couldn't reach Sleeper — try again.");

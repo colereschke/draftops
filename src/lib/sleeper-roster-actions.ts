@@ -213,7 +213,7 @@ export async function saveSleeperRosterMapping(input: {
 }): Promise<SleeperRosterSyncResponse> {
   const draft = await requireOwnedDraft(input.draftId);
   if (!draft) return { ok: false, code: 'not_found' };
-  if (!input.leagueId.trim() || input.mappings.length === 0) {
+  if (input.mappings.length === 0) {
     return { ok: false, code: 'configuration_required' };
   }
 

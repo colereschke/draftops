@@ -55,7 +55,10 @@ describe('Sleeper client', () => {
     ],
     [
       'timeout',
-      [Promise.reject(Object.assign(new Error('timed out'), { name: 'TimeoutError' }))],
+      [
+        Promise.reject(Object.assign(new Error('timed out'), { name: 'TimeoutError' })),
+        Promise.reject(Object.assign(new Error('timed out'), { name: 'TimeoutError' })),
+      ],
       'TIMEOUT',
     ],
   ])('returns %s as the client failure code', async (_, results, code) => {
@@ -83,6 +86,30 @@ describe('Sleeper client', () => {
   it('retries a 503 once and returns validated data', async () => {
     mockFetch
       .mockResolvedValueOnce(response(503, {}))
+      .mockResolvedValueOnce(response(200, VALID_LEAGUE));
+
+    await expect(fetchSleeperLeague('1360707683916734464')).resolves.toEqual(VALID_LEAGUE);
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+  });
+
+  it('retries a timeout once and returns validated data', async () => {
+    mockFetch
+      .mockRejectedValueOnce(Object.assign(new Error('timed out'), { name: 'TimeoutError' }))
+      .mockResolvedValueOnce(response(200, VALID_LEAGUE));
+
+    await expect(fetchSleeperLeague('1360707683916734464')).resolves.toEqual(VALID_LEAGUE);
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+  });
+
+  it('classifies a timeout while reading the response body and retries once', async () => {
+    mockFetch
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: jest
+          .fn()
+          .mockRejectedValue(Object.assign(new Error('timed out'), { name: 'TimeoutError' })),
+      } as unknown as Response)
       .mockResolvedValueOnce(response(200, VALID_LEAGUE));
 
     await expect(fetchSleeperLeague('1360707683916734464')).resolves.toEqual(VALID_LEAGUE);

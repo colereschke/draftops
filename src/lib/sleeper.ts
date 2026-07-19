@@ -103,7 +103,10 @@ const sleeperRosterSchema = z.object({
   players: z.array(z.string()).nullable().optional(),
 });
 
-export function validateSleeperLeagueId(leagueId: string): string {
+export function validateSleeperLeagueId(leagueId: unknown): string {
+  if (typeof leagueId !== 'string') {
+    throw new SleeperClientError('INVALID_LEAGUE_ID');
+  }
   const trimmedLeagueId = leagueId.trim();
   if (!/^\d{5,25}$/.test(trimmedLeagueId)) {
     throw new SleeperClientError('INVALID_LEAGUE_ID');
@@ -127,7 +130,8 @@ async function fetchSleeperEndpoint<T>(
       response = await fetch(url, { signal });
     } catch (error) {
       if (signal.aborted || (error instanceof Error && error.name === 'TimeoutError')) {
-        throw new SleeperClientError('TIMEOUT');
+        if (attempt === MAX_ATTEMPTS) throw new SleeperClientError('TIMEOUT');
+        continue;
       }
       if (attempt === MAX_ATTEMPTS) throw new SleeperClientError('UNAVAILABLE');
       continue;
@@ -147,7 +151,11 @@ async function fetchSleeperEndpoint<T>(
     let body: unknown;
     try {
       body = await response.json();
-    } catch {
+    } catch (error) {
+      if (signal.aborted || (error instanceof Error && error.name === 'TimeoutError')) {
+        if (attempt === MAX_ATTEMPTS) throw new SleeperClientError('TIMEOUT');
+        continue;
+      }
       throw new SleeperClientError('MALFORMED_RESPONSE');
     }
 

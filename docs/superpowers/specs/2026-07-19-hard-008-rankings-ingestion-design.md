@@ -12,16 +12,18 @@ parser will support UTF-8 BOMs, CRLF and LF line endings, commas and line breaks
 fields, and doubled quote escapes. It will reject malformed quoting rather than attempting a
 best-effort interpretation.
 
-The parser will enforce these limits before returning rows:
+The rankings importer will pass explicit limits to the parser and enforce them before returning
+rows:
 
-- input text: 1 MiB maximum;
+- UTF-8 input bytes: 1 MiB maximum;
 - data rows: 2,000 maximum;
 - field length: 10,000 characters maximum;
 - accumulated validation errors: 25 maximum.
 
-The existing generic CSV consumers will retain the successful `ParsedCsv` shape. Parse failures
-will be represented explicitly so the rankings importer can return user-safe errors before any
-database access or writes.
+The existing generic CSV consumers will retain the successful `ParsedCsv` shape and use the same
+parser without rankings-specific caps, so projection and Sleeper-sync CLI data is not constrained
+by a web-upload limit. Parse failures will be represented explicitly so the rankings importer can
+return user-safe errors before any database access or writes.
 
 ## Ranking validation
 

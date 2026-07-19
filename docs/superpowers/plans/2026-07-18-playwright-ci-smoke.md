@@ -246,7 +246,7 @@ No ESLint override block is needed for `e2e/**` — this was verified directly (
 **Interfaces:**
 
 - Consumes: `E2E_TEST_USER_ID` from `e2e/env.ts` (Task 1).
-- Produces: `e2e/fixtures/players.ts` exports `FixturePlayer` interface, `FIXTURE_PLAYERS: FixturePlayer[]`, `BID_TARGET: FixturePlayer`, `NOMINATE_TARGET: FixturePlayer` — Tasks 3 and 4 import `BID_TARGET`/`NOMINATE_TARGET` by name so the seeded data and the specs that reference it never drift apart.
+- Produces: `e2e/fixtures/players.ts` exports `FixturePlayer` interface, `FIXTURE_PLAYERS: FixturePlayer[]`, `BID_TARGET: FixturePlayer`, `NOMINATE_TARGET: FixturePlayer`, `BASELINE_BID_TARGET: FixturePlayer` — Tasks 3 and 4 import `BID_TARGET`/`NOMINATE_TARGET` by name so the seeded data and the specs that reference it never drift apart. `BASELINE_BID_TARGET` is consumed only within this task's `e2e/seed.ts`.
 - Produces: `e2e/db.ts` exports `prisma: PrismaClient`, `closeDb(): Promise<void>` — consumed only by `e2e/seed.ts` (this task) and `e2e/fixtures/getDraftId.ts` (`prisma` only). Tasks 3-5's spec files never import `e2e/db.ts` directly or call `closeDb()` — see the note in Task 3 Step 1 for why.
 - Produces: `e2e/fixtures/getDraftId.ts` exports `getSeededDraftId(): Promise<number>` — Tasks 3, 4, and 5 import this.
 
@@ -284,6 +284,23 @@ export const BID_TARGET: FixturePlayer = {
   budget: 110,
   ceiling: 127,
   floor: 96,
+};
+
+// Seeded (via e2e/seed.ts) with a real logged AuctionResult before any spec runs, so
+// nomination scoring's `hasAuctionData` is true from the start — the nomination table
+// only renders per-row "Nominate" buttons once at least one bid exists. Without this,
+// nominate.spec.ts would only pass by accident of running after bid.spec.ts logs its own
+// bid, which is an unstated, order-dependent coupling between two specs meant to be
+// independent.
+export const BASELINE_BID_TARGET: FixturePlayer = {
+  name: 'Fixture TE One',
+  nflTeam: 'KC',
+  pos: 'TE',
+  age: 28,
+  sfRank: 9,
+  budget: 70,
+  ceiling: 81,
+  floor: 61,
 };
 
 export const FIXTURE_PLAYERS: FixturePlayer[] = [
@@ -349,16 +366,7 @@ export const FIXTURE_PLAYERS: FixturePlayer[] = [
     ceiling: 92,
     floor: 70,
   },
-  {
-    name: 'Fixture TE One',
-    nflTeam: 'KC',
-    pos: 'TE',
-    age: 28,
-    sfRank: 9,
-    budget: 70,
-    ceiling: 81,
-    floor: 61,
-  },
+  BASELINE_BID_TARGET,
   {
     name: 'Fixture TE Two',
     nflTeam: 'SF',
@@ -426,7 +434,7 @@ export async function getSeededDraftId(): Promise<number> {
 
 ```ts
 import { LEAGUE_TEAMS } from '../src/lib/teams';
-import { FIXTURE_PLAYERS } from './fixtures/players';
+import { FIXTURE_PLAYERS, BASELINE_BID_TARGET } from './fixtures/players';
 import { E2E_TEST_USER_ID } from './env';
 import { prisma, closeDb } from './db';
 
@@ -454,7 +462,7 @@ async function main() {
   });
   await prisma.draft.update({ where: { id: draft.id }, data: { ownerTeamId: ownerTeam.id } });
 
-  await prisma.player.createMany({
+  const createdPlayers = await prisma.player.createManyAndReturn({
     data: FIXTURE_PLAYERS.map((player) => ({
       name: player.name,
       nflTeam: player.nflTeam,
@@ -469,6 +477,21 @@ async function main() {
       baseFloor: player.floor,
       draftId: draft.id,
     })),
+  });
+
+  const baselinePlayer = createdPlayers.find((p) => p.name === BASELINE_BID_TARGET.name);
+  if (!baselinePlayer) throw new Error('Baseline bid target was not seeded');
+
+  await prisma.auctionResult.create({
+    data: {
+      player: baselinePlayer.name,
+      playerId: baselinePlayer.id,
+      position: baselinePlayer.pos,
+      nflTeam: baselinePlayer.nflTeam,
+      price: baselinePlayer.budget,
+      teamId: ownerTeam.id,
+      draftId: draft.id,
+    },
   });
 
   console.log(`Seeded e2e draft ${draft.id} with ${FIXTURE_PLAYERS.length} players.`);
@@ -499,6 +522,8 @@ psql -h localhost -U postgres -d draftops_e2e_scratch -tAc 'SELECT COUNT(*) FROM
 # Expected: 12
 psql -h localhost -U postgres -d draftops_e2e_scratch -tAc "SELECT \"ownerTeamId\" IS NOT NULL FROM \"Draft\""
 # Expected: t
+psql -h localhost -U postgres -d draftops_e2e_scratch -tAc 'SELECT COUNT(*) FROM "AuctionResult"'
+# Expected: 1 (the baseline bid on BASELINE_BID_TARGET)
 
 psql -h localhost -U postgres -c "DROP DATABASE draftops_e2e_scratch;"
 ```

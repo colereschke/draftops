@@ -31,6 +31,23 @@ export const BID_TARGET: FixturePlayer = {
   floor: 96,
 };
 
+// Seeded (via e2e/seed.ts) with a real logged AuctionResult before any spec runs, so
+// nomination scoring's `hasAuctionData` is true from the start — the nomination table
+// only renders per-row "Nominate" buttons once at least one bid exists. Without this,
+// nominate.spec.ts would only pass by accident of running after bid.spec.ts logs its own
+// bid, which is an unstated, order-dependent coupling between two specs meant to be
+// independent.
+export const BASELINE_BID_TARGET: FixturePlayer = {
+  name: 'Fixture TE One',
+  nflTeam: 'KC',
+  pos: 'TE',
+  age: 28,
+  sfRank: 9,
+  budget: 70,
+  ceiling: 81,
+  floor: 61,
+};
+
 export const FIXTURE_PLAYERS: FixturePlayer[] = [
   {
     name: 'Fixture QB One',
@@ -94,16 +111,7 @@ export const FIXTURE_PLAYERS: FixturePlayer[] = [
     ceiling: 92,
     floor: 70,
   },
-  {
-    name: 'Fixture TE One',
-    nflTeam: 'KC',
-    pos: 'TE',
-    age: 28,
-    sfRank: 9,
-    budget: 70,
-    ceiling: 81,
-    floor: 61,
-  },
+  BASELINE_BID_TARGET,
   {
     name: 'Fixture TE Two',
     nflTeam: 'SF',

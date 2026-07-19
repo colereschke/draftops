@@ -1,5 +1,5 @@
 import { LEAGUE_TEAMS } from '../src/lib/teams';
-import { FIXTURE_PLAYERS } from './fixtures/players';
+import { FIXTURE_PLAYERS, BASELINE_BID_TARGET } from './fixtures/players';
 import { E2E_TEST_USER_ID } from './env';
 import { prisma, closeDb } from './db';
 
@@ -27,7 +27,7 @@ async function main() {
   });
   await prisma.draft.update({ where: { id: draft.id }, data: { ownerTeamId: ownerTeam.id } });
 
-  await prisma.player.createMany({
+  const createdPlayers = await prisma.player.createManyAndReturn({
     data: FIXTURE_PLAYERS.map((player) => ({
       name: player.name,
       nflTeam: player.nflTeam,
@@ -42,6 +42,21 @@ async function main() {
       baseFloor: player.floor,
       draftId: draft.id,
     })),
+  });
+
+  const baselinePlayer = createdPlayers.find((p) => p.name === BASELINE_BID_TARGET.name);
+  if (!baselinePlayer) throw new Error('Baseline bid target was not seeded');
+
+  await prisma.auctionResult.create({
+    data: {
+      player: baselinePlayer.name,
+      playerId: baselinePlayer.id,
+      position: baselinePlayer.pos,
+      nflTeam: baselinePlayer.nflTeam,
+      price: baselinePlayer.budget,
+      teamId: ownerTeam.id,
+      draftId: draft.id,
+    },
   });
 
   console.log(`Seeded e2e draft ${draft.id} with ${FIXTURE_PLAYERS.length} players.`);

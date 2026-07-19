@@ -166,8 +166,59 @@ describe('createBidRecord', () => {
     expect(mockAuctionCreate).not.toHaveBeenCalled();
   });
 
+  it('supersedes a deleted claim before creating its replacement', async () => {
+    const deletedBid = {
+      id: 8,
+      draftId: 4,
+      playerId: 10,
+      player: 'Josh Allen',
+      position: 'QB',
+      nflTeam: 'BUF',
+      price: 100,
+      sfRank: 1,
+      notes: null,
+      teamId: 6,
+      createdAt: new Date('2026-07-19T12:00:00.000Z'),
+      updatedAt: new Date('2026-07-19T12:05:00.000Z'),
+      deletedAt: new Date('2026-07-19T12:05:00.000Z'),
+      supersededAt: null,
+    };
+    mockAuctionFindMany.mockResolvedValueOnce([]).mockResolvedValueOnce([deletedBid]);
+    mockAuctionUpdate.mockResolvedValueOnce({
+      ...deletedBid,
+      supersededAt: new Date('2026-07-19T12:20:00.000Z'),
+    });
+
+    await expect(createBidRecord(CREATE_INPUT)).resolves.toEqual({
+      ok: true,
+      data: { bidId: 99 },
+    });
+
+    expect(mockAuctionFindFirst).toHaveBeenCalledWith({
+      where: { playerId: 10, draftId: 4, deletedAt: null },
+      select: { id: true },
+    });
+    expect(mockAuctionFindMany).toHaveBeenLastCalledWith({
+      where: {
+        playerId: 10,
+        draftId: 4,
+        deletedAt: { not: null },
+        supersededAt: null,
+      },
+    });
+    expect(mockAuctionUpdate).toHaveBeenCalledWith({
+      where: { id: 8 },
+      data: { supersededAt: expect.any(Date) },
+    });
+    expect(mockAuditCreate).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ type: 'SUPERSEDE', bidId: 8 }) }),
+    );
+  });
+
   it('accepts the exact maximum bid that preserves one dollar per open roster slot', async () => {
-    mockAuctionFindMany.mockResolvedValue([{ id: 1, price: 100, position: 'RB' }]);
+    mockAuctionFindMany
+      .mockResolvedValueOnce([{ id: 1, price: 100, position: 'RB' }])
+      .mockResolvedValue([]);
 
     await expect(createBidRecord({ ...CREATE_INPUT, price: 899 })).resolves.toMatchObject({
       ok: true,
@@ -175,7 +226,9 @@ describe('createBidRecord', () => {
   });
 
   it('rejects one dollar above the maximum legal bid', async () => {
-    mockAuctionFindMany.mockResolvedValue([{ id: 1, price: 100, position: 'RB' }]);
+    mockAuctionFindMany
+      .mockResolvedValueOnce([{ id: 1, price: 100, position: 'RB' }])
+      .mockResolvedValue([]);
 
     await expect(createBidRecord({ ...CREATE_INPUT, price: 900 })).resolves.toEqual({
       ok: false,
@@ -186,7 +239,9 @@ describe('createBidRecord', () => {
 
   it('rejects a skill player when the roster is full', async () => {
     mockDraftFindFirst.mockResolvedValue({ ...ACTIVE_DRAFT, rosterSize: 1 });
-    mockAuctionFindMany.mockResolvedValue([{ id: 1, price: 100, position: 'RB' }]);
+    mockAuctionFindMany
+      .mockResolvedValueOnce([{ id: 1, price: 100, position: 'RB' }])
+      .mockResolvedValue([]);
 
     await expect(createBidRecord(CREATE_INPUT)).resolves.toEqual({
       ok: false,
@@ -197,7 +252,9 @@ describe('createBidRecord', () => {
   it('allows a package to use budget without consuming a roster slot', async () => {
     mockDraftFindFirst.mockResolvedValue({ ...ACTIVE_DRAFT, rosterSize: 1 });
     mockPlayerFindFirst.mockResolvedValue({ ...PLAYER, pos: 'PKG', name: '2027 Pick Package' });
-    mockAuctionFindMany.mockResolvedValue([{ id: 1, price: 100, position: 'RB' }]);
+    mockAuctionFindMany
+      .mockResolvedValueOnce([{ id: 1, price: 100, position: 'RB' }])
+      .mockResolvedValue([]);
 
     await expect(createBidRecord({ ...CREATE_INPUT, price: 900 })).resolves.toMatchObject({
       ok: true,
@@ -206,11 +263,13 @@ describe('createBidRecord', () => {
 
   it('ignores PICK and PKG results when checking the final skill roster slot', async () => {
     mockDraftFindFirst.mockResolvedValue({ ...ACTIVE_DRAFT, rosterSize: 2 });
-    mockAuctionFindMany.mockResolvedValue([
-      { id: 1, price: 100, position: 'RB' },
-      { id: 2, price: 50, position: 'PICK' },
-      { id: 3, price: 50, position: 'PKG' },
-    ]);
+    mockAuctionFindMany
+      .mockResolvedValueOnce([
+        { id: 1, price: 100, position: 'RB' },
+        { id: 2, price: 50, position: 'PICK' },
+        { id: 3, price: 50, position: 'PKG' },
+      ])
+      .mockResolvedValue([]);
 
     await expect(createBidRecord({ ...CREATE_INPUT, price: 800 })).resolves.toMatchObject({
       ok: true,
@@ -401,5 +460,44 @@ describe('restoreBidRecord', () => {
     expect(mockAuditCreate).toHaveBeenCalledWith(
       expect.objectContaining({ data: expect.objectContaining({ type: 'RESTORE', bidId: 12 }) }),
     );
+  });
+
+  it('rejects restoration at the database 30-minute boundary', async () => {
+    mockAuctionFindFirst.mockResolvedValue({
+      id: 12,
+      draftId: 4,
+      playerId: 10,
+      position: 'QB',
+      price: 120,
+      teamId: 7,
+      deletedAt: new Date('2026-07-19T11:50:00.000Z'),
+      supersededAt: null,
+    });
+
+    await expect(restoreBidRecord({ userId: 'owner-1', draftId: 4, bidId: 12 })).resolves.toEqual({
+      ok: false,
+      code: 'RESTORE_WINDOW_EXPIRED',
+    });
+    expect(mockAuctionUpdate).not.toHaveBeenCalled();
+  });
+
+  it('rejects restoration when a replacement has permanently superseded the deleted bid', async () => {
+    mockAuctionFindFirst.mockResolvedValue({
+      id: 12,
+      draftId: 4,
+      playerId: 10,
+      position: 'QB',
+      price: 120,
+      teamId: 7,
+      deletedAt: new Date('2026-07-19T12:10:00.000Z'),
+      supersededAt: new Date('2026-07-19T12:15:00.000Z'),
+    });
+
+    await expect(restoreBidRecord({ userId: 'owner-1', draftId: 4, bidId: 12 })).resolves.toEqual({
+      ok: false,
+      code: 'BID_SUPERSEDED',
+    });
+    expect(mockQueryRaw).not.toHaveBeenCalled();
+    expect(mockAuctionUpdate).not.toHaveBeenCalled();
   });
 });

@@ -140,6 +140,29 @@ export async function createBidInTransaction(
     price: input.price,
   });
 
+  const deletedClaims = await tx.auctionResult.findMany({
+    where: {
+      playerId: input.player.id,
+      draftId: draft.id,
+      deletedAt: { not: null },
+      supersededAt: null,
+    },
+  });
+  for (const deletedClaim of deletedClaims) {
+    const superseded = await tx.auctionResult.update({
+      where: { id: deletedClaim.id },
+      data: { supersededAt: new Date() },
+    });
+    await createBidAuditEvent(tx, {
+      draftId: draft.id,
+      bidId: superseded.id,
+      actorId: input.actorId,
+      type: 'SUPERSEDE',
+      before: toBidSnapshot(deletedClaim),
+      after: toBidSnapshot(superseded),
+    });
+  }
+
   let bid: AuditableBid;
   try {
     bid = await tx.auctionResult.create({
@@ -188,7 +211,7 @@ export async function createBidRecord(
         select: { id: true, name: true, pos: true, nflTeam: true, sfRank: true },
       }),
       tx.auctionResult.findFirst({
-        where: { playerId: input.playerId, draftId: draft.id },
+        where: { playerId: input.playerId, draftId: draft.id, deletedAt: null },
         select: { id: true },
       }),
     ]);

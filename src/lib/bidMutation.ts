@@ -5,6 +5,7 @@ import {
   withActiveOwnedDraftMutation,
   type DraftMutationResult,
 } from '@/lib/draftMutation';
+import { createBidAuditEvent, toBidSnapshot, type AuditableBid } from '@/lib/bidAudit';
 import { countsTowardRoster } from '@/lib/rosterPolicy';
 
 interface CreateBidRecordInput {
@@ -24,6 +25,12 @@ interface UpdateBidRecordInput {
 }
 
 interface DeleteBidRecordInput {
+  userId: string;
+  draftId: number;
+  bidId: number;
+}
+
+interface RestoreBidRecordInput {
   userId: string;
   draftId: number;
   bidId: number;
@@ -221,10 +228,69 @@ export async function deleteBidRecord(
   }
 
   return withActiveOwnedDraftMutation(input.userId, input.draftId, async (tx, draft) => {
-    const deleted = await tx.auctionResult.deleteMany({
+    const existingBid = await tx.auctionResult.findFirst({
+      where: { id: input.bidId, draftId: draft.id, deletedAt: null },
+    });
+    if (!existingBid) throw new DraftMutationFailure('BID_NOT_FOUND');
+
+    const deleted = await tx.auctionResult.update({
+      where: { id: existingBid.id },
+      data: { deletedAt: new Date() },
+    });
+    await createBidAuditEvent(tx, {
+      draftId: draft.id,
+      bidId: deleted.id,
+      actorId: input.userId,
+      type: 'DELETE',
+      before: toBidSnapshot(existingBid as AuditableBid),
+      after: toBidSnapshot(deleted),
+    });
+    return null;
+  });
+}
+
+export async function restoreBidRecord(
+  input: RestoreBidRecordInput,
+): Promise<DraftMutationResult<{ bidId: number }>> {
+  if (!isPositiveSafeInteger(input.draftId) || !isPositiveSafeInteger(input.bidId)) {
+    return { ok: false, code: 'INVALID_INPUT' };
+  }
+
+  return withActiveOwnedDraftMutation(input.userId, input.draftId, async (tx, draft) => {
+    const bid = await tx.auctionResult.findFirst({
       where: { id: input.bidId, draftId: draft.id },
     });
-    if (deleted.count === 0) throw new DraftMutationFailure('BID_NOT_FOUND');
-    return null;
+    if (!bid) throw new DraftMutationFailure('BID_NOT_FOUND');
+    if (bid.deletedAt === null) throw new DraftMutationFailure('BID_NOT_DELETED');
+    if (bid.supersededAt !== null) throw new DraftMutationFailure('BID_SUPERSEDED');
+
+    const clock = await tx.$queryRaw<Array<{ now: Date }>>`SELECT transaction_timestamp() AS now`;
+    if (bid.deletedAt.getTime() <= clock[0].now.getTime() - 30 * 60 * 1000) {
+      throw new DraftMutationFailure('RESTORE_WINDOW_EXPIRED');
+    }
+    const activeClaim = await tx.auctionResult.findFirst({
+      where: { draftId: draft.id, playerId: bid.playerId, deletedAt: null },
+      select: { id: true },
+    });
+    if (activeClaim) throw new DraftMutationFailure('BID_SUPERSEDED');
+
+    await assertBidLegalInTransaction(tx, draft, {
+      teamId: bid.teamId,
+      position: bid.position,
+      price: bid.price,
+    });
+    const restored = await tx.auctionResult.update({
+      where: { id: bid.id },
+      data: { deletedAt: null },
+    });
+    await createBidAuditEvent(tx, {
+      draftId: draft.id,
+      bidId: restored.id,
+      actorId: input.userId,
+      type: 'RESTORE',
+      before: toBidSnapshot(bid),
+      after: toBidSnapshot(restored),
+    });
+    return { bidId: restored.id };
   });
 }

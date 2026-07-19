@@ -1,7 +1,13 @@
-import { createBidRecord, deleteBidRecord, updateBidRecord } from '@/lib/bidMutation';
+import {
+  createBidRecord,
+  deleteBidRecord,
+  restoreBidRecord,
+  updateBidRecord,
+} from '@/lib/bidMutation';
 
 const mockTransaction = jest.fn();
 const mockExecuteRaw = jest.fn();
+const mockQueryRaw = jest.fn();
 const mockDraftFindFirst = jest.fn();
 const mockTeamFindFirst = jest.fn();
 const mockPlayerFindFirst = jest.fn();
@@ -11,9 +17,11 @@ const mockAuctionCreate = jest.fn();
 const mockAuctionUpdate = jest.fn();
 const mockAuctionDeleteMany = jest.fn();
 const mockNominationDeleteMany = jest.fn();
+const mockAuditCreate = jest.fn();
 
 const mockTx = {
   $executeRaw: mockExecuteRaw,
+  $queryRaw: mockQueryRaw,
   draft: { findFirst: mockDraftFindFirst },
   team: { findFirst: mockTeamFindFirst },
   player: { findFirst: mockPlayerFindFirst },
@@ -24,6 +32,7 @@ const mockTx = {
     update: mockAuctionUpdate,
     deleteMany: mockAuctionDeleteMany,
   },
+  bidAuditEvent: { create: mockAuditCreate },
   nominatedPlayer: { deleteMany: mockNominationDeleteMany },
 };
 
@@ -69,6 +78,7 @@ const CREATE_INPUT = {
 beforeEach(() => {
   jest.clearAllMocks();
   mockExecuteRaw.mockResolvedValue(1);
+  mockQueryRaw.mockResolvedValue([{ now: new Date('2026-07-19T12:20:00.000Z') }]);
   mockDraftFindFirst.mockResolvedValue(ACTIVE_DRAFT);
   mockTeamFindFirst.mockResolvedValue({ id: 7, budget: 1000 });
   mockPlayerFindFirst.mockResolvedValue(PLAYER);
@@ -78,6 +88,7 @@ beforeEach(() => {
   mockAuctionUpdate.mockResolvedValue({ id: 12 });
   mockAuctionDeleteMany.mockResolvedValue({ count: 1 });
   mockNominationDeleteMany.mockResolvedValue({ count: 1 });
+  mockAuditCreate.mockResolvedValue({ id: 1 });
   mockTransaction.mockImplementation((operation: (tx: typeof mockTx) => Promise<unknown>) =>
     operation(mockTx),
   );
@@ -256,12 +267,53 @@ describe('updateBidRecord', () => {
 });
 
 describe('deleteBidRecord', () => {
-  it('deletes only the locked draft result', async () => {
+  it('soft deletes and audits only the locked active draft result', async () => {
+    mockAuctionFindFirst.mockResolvedValue({
+      id: 12,
+      draftId: 4,
+      playerId: 10,
+      player: 'Josh Allen',
+      position: 'QB',
+      nflTeam: 'BUF',
+      price: 120,
+      sfRank: 1,
+      notes: null,
+      teamId: 7,
+      createdAt: new Date('2026-07-19T12:00:00.000Z'),
+      updatedAt: new Date('2026-07-19T12:00:00.000Z'),
+      deletedAt: null,
+      supersededAt: null,
+    });
+    mockAuctionUpdate.mockResolvedValue({
+      id: 12,
+      draftId: 4,
+      playerId: 10,
+      player: 'Josh Allen',
+      position: 'QB',
+      nflTeam: 'BUF',
+      price: 120,
+      sfRank: 1,
+      notes: null,
+      teamId: 7,
+      createdAt: new Date('2026-07-19T12:00:00.000Z'),
+      updatedAt: new Date('2026-07-19T12:01:00.000Z'),
+      deletedAt: new Date('2026-07-19T12:01:00.000Z'),
+      supersededAt: null,
+    });
+
     await expect(deleteBidRecord({ userId: 'owner-1', draftId: 4, bidId: 12 })).resolves.toEqual({
       ok: true,
       data: null,
     });
-    expect(mockAuctionDeleteMany).toHaveBeenCalledWith({ where: { id: 12, draftId: 4 } });
+    expect(mockAuctionUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 12 },
+        data: { deletedAt: expect.any(Date) },
+      }),
+    );
+    expect(mockAuditCreate).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ type: 'DELETE', bidId: 12 }) }),
+    );
   });
 
   it('returns BID_NOT_FOUND when no row is deleted', async () => {
@@ -271,5 +323,39 @@ describe('deleteBidRecord', () => {
       ok: false,
       code: 'BID_NOT_FOUND',
     });
+  });
+});
+
+describe('restoreBidRecord', () => {
+  it('restores an unsuperseded deleted bid within the database recovery window and audits it', async () => {
+    const deletedBid = {
+      id: 12,
+      draftId: 4,
+      playerId: 10,
+      player: 'Josh Allen',
+      position: 'QB',
+      nflTeam: 'BUF',
+      price: 120,
+      sfRank: 1,
+      notes: null,
+      teamId: 7,
+      createdAt: new Date('2026-07-19T12:00:00.000Z'),
+      updatedAt: new Date('2026-07-19T12:10:00.000Z'),
+      deletedAt: new Date('2026-07-19T12:10:00.000Z'),
+      supersededAt: null,
+    };
+    mockAuctionFindFirst.mockResolvedValueOnce(deletedBid).mockResolvedValueOnce(null);
+    mockAuctionUpdate.mockResolvedValue({ ...deletedBid, deletedAt: null });
+
+    await expect(restoreBidRecord({ userId: 'owner-1', draftId: 4, bidId: 12 })).resolves.toEqual({
+      ok: true,
+      data: { bidId: 12 },
+    });
+    expect(mockAuctionUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: 12 }, data: { deletedAt: null } }),
+    );
+    expect(mockAuditCreate).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ type: 'RESTORE', bidId: 12 }) }),
+    );
   });
 });

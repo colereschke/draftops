@@ -1,4 +1,4 @@
-import { Prisma, type BidAuditEventType } from '@prisma/client';
+import type { BidAuditEventType, Prisma } from '@prisma/client';
 
 export interface AuditableBid {
   id: number;
@@ -72,8 +72,12 @@ export async function createBidAuditEvent(
       bidId: input.bidId,
       actorId: input.actorId,
       type: input.type,
-      before: input.before ? (input.before as unknown as Prisma.InputJsonObject) : Prisma.JsonNull,
-      after: input.after ? (input.after as unknown as Prisma.InputJsonObject) : Prisma.JsonNull,
+      before: input.before
+        ? (input.before as unknown as Prisma.InputJsonObject)
+        : (null as unknown as Prisma.NullableJsonNullValueInput),
+      after: input.after
+        ? (input.after as unknown as Prisma.InputJsonObject)
+        : (null as unknown as Prisma.NullableJsonNullValueInput),
     },
   });
 }

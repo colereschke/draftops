@@ -23,7 +23,7 @@ export function parseCsv(contents: string, options: CsvParseOptions = {}): Parse
 
   if (
     options.maxBytes !== undefined &&
-    new TextEncoder().encode(normalizedContents).byteLength > options.maxBytes
+    new TextEncoder().encode(contents).byteLength > options.maxBytes
   ) {
     throw new CsvParseError('CSV file exceeds the maximum allowed size.');
   }

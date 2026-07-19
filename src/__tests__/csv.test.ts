@@ -53,4 +53,15 @@ describe('parseCsv', () => {
   it('rejects a bare carriage return after a quoted field', () => {
     expect(() => parseCsv('Player\n"Josh"\r')).toThrow(CsvParseError);
   });
+
+  it('counts a leading BOM toward the UTF-8 byte cap', () => {
+    expect(() => parseCsv('\ufeffabc', { maxBytes: 3 })).toThrow(CsvParseError);
+  });
+
+  it('does not apply limits when options are omitted', () => {
+    expect(parseCsv('Player\nJoshua')).toEqual({
+      headers: ['Player'],
+      rows: [{ Player: 'Joshua' }],
+    });
+  });
 });

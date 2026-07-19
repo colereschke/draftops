@@ -4,6 +4,7 @@ import {
   previewSleeperRosterSync,
   saveSleeperRosterMapping,
 } from '@/lib/sleeper-roster-actions';
+import { SleeperClientError } from '@/lib/sleeper';
 
 const mockAuth = jest.fn();
 const mockGetDraft = jest.fn();
@@ -59,7 +60,7 @@ jest.mock('@/lib/db', () => ({
   },
 }));
 
-const DRAFT = { id: 4, sleeperLeagueId: 'league-1' };
+const DRAFT = { id: 4, sleeperLeagueId: '12345' };
 const LOCKED_DRAFT = {
   ...DRAFT,
   name: 'Sleeper Draft',
@@ -143,6 +144,7 @@ describe('Sleeper roster actions', () => {
       ok: false,
       code: 'not_found',
     });
+    expect(mockFetchRosters).not.toHaveBeenCalled();
     mockAuth.mockResolvedValue({ user: { id: 'other' } });
     mockGetDraft.mockResolvedValue(null);
     await expect(previewSleeperRosterSync({ draftId: 4 })).resolves.toEqual({
@@ -155,7 +157,7 @@ describe('Sleeper roster actions', () => {
     await expect(
       saveSleeperRosterMapping({
         draftId: 4,
-        leagueId: 'league-1',
+        leagueId: '12345',
         mappings: [
           { teamId: 7, sleeperRosterId: 9 },
           { teamId: 7, sleeperRosterId: 9 },
@@ -169,7 +171,7 @@ describe('Sleeper roster actions', () => {
     await expect(
       saveSleeperRosterMapping({
         draftId: 4,
-        leagueId: 'league-1',
+        leagueId: '12345',
         mappings: [{ teamId: 7, sleeperRosterId: 99 }],
       }),
     ).resolves.toEqual({ ok: false, code: 'mapping_required' });
@@ -179,7 +181,7 @@ describe('Sleeper roster actions', () => {
     await expect(
       saveSleeperRosterMapping({
         draftId: 4,
-        leagueId: 'league-1',
+        leagueId: '12345',
         mappings: [{ teamId: 7, sleeperRosterId: 9 }],
       }),
     ).resolves.toMatchObject({ ok: true });
@@ -202,7 +204,7 @@ describe('Sleeper roster actions', () => {
     await expect(
       saveSleeperRosterMapping({
         draftId: 4,
-        leagueId: 'league-1',
+        leagueId: '12345',
         mappings: [{ teamId: 7, sleeperRosterId: 9 }],
       }),
     ).resolves.toEqual({ ok: false, code: 'draft_complete' });
@@ -232,7 +234,7 @@ describe('Sleeper roster actions', () => {
     await expect(
       saveSleeperRosterMapping({
         draftId: 4,
-        leagueId: 'league-1',
+        leagueId: '12345',
         mappings: [{ teamId: 7, sleeperRosterId: 9 }],
       }),
     ).rejects.toThrow('DB connection lost');
@@ -281,7 +283,7 @@ describe('Sleeper roster actions', () => {
     ).resolves.toEqual({ ok: false, code: 'configuration_required' });
 
     mockGetDraft.mockResolvedValue(DRAFT);
-    mockFetchRosters.mockRejectedValue(new Error('SLEEPER_ERROR: unavailable'));
+    mockFetchRosters.mockRejectedValue(new SleeperClientError('UNAVAILABLE'));
     await expect(
       logSleeperRosterCatchUp({ draftId: 4, entries: [{ playerId: 3, teamId: 7, price: 42 }] }),
     ).resolves.toEqual({ ok: false, code: 'sleeper_error' });
@@ -409,10 +411,13 @@ describe('Sleeper roster actions', () => {
 
   it('returns not_found for previewSleeperRosterMatch when unauthenticated', async () => {
     mockAuth.mockResolvedValue(null);
-    await expect(previewSleeperRosterMatch({ draftId: 4, leagueId: 'league-1' })).resolves.toEqual({
+    await expect(previewSleeperRosterMatch({ draftId: 4, leagueId: '12345' })).resolves.toEqual({
       ok: false,
       code: 'not_found',
     });
+    expect(mockFetchLeague).not.toHaveBeenCalled();
+    expect(mockFetchUsers).not.toHaveBeenCalled();
+    expect(mockFetchRosters).not.toHaveBeenCalled();
   });
 
   it('rejects a blank league ID for previewSleeperRosterMatch without calling Sleeper', async () => {
@@ -423,9 +428,33 @@ describe('Sleeper roster actions', () => {
     expect(mockFetchLeague).not.toHaveBeenCalled();
   });
 
+  it('rejects an invalid league ID for previewSleeperRosterMatch before endpoint calls', async () => {
+    await expect(previewSleeperRosterMatch({ draftId: 4, leagueId: '1234' })).resolves.toEqual({
+      ok: false,
+      code: 'invalid_league_id',
+    });
+    expect(mockFetchLeague).not.toHaveBeenCalled();
+    expect(mockFetchUsers).not.toHaveBeenCalled();
+    expect(mockFetchRosters).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['TIMEOUT', 'timeout'],
+    ['RATE_LIMITED', 'rate_limited'],
+    ['MALFORMED_RESPONSE', 'malformed_response'],
+    ['UNAVAILABLE', 'sleeper_error'],
+  ] as const)('maps Sleeper %s failures to %s', async (failureCode, responseCode) => {
+    mockFetchRosters.mockRejectedValue(new SleeperClientError(failureCode));
+
+    await expect(previewSleeperRosterSync({ draftId: 4 })).resolves.toEqual({
+      ok: false,
+      code: responseCode,
+    });
+  });
+
   it('returns sleeper_error from previewSleeperRosterMatch when Sleeper cannot be reached', async () => {
-    mockFetchLeague.mockRejectedValue(new Error('NOT_FOUND'));
-    await expect(previewSleeperRosterMatch({ draftId: 4, leagueId: 'league-1' })).resolves.toEqual({
+    mockFetchLeague.mockRejectedValue(new SleeperClientError('NOT_FOUND'));
+    await expect(previewSleeperRosterMatch({ draftId: 4, leagueId: '12345' })).resolves.toEqual({
       ok: false,
       code: 'sleeper_error',
     });
@@ -433,7 +462,7 @@ describe('Sleeper roster actions', () => {
 
   it('rethrows an unexpected previewSleeperRosterMatch failure instead of masking it', async () => {
     mockFetchLeague.mockRejectedValue(new Error('DB connection lost'));
-    await expect(previewSleeperRosterMatch({ draftId: 4, leagueId: 'league-1' })).rejects.toThrow(
+    await expect(previewSleeperRosterMatch({ draftId: 4, leagueId: '12345' })).rejects.toThrow(
       'DB connection lost',
     );
   });
@@ -446,7 +475,7 @@ describe('Sleeper roster actions', () => {
     mockFetchUsers.mockResolvedValue([{ user_id: 'u1', display_name: 'cole' }]);
     mockFetchRosters.mockResolvedValue([{ roster_id: 9, owner_id: 'u1' }]);
 
-    await expect(previewSleeperRosterMatch({ draftId: 4, leagueId: 'league-1' })).resolves.toEqual({
+    await expect(previewSleeperRosterMatch({ draftId: 4, leagueId: '12345' })).resolves.toEqual({
       ok: true,
       leagueName: 'Dynasty Warlords',
       rosters: [

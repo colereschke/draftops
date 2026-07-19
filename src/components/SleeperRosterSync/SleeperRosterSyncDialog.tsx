@@ -36,7 +36,13 @@ function responseMessage(code: string): string {
     case 'sleeper_error':
       return 'Sleeper could not be reached. Try again in a moment.';
     case 'invalid_league_id':
-      return 'Enter a Sleeper league ID.';
+      return 'Enter a valid numeric Sleeper league ID.';
+    case 'timeout':
+      return 'Sleeper took too long to respond. Try again in a moment.';
+    case 'rate_limited':
+      return 'Sleeper is rate limiting requests. Try again in a moment.';
+    case 'malformed_response':
+      return 'Sleeper returned unexpected data. Try again in a moment.';
     case 'invalid_input':
       return 'Enter a whole-dollar price greater than zero.';
     case 'not_found':

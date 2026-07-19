@@ -9,6 +9,8 @@ import {
   fetchSleeperLeagueRosters,
   fetchSleeperLeagueUsers,
   matchSleeperRostersToTeams,
+  SleeperClientError,
+  validateSleeperLeagueId,
 } from '@/lib/sleeper';
 import type { SleeperRosterCandidate } from '@/lib/sleeper';
 import type { LeagueTeam } from '@/types';
@@ -36,6 +38,10 @@ export type SleeperRosterSyncResponse =
         | 'configuration_required'
         | 'mapping_required'
         | 'not_found'
+        | 'invalid_league_id'
+        | 'timeout'
+        | 'rate_limited'
+        | 'malformed_response'
         | 'sleeper_error'
         | 'draft_complete';
     };
@@ -47,6 +53,10 @@ export type SleeperRosterCatchUpResponse =
         | 'invalid_input'
         | 'not_found'
         | 'configuration_required'
+        | 'invalid_league_id'
+        | 'timeout'
+        | 'rate_limited'
+        | 'malformed_response'
         | 'sleeper_error'
         | 'draft_complete';
     }
@@ -61,7 +71,16 @@ export type SleeperRosterCatchUpResponse =
 
 export type SleeperRosterMatchResponse =
   | { ok: true; leagueName: string; rosters: SleeperRosterCandidate[]; teams: LeagueTeam[] }
-  | { ok: false; code: 'not_found' | 'sleeper_error' | 'invalid_league_id' };
+  | {
+      ok: false;
+      code:
+        | 'not_found'
+        | 'sleeper_error'
+        | 'invalid_league_id'
+        | 'timeout'
+        | 'rate_limited'
+        | 'malformed_response';
+    };
 
 interface OwnedDraft {
   id: number;
@@ -79,11 +98,24 @@ async function requireOwnedDraft(draftId: number): Promise<OwnedDraft | null> {
     : null;
 }
 
-function isSleeperError(error: unknown): boolean {
-  return (
-    error instanceof Error &&
-    (error.message === 'NOT_FOUND' || error.message.startsWith('SLEEPER_ERROR:'))
-  );
+type SleeperRosterExternalFailureCode =
+  'invalid_league_id' | 'timeout' | 'rate_limited' | 'malformed_response' | 'sleeper_error';
+
+function mapSleeperRosterFailure(error: unknown): SleeperRosterExternalFailureCode | null {
+  if (!(error instanceof SleeperClientError)) return null;
+
+  switch (error.code) {
+    case 'INVALID_LEAGUE_ID':
+      return 'invalid_league_id';
+    case 'TIMEOUT':
+      return 'timeout';
+    case 'RATE_LIMITED':
+      return 'rate_limited';
+    case 'MALFORMED_RESPONSE':
+      return 'malformed_response';
+    default:
+      return 'sleeper_error';
+  }
 }
 
 function hasDuplicateValues(values: number[]): boolean {
@@ -121,13 +153,15 @@ export async function previewSleeperRosterSync(input: {
   if (!draft.sleeperLeagueId) return { ok: false, code: 'configuration_required' };
 
   try {
-    const rosters = await fetchSleeperLeagueRosters(draft.sleeperLeagueId);
+    const leagueId = validateSleeperLeagueId(draft.sleeperLeagueId);
+    const rosters = await fetchSleeperLeagueRosters(leagueId);
     const preview = await getPreview(draft.id, rosters);
     if (preview.diagnostics.unmappedRosterIds.length > 0)
       return { ok: false, code: 'mapping_required' };
     return { ok: true, preview };
   } catch (error) {
-    if (isSleeperError(error)) return { ok: false, code: 'sleeper_error' };
+    const code = mapSleeperRosterFailure(error);
+    if (code) return { ok: false, code };
     throw error;
   }
 }
@@ -138,20 +172,20 @@ export async function previewSleeperRosterMatch(input: {
 }): Promise<SleeperRosterMatchResponse> {
   const draft = await requireOwnedDraft(input.draftId);
   if (!draft) return { ok: false, code: 'not_found' };
-  const leagueId = input.leagueId.trim();
-  if (!leagueId) return { ok: false, code: 'invalid_league_id' };
 
   let league: Awaited<ReturnType<typeof fetchSleeperLeague>>;
   let users: Awaited<ReturnType<typeof fetchSleeperLeagueUsers>>;
   let rosters: Awaited<ReturnType<typeof fetchSleeperLeagueRosters>>;
   try {
+    const leagueId = validateSleeperLeagueId(input.leagueId);
     [league, users, rosters] = await Promise.all([
       fetchSleeperLeague(leagueId),
       fetchSleeperLeagueUsers(leagueId),
       fetchSleeperLeagueRosters(leagueId),
     ]);
   } catch (error) {
-    if (isSleeperError(error)) return { ok: false, code: 'sleeper_error' };
+    const code = mapSleeperRosterFailure(error);
+    if (code) return { ok: false, code };
     throw error;
   }
 
@@ -200,14 +234,17 @@ export async function saveSleeperRosterMapping(input: {
   }
 
   let rosters: Awaited<ReturnType<typeof fetchSleeperLeagueRosters>>;
+  let leagueId: string;
   try {
+    leagueId = validateSleeperLeagueId(input.leagueId);
     [, , rosters] = await Promise.all([
-      fetchSleeperLeague(input.leagueId),
-      fetchSleeperLeagueUsers(input.leagueId),
-      fetchSleeperLeagueRosters(input.leagueId),
+      fetchSleeperLeague(leagueId),
+      fetchSleeperLeagueUsers(leagueId),
+      fetchSleeperLeagueRosters(leagueId),
     ]);
   } catch (error) {
-    if (isSleeperError(error)) return { ok: false, code: 'sleeper_error' };
+    const code = mapSleeperRosterFailure(error);
+    if (code) return { ok: false, code };
     throw error;
   }
 
@@ -244,7 +281,7 @@ export async function saveSleeperRosterMapping(input: {
       });
       await tx.draft.update({
         where: { id: lockedDraft.id },
-        data: { sleeperLeagueId: input.leagueId },
+        data: { sleeperLeagueId: leagueId },
       });
       for (const mapping of input.mappings) {
         await tx.team.update({
@@ -311,9 +348,12 @@ export async function logSleeperRosterCatchUp(input: {
 
   let rosters: Awaited<ReturnType<typeof fetchSleeperLeagueRosters>>;
   try {
-    rosters = await fetchSleeperLeagueRosters(draft.sleeperLeagueId);
-  } catch {
-    return { ok: false, code: 'sleeper_error' };
+    const leagueId = validateSleeperLeagueId(draft.sleeperLeagueId);
+    rosters = await fetchSleeperLeagueRosters(leagueId);
+  } catch (error) {
+    const code = mapSleeperRosterFailure(error);
+    if (code) return { ok: false, code };
+    throw error;
   }
 
   const mutation = await withActiveOwnedDraftMutation(

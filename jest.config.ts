@@ -16,6 +16,7 @@ const config: Config = {
     '<rootDir>/.claude/',
     '<rootDir>/.claire/',
     '<rootDir>/.worktrees/',
+    '<rootDir>/e2e/',
     '<rootDir>/src/__tests__/fixtures/',
     '<rootDir>/src/__tests__/integration/',
   ],

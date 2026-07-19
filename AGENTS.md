@@ -9,6 +9,7 @@ make setup       # First-time: install + migrate + seed
 make dev         # Dev server at http://localhost:3000
 make check       # Full quality gate: typecheck + lint + format + test
 make test        # Jest only
+make test-e2e    # Playwright smoke tests (use a disposable database)
 make db-studio   # Visual DB browser (Prisma Studio)
 make db-reset    # Wipe DB and re-seed (destructive)
 ```
@@ -32,45 +33,59 @@ src/
 ├── app/
 │   ├── api/
 │   │   ├── auth/[...nextauth]/route.ts  # Auth.js catch-all route
-│   │   ├── nomination-data/route.ts     # GET — returns teamStats, auctionResults, watchlist, nominatedPlayers
-│   │   ├── nominated/route.ts           # POST/DELETE — mark/unmark a player as currently in auction
-│   │   └── watchlist/route.ts           # POST/DELETE — add/remove from PlayerWatchlist
-│   ├── budget/page.tsx               # /budget — buying power view (server component)
-│   ├── nominate/page.tsx             # /nominate — nomination helper (server component)
-│   ├── sign-in/page.tsx              # /sign-in — Discord OAuth sign-in page
-│   ├── teams/page.tsx                # /teams — team roster tracker (server component)
+│   │   ├── draft/[draftId]/             # Per-draft info, nomination, nominated, and watchlist routes
+│   │   ├── drafts/route.ts              # GET/POST draft collection
+│   │   └── log-error/route.ts           # Client error reporting
+│   ├── draft/[draftId]/              # Value sheet plus budget, nominate, and teams subpages
+│   ├── drafts/                       # Draft list and validated draft-creation form
+│   ├── rankings/page.tsx             # Profile-level custom rankings upload and match resolution
+│   ├── sign-in/page.tsx              # Branded Discord OAuth sign-in screen
 │   ├── error.tsx                     # App-level error boundary
+│   ├── global-error.tsx               # Root error boundary
 │   ├── globals.css                   # CSS custom properties (design tokens)
+│   ├── icon.svg                      # Gavel favicon (Next.js App Router file convention)
 │   ├── layout.tsx                    # Font setup + NavBar
-│   └── page.tsx                      # / — value sheet (server component)
+│   └── page.tsx                      # Redirects to the sole active draft or /drafts
 ├── auth.ts                           # Auth.js config: Discord provider, JWT strategy, session callback
 ├── components/
 │   ├── AuctionSheet/                 # Main player value sheet + bid logging
 │   ├── BidModal/                     # Log/edit/delete bid modal
-│   ├── BudgetPressure/               # Budget pressure table + 20s auto-refresh
+│   ├── Brand/                        # Gavel logo mark and wordmark lockup
+│   ├── BudgetPressure/               # Live threat board + 20s auto-refresh
 │   ├── NavBar/                       # Fixed header with nav links
 │   ├── NominationHelper/             # Nomination scorer + watchlist + in-auction sidebar
-│   └── RosterTracker/                # Expandable team roster view
+│   ├── Onboarding/                   # First-draft welcome and active-draft feature tour
+│   ├── RankingsUpload/               # CSV upload and unmatched Sleeper-player resolution
+│   ├── RosterTracker/                # Manager dossiers and expandable grouped rosters
+│   ├── SignIn/                       # Branded sign-in screen and decorative value ticker
+│   └── SleeperRosterSync/            # Sleeper mapping and catch-up batch dialog
 ├── data/
 │   └── players.ts                    # ~267 ETR dynasty players — server-only seed source (NOT imported by client components)
 ├── lib/
-│   ├── actions.ts                    # Server actions: createDraft (seeds Player table), logBid, updateBid, deleteBid
-│   ├── budget.ts                     # computeTeamStats for /budget page
-│   ├── computeTeamStats.ts           # computeTeamStats(teams, players) for /teams page (players param, no static import)
+│   ├── actions.ts                    # Auth-gated draft lifecycle and bid mutations; createDraft returns DraftMutationResult
+│   ├── activeDraftPlayers.ts         # Canonical loader that overlays only the active projection value set
+│   ├── computeDraftTeamStats.ts      # Per-draft team stats for all draft views
 │   ├── db.ts                         # Prisma singleton using PrismaPg adapter (pg Pool)
 │   ├── draft.ts                      # getDraft(userId, draftId) — auth-gated draft lookup
-│   ├── nominationScoring.ts          # computeNominationScores — core nomination logic
+│   ├── nominationScoring.ts          # computeNominationScores(..., targetRoster) — core nomination logic
 │   ├── posColors.ts                  # POS_COLORS map (bg, accent, badge, badgeText per position)
-│   └── teams.ts                      # LEAGUE_TEAMS, ROSTER_SIZE = 30, TARGET_ROSTER (ROSTER_SIZE used as fallback until #5b)
+│   ├── projectionApplication.ts      # Stage, validate, and atomically activate projection value sets
+│   ├── tendencies.ts                 # Shared manager behavior engine for /teams and /budget
+│   ├── threat.ts                     # Position-specific budget threat ranking
+│   ├── valueAdjustment.ts            # Draft-settings fallback-value adjustment
+│   ├── valueSpread.ts                # Advisory dynasty-versus-projection spread tags
+│   └── teams.ts                      # Default seed teams only; runtime reads draft settings
 └── types/
     └── index.ts                      # Player, Position, StartingSlot, ScoringSettings, DEFAULT_* constants,
                                       # TeamStats, AuctionResultEntry, RosterEntry, TeamWithRoster, ClaimedBid, LeagueTeam
 middleware.ts                         # Auth.js middleware — redirects unauthenticated users to /sign-in
 prisma/
-├── schema.prisma                     # Draft + Team + AuctionResult + PlayerWatchlist + NominatedPlayer + Player
+├── schema.prisma                     # Draft, player, auction, projection, rankings, Sleeper identity, and onboarding models
 ├── seed.ts                           # Upserts default draft + 12 teams (idempotent)
 ├── seed-players.ts                   # Full-seed script: seeds Player rows for drafts with zero players (skips drafts that already have any)
 ├── sync-players.ts                   # Backfill script: inserts src/data/players.ts entries missing (by name) from each draft's Player table; idempotent, safe to re-run after adding new players
+├── sync-sleeper-players.ts           # Upserts generated Sleeper identity data for ranking/projection matching
+├── backfill-budget-scaled-values.ts  # Dry-run/apply fallback-value backfill for existing drafts
 └── migrations/                       # Postgres migration history
 prisma.config.ts                      # Prisma v7 config — DATABASE_URL from env
 existing_project_docs/                # Original reference files — do not delete
@@ -78,41 +93,44 @@ existing_project_docs/                # Original reference files — do not dele
 
 ## Pages & Routes
 
-| Route       | Purpose                                                                                                |
-| ----------- | ------------------------------------------------------------------------------------------------------ |
-| `/sign-in`  | Discord OAuth sign-in; redirects to `/` after auth                                                     |
-| `/`         | Value sheet — full player list with filters, search, sort, bid logging via modal                       |
-| `/teams`    | Team roster tracker — expandable rows showing each player a team has won, with delta vs. target budget |
-| `/budget`   | Budget pressure view — teams sorted by buying power with visual bar; auto-refreshes every 20s          |
-| `/nominate` | Nomination helper — ranks available players by rival demand score; personal watchlist sidebar          |
+| Route                       | Purpose                                                                                                   |
+| --------------------------- | --------------------------------------------------------------------------------------------------------- |
+| `/`                         | Redirects an authenticated user to their sole active draft, otherwise `/drafts`.                          |
+| `/drafts`                   | Lists active/completed drafts and offers validated draft creation at `/drafts/new`.                       |
+| `/draft/[draftId]`          | Value sheet — filters, sorting, bid logging, live nominations, catch-up sync, and advisory Value Spreads. |
+| `/draft/[draftId]/teams`    | Manager dossier board with expandable, position-grouped roster detail.                                    |
+| `/draft/[draftId]/budget`   | Live threat board, position-anchored to the nomination unless manually overridden.                        |
+| `/draft/[draftId]/nominate` | Rival-demand nomination helper with persisted watchlist.                                                  |
+| `/rankings`                 | Profile-level custom rankings upload and Sleeper-match resolution.                                        |
+| `/sign-in`                  | Branded Discord OAuth sign-in with a decorative scrolling `ValueTicker`.                                  |
 
 All pages are server components that fetch from Prisma directly and pass data down to `'use client'` components. Every route except `/sign-in` and the Auth.js API route is protected by `middleware.ts`.
 
 ## Database Schema
 
-Five models — all data scoped to a `Draft`:
+Draft-scoped auction, projection, and onboarding models plus global/profile-level identity and rankings models:
 
-- `Draft` — top-level container. `ownerId` = Auth.js userId (Discord snowflake); `ownerTeamId` = which `Team` belongs to the owner (used by nomination scoring instead of the old hardcoded `'coreschke'` handle)
-- `Team` — managers within a draft; unique on `(handle, draftId)`
-- `AuctionResult` — one row per completed bid (player, position, nflTeam, price, sfRank, notes, teamId, draftId)
-- `PlayerWatchlist` — owner's personal watchlist; excluded from nomination suggestions; unique on `(playerName, draftId)`
-- `NominatedPlayer` — players currently up for bidding; shown with a teal "LIVE" badge; auto-removed when a bid is logged via `logBid`; unique on `(playerName, draftId)`
+- `Draft` — top-level container with owner, `ACTIVE`/`COMPLETE` status, league settings, the owner team, optional Sleeper league mapping, and the sole active projection-value-set pointer.
+- `OnboardingProgress` — one per user; records first-draft welcome/feature-tour progress and its associated draft.
+- `Team` / `AuctionResult` / `PlayerWatchlist` / `NominatedPlayer` — draft-scoped operational data. Player-facing references use composite same-draft relations, so cross-draft associations cannot be persisted.
+- `Player` — per-draft fallback-value row with optional Sleeper/custom identity and generated future-asset metadata.
+- `ProjectionSource` / `PlayerProjection` / `DraftProjectionValueSet` / `DraftPlayerValue` — source metadata, normalized projections, atomic staged/active value sets, and draft-specific valuation outputs.
+- `SleeperPlayer` — global identity reference for custom-ranking and projection matching.
+- `UserRankingSet` / `UserRankingPlayer` — one signed-in user's active custom-ranking set and its rows; it can seed new drafts but does not modify existing ones.
 
 Derived values (computed at query time, not stored):
 
 - `spent = SUM(results.price)`
 - `remaining = budget - spent`
 - `rosterCount = COUNT(results)`
-- `buyingPower = remaining - (ROSTER_SIZE - rosterCount)` — classic auction math
+- `buyingPower = remaining - (draft.rosterSize - rosterCount)` — classic auction math
 - `delta = result.price - player.budget` — on each roster entry, how much over/under target
 
 ## Key Library Files
 
 **`src/lib/teams.ts`**
 
-- `LEAGUE_TEAMS` — 12 teams with handles + display names
-- `ROSTER_SIZE = 30`
-- `TARGET_ROSTER = { QB: 4, RB: 9, WR: 11, TE: 3 }` — used by nomination scoring
+- `LEAGUE_TEAMS` — 12 teams with handles + display names; used only to seed the default draft. Runtime roster size and targets come from draft settings.
 
 **`src/lib/draft.ts`**
 
@@ -120,7 +138,7 @@ Derived values (computed at query time, not stored):
 
 **`src/lib/nominationScoring.ts`** — core nomination intelligence
 
-- `computeNominationScores(players, teamStats, auctionResults, watchlist, nominatedPlayers, myHandle)`
+- `computeNominationScores(players, teamStats, auctionResults, watchlist, nominatedPlayers, myHandle, targetRoster)`
 - Filters out won players, watchlist items, and currently nominated players
 - For each available player, scores rival demand: `needRatio = (target - currentCount) / target` per position per team
 - Nomination score = `totalRivalDemand × player.ceiling` where demand = `sum(rival.buyingPower × needRatio)`
@@ -235,7 +253,7 @@ Existing-draft budget backfill:
 
 - **12 teams**, $1,000 budget, 30-man rosters
 - **Kicker = pick package**: Winning a kicker bid nets you that team's entire 2027 1st+2nd+3rd picks. Cole's picks = Matt Gay.
-- **2028 picks NOT in startup pool**
+- Future-pick availability and package handling are configured per draft; do not assume a static startup-pool year when changing pick behavior.
 - Scoring: Full PPR + TE premium (+1 PPR, +0.25 first down for TEs), Superflex
 
 ## Prisma v7 Notes
@@ -268,7 +286,7 @@ OWNER_DISCORD_ID=      # Your Discord user ID — seeds ownerId on the default d
 - Single quotes, trailing commas, 2-space indent, 100 char line width (Prettier)
 - No unused vars (ESLint errors), no explicit `any` (ESLint warns) — use `unknown` with a type guard if the type is genuinely unknown
 - Pre-commit hook runs `pnpm lint-staged` + `pnpm tsc --noEmit` — do not skip with `--no-verify`
-- CI runs typecheck + lint + format check + tests on every PR
+- CI runs quality (typecheck/lint/format/unit), production build, clean-Postgres migrations plus integration tests, Python projection checks, and Playwright smoke tests on every PR.
 - **Before any code review** (`/code-review` or otherwise): run `pnpm tsc --noEmit` and `pnpm lint` to surface type errors and lint violations early — these are the same checks the pre-commit hook enforces and they won't run automatically during edit sessions
 - Non-null assertions (`!`) only when the value's existence is obvious from context
 - Prefer `interface` over `type` for object shapes (props, API responses, domain types) — reserve `type` for unions, intersections, and aliases
@@ -286,35 +304,39 @@ OWNER_DISCORD_ID=      # Your Discord user ID — seeds ownerId on the default d
 
 - **Select by `data-testid` or `id`** — avoid visible text, role+name, or CSS class selectors; they're brittle. Add a `data-testid` to the component under test if one doesn't exist.
 - **Typed mock data** — annotate test fixtures with the real source type (e.g. `const MOCK_TEAM: Team[]`). Reuse types from `src/types/` rather than redefining shapes locally.
+- **E2E isolation** — Playwright uses `e2e/seed.ts` to create data from scratch. Run it only against a disposable database; never point it at a real dev or production database.
 
 ## What's Built
 
 - **Auth** — Discord OAuth via Auth.js v5; JWT sessions; middleware protects all routes; `/sign-in` page
+- **Draft lifecycle and onboarding** — root routing selects the active draft; `/drafts` manages active/completed drafts; the validated `/drafts/new` form shares `draftInputSchema` with `createDraft`; a first-draft welcome and feature tour persist through `OnboardingProgress`.
+- **Draft integrity** — player-facing records use non-null composite same-draft foreign keys; a player cannot be claimed, watched, nominated, or valued through another draft. Completed drafts render read-only controls.
 - **PostgreSQL** — migrated from SQLite; Neon in prod, local WSL2 Postgres in dev; `@prisma/adapter-pg`
-- **Multi-draft schema** — `Draft` model with `ownerId` + `ownerTeamId`; all data scoped to `draftId`; expand/contract migration complete (non-nullable, composite uniques)
+- **Multi-draft schema** — all operational data is draft-scoped; the default active-player loader overlays only the explicitly active projection value set.
 - **League settings** — `Draft` stores `teamCount`, `rosterSize`, `budget`, `startingLineup Json?`, `scoringSettings Json?`, `targetRoster Json?`; form has Roster Settings, Starting Lineup builder, and Scoring sections; QB/SUPER_FLEX lineup validation (PR #20)
-- **Per-draft Player table** — `Player` model scoped to `draftId`, seeded from ETR base values at draft creation; `age Float?`; `@@unique([name, draftId])`; `prisma/seed-players.ts` backfills existing drafts (PR #20)
-- `/` — Value sheet with full player list (from DB), filters, search, sort, bid logging modal, budget tracker
-- `/teams` — Team roster tracker with expandable rows, spend/remaining/buying power per team, delta vs. target per player (players from DB)
-- `/budget` — Budget pressure view sorted by buying power with auto-refresh
-- `/nominate` — Nomination helper that ranks available players by rival demand; personal watchlist persisted to DB; "Nom" button tracks players currently in auction; full server-component with auth gate (PR #20)
+- **Custom rankings and Sleeper identity** — one profile-level `UserRankingSet` can seed a new draft; imported CSV rows are matched to `SleeperPlayer`, with a manual resolution UI. Runtime must query the identity table rather than depend on generated local files.
+- **Projection application** — projection data stages in a new `DraftProjectionValueSet`, validates, and atomically activates through `Draft.activeProjectionValueSetId`; prior active values survive any failed reapplication.
+- **Value sheet** — player filters/search/sort, bid logging, live-nomination state, catch-up-from-Sleeper flow, optimistic mutation recovery, and advisory Value Spreads that never alter auction targets.
+- **Teams and budget** — manager dossier cards and a position-aware live threat board use shared revealed buying-tendency data rather than count-vs-target need framing.
+- **Nomination helper** — ranks available players by rival demand, with persisted watchlist and live-nomination controls.
+- **Brand** — gavel `LogoMark`/`LogoLockup`, static favicon, and responsive sign-in `ValueTicker`.
 
 ## Player Data
 
-Source: ETR dynasty rankings CSV (~267 players). Values scaled ×5 for $1,000 budget; TE premium applied post-import. Lives in `src/data/players.ts` as server-only seed data — **never import this in client components**. Will be replaced by custom rankings upload (#7) when that lands.
+Source: ETR dynasty rankings CSV (~267 players), normalized ×5 to a $1,000 source economy; TE seeds receive the legacy premium. `src/data/players.ts` is server-only. At draft creation, source values are scaled to the selected draft budget and adjusted for scoring, scarcity, and concentration; `Player.base*` preserves source values while `Player.budget`/`ceiling`/`floor` are the fallback draft values. Projection shaping is staged and atomically activated separately, and players without an active projected row retain their fallback value. Custom ranking sets are an alternative source for new drafts.
 
 `ScoringSettings` is a `type` alias (not `interface`) — Prisma's `InputJsonValue` requires implicit string index signature that only type aliases provide.
 
 ## What's Next
 
-**Deploy Milestone** (Vercel + Neon) — #5a League Settings + Player Table is done (PR #20). `prisma migrate deploy` is already wired into the Vercel build command — Neon migration applies on deploy. Run `pnpm tsx prisma/seed-players.ts` against prod DB after PR #20 merges (before deploying) to backfill existing drafts.
+**Deploy Milestone** (Vercel + Neon) — done. `prisma migrate deploy` is wired into the Vercel build command. Generated `data/generated/*` files are local/CLI inputs only; deployed runtime code must use persisted `SleeperPlayer` identity data.
 
 **Longer term** (see `ROADMAP.md`):
 
-- #5b Value adjustment algorithm — tunes player budget/ceiling/floor based on league settings delta from baseline. `rosterSize` is stored on `Draft` but `computeTeamStats` still uses the `ROSTER_SIZE` constant — #5b wires those together.
+- #5b Value adjustment algorithm — Phase 1 is done (settings→fallback scaling plus scoring/scarcity/concentration). Phase 2 is a projection/VOR refinement.
 - #5c Sleeper league import — auto-populate draft settings from a Sleeper league ID
 - #6 UI redesign (Linear/Vercel aesthetic, shadcn/ui shortlisted) — after deploy milestone
-- #7 Custom rankings upload CSV — adds upload UI on top of the Player model from #5a
+- #7 Custom rankings upload CSV — done. Deferred: existing-draft replacement, multiple named sets, flexible column mapping, and kicker/PKG assignment UX.
 
 ## Global Rules
 

@@ -161,6 +161,26 @@ describe('parseRankingsCsv', () => {
     }
   });
 
+  it('rejects a UTF-8 upload larger than 1 MiB', () => {
+    const result = parseRankingsCsv(`${HEADER}\nJosh Allen,BUF,QB,30,$51\n${'é'.repeat(524288)}`);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.errors).toEqual(expect.arrayContaining([expect.stringMatching(/size/i)]));
+    }
+  });
+
+  it('rejects an upload with more than 2,000 data rows', () => {
+    const result = parseRankingsCsv(
+      [HEADER, ...Array.from({ length: 2001 }, () => 'Josh Allen,BUF,QB,30,$51')].join('\n'),
+    );
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.errors).toEqual(expect.arrayContaining([expect.stringMatching(/row count/i)]));
+    }
+  });
+
   it('caps row validation errors at 25 and appends a truncation message', () => {
     const result = parseRankingsCsv(
       [HEADER, ...Array.from({ length: 30 }, () => ',BUF,QB,30,$51')].join('\n'),

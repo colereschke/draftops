@@ -249,16 +249,42 @@ describe('updateBidRecord', () => {
   const existingBid = { id: 12, playerId: 10, position: 'QB', price: 500, teamId: 7 };
 
   it('excludes the existing bid before validating a same-team price update', async () => {
-    mockAuctionFindFirst.mockResolvedValue(existingBid);
+    mockAuctionFindFirst.mockResolvedValue({
+      ...existingBid,
+      draftId: 4,
+      player: 'Josh Allen',
+      nflTeam: 'BUF',
+      sfRank: 1,
+      notes: null,
+      createdAt: new Date('2026-07-19T12:00:00.000Z'),
+      updatedAt: new Date('2026-07-19T12:00:00.000Z'),
+      deletedAt: null,
+      supersededAt: null,
+    });
     mockAuctionFindMany.mockResolvedValue([{ id: 13, price: 100, position: 'RB' }]);
+    mockAuctionUpdate.mockResolvedValue({
+      ...existingBid,
+      draftId: 4,
+      player: 'Josh Allen',
+      nflTeam: 'BUF',
+      sfRank: 1,
+      notes: null,
+      createdAt: new Date('2026-07-19T12:00:00.000Z'),
+      updatedAt: new Date('2026-07-19T12:01:00.000Z'),
+      deletedAt: null,
+      supersededAt: null,
+    });
 
     await expect(
       updateBidRecord({ userId: 'owner-1', draftId: 4, bidId: 12, teamId: 7, price: 899 }),
     ).resolves.toMatchObject({ ok: true });
     expect(mockAuctionFindMany).toHaveBeenCalledWith({
-      where: { draftId: 4, teamId: 7, id: { not: 12 } },
+      where: { draftId: 4, teamId: 7, deletedAt: null, id: { not: 12 } },
       select: { id: true, price: true, position: true },
     });
+    expect(mockAuditCreate).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ type: 'UPDATE', bidId: 12 }) }),
+    );
   });
 
   it('validates the destination team when moving a bid', async () => {

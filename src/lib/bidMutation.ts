@@ -102,6 +102,7 @@ export async function assertBidLegalInTransaction(
       where: {
         draftId: draft.id,
         teamId: input.teamId,
+        deletedAt: null,
         ...(input.excludeBidId === undefined ? {} : { id: { not: input.excludeBidId } }),
       },
       select: { id: true, price: true, position: true },
@@ -210,8 +211,7 @@ export async function updateBidRecord(
 
   return withActiveOwnedDraftMutation(input.userId, input.draftId, async (tx, draft) => {
     const existingBid = await tx.auctionResult.findFirst({
-      where: { id: input.bidId, draftId: draft.id },
-      select: { id: true, playerId: true, position: true, price: true, teamId: true },
+      where: { id: input.bidId, draftId: draft.id, deletedAt: null },
     });
     if (!existingBid) throw new DraftMutationFailure('BID_NOT_FOUND');
 
@@ -225,7 +225,14 @@ export async function updateBidRecord(
     const updated = await tx.auctionResult.update({
       where: { id: existingBid.id },
       data: { price: input.price, teamId: input.teamId },
-      select: { id: true },
+    });
+    await createBidAuditEvent(tx, {
+      draftId: draft.id,
+      bidId: updated.id,
+      actorId: input.userId,
+      type: 'UPDATE',
+      before: toBidSnapshot(existingBid),
+      after: toBidSnapshot(updated),
     });
     return { bidId: updated.id };
   });

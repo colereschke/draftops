@@ -2,6 +2,7 @@ import {
   buildStaleDraftPlayerValueDeleteWhere,
   buildDraftPlayerValueData,
   getSleeperIdUpdates,
+  formatProjectionApplyResult,
   resolvePlayerSleeperIds,
   type CsvProjectionRow,
   groupProjectionRowsBySource,
@@ -10,6 +11,19 @@ import {
   parseProjectionRows,
   runProjectionImportWorkflow,
 } from '../../prisma/apply-projection-values';
+
+it('formats activation metadata for operational audit output', () => {
+  expect(
+    formatProjectionApplyResult({
+      valueSetId: 11,
+      projectionSourceId: 7,
+      appliedCount: 267,
+      activatedAt: new Date('2026-07-18T12:00:00.000Z'),
+    }),
+  ).toBe(
+    'Activated projection value set 11 from source 7 with 267 player row(s) at 2026-07-18T12:00:00.000Z.',
+  );
+});
 
 function projectionRow(overrides: Partial<CsvProjectionRow>): CsvProjectionRow {
   return {

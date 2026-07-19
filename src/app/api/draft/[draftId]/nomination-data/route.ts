@@ -70,8 +70,8 @@ export async function GET(
   return NextResponse.json({
     teamStats,
     auctionResults,
-    watchlist: watchlistEntries.flatMap((e) => (e.playerId === null ? [] : [e.playerId])),
-    nominated: nominatedEntries.flatMap((e) => (e.playerId === null ? [] : [e.playerId])),
+    watchlist: watchlistEntries.map((entry) => entry.playerId),
+    nominated: nominatedEntries.map((entry) => entry.playerId),
     ownerHandle: draft.ownerTeam?.handle ?? null,
     targetRoster:
       (draft.targetRoster as Partial<Record<Position, number>> | null) ?? DEFAULT_TARGET_ROSTER,

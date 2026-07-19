@@ -29,6 +29,35 @@ const draft200: BudgetValueBackfillDraft = {
   startingLineup: [...DEFAULT_STARTING_LINEUP],
   scoringSettings: { ...DEFAULT_SCORING_SETTINGS },
   targetRoster: { QB: 4, RB: 9, WR: 11, TE: 3 },
+  activeProjectionValueSetId: 17,
+  projectionValueSets: [
+    {
+      id: 16,
+      draftId: 5,
+      projectionSourceId: 6,
+      status: 'ARCHIVED',
+      expectedPlayerCount: 1,
+      appliedPlayerCount: 1,
+      createdAt: new Date('2026-07-14T12:00:00.000Z'),
+      activatedAt: new Date('2026-07-14T12:00:00.000Z'),
+      failedAt: null,
+      failureCode: null,
+      failureMessage: null,
+    },
+    {
+      id: 17,
+      draftId: 5,
+      projectionSourceId: 7,
+      status: 'ACTIVE',
+      expectedPlayerCount: 1,
+      appliedPlayerCount: 1,
+      createdAt: new Date('2026-07-15T12:00:00.000Z'),
+      activatedAt: new Date('2026-07-15T12:00:00.000Z'),
+      failedAt: null,
+      failureCode: null,
+      failureMessage: null,
+    },
+  ],
   players: [
     {
       id: 10,
@@ -79,6 +108,7 @@ const draft200: BudgetValueBackfillDraft = {
       draftId: 5,
       playerId: 10,
       projectionSourceId: 6,
+      valueSetId: 16,
       projectedPoints: 290,
       replacementPoints: 200,
       vor: 90,
@@ -94,6 +124,7 @@ const draft200: BudgetValueBackfillDraft = {
       draftId: 5,
       playerId: 10,
       projectionSourceId: 7,
+      valueSetId: 17,
       projectedPoints: 300,
       replacementPoints: 200,
       vor: 100,
@@ -113,6 +144,7 @@ const mockActiveValueAggregate = jest.fn();
 const mockPlayerUpdate = jest.fn();
 const mockWriteSnapshot = jest.fn();
 const mockApplyProjections = jest.fn();
+const mockPruneProjectionRows = jest.fn();
 
 const mockTx = { player: { update: mockPlayerUpdate } };
 
@@ -130,6 +162,7 @@ const prisma = prismaMock as unknown as BudgetValueBackfillPrisma;
 const dependencies: BudgetValueBackfillDependencies = {
   writeSnapshot: mockWriteSnapshot,
   applyProjections: mockApplyProjections,
+  pruneProjectionRows: mockPruneProjectionRows,
 };
 
 describe('budget value backfill CLI', () => {
@@ -263,8 +296,14 @@ beforeEach(() => {
   mockWriteSnapshot.mockResolvedValue('/snapshots/value-backfill.json');
   mockTransaction.mockImplementation((callback) => callback(mockTx));
   mockPlayerUpdate.mockResolvedValue({});
-  mockApplyProjections.mockResolvedValue({ projectionSourceId: 7, appliedCount: 1 });
+  mockApplyProjections.mockResolvedValue({
+    valueSetId: 11,
+    projectionSourceId: 7,
+    appliedCount: 1,
+    activatedAt: new Date('2026-07-18T12:00:00.000Z'),
+  });
   mockActiveValueAggregate.mockResolvedValue({ _sum: { activeAuctionValue: 24 } });
+  mockPruneProjectionRows.mockResolvedValue(undefined);
 });
 
 describe('planBudgetValueBackfill', () => {
@@ -389,6 +428,27 @@ describe('runBudgetValueBackfill', () => {
     expect(mockWriteSnapshot.mock.invocationCallOrder[0]).toBeLessThan(
       mockTransaction.mock.invocationCallOrder[0],
     );
+    expect(mockDraftFindMany).toHaveBeenCalledWith({
+      select: expect.objectContaining({
+        activeProjectionValueSetId: true,
+        projectionValueSets: {
+          select: {
+            id: true,
+            draftId: true,
+            projectionSourceId: true,
+            status: true,
+            expectedPlayerCount: true,
+            appliedPlayerCount: true,
+            createdAt: true,
+            activatedAt: true,
+            failedAt: true,
+            failureCode: true,
+            failureMessage: true,
+          },
+        },
+        playerValues: { select: expect.objectContaining({ valueSetId: true }) },
+      }),
+    });
   });
 
   it('performs no database mutation when snapshot writing fails', async () => {
@@ -414,10 +474,14 @@ describe('runBudgetValueBackfill', () => {
     });
     expect(dependencies.applyProjections).toHaveBeenCalledWith(mockTx, {
       draftId: 5,
-      useBatchTransaction: false,
+      mode: 'transaction',
     });
     expect(mockPlayerUpdate.mock.invocationCallOrder[1]).toBeLessThan(
       mockApplyProjections.mock.invocationCallOrder[0],
+    );
+    expect(mockPruneProjectionRows).toHaveBeenCalledWith(prisma, 5);
+    expect(mockTransaction.mock.invocationCallOrder[0]).toBeLessThan(
+      mockPruneProjectionRows.mock.invocationCallOrder[0],
     );
   });
 
@@ -434,7 +498,7 @@ describe('runBudgetValueBackfill', () => {
     expect(result.snapshotPath).toBe('/snapshots/value-backfill.json');
     expect(result.drafts[0].afterActiveTotal).toBe(24);
     expect(mockActiveValueAggregate).toHaveBeenCalledWith({
-      where: { draftId: 5, projectionSourceId: 7 },
+      where: { draftId: 5, valueSetId: 11 },
       _sum: { activeAuctionValue: true },
     });
   });

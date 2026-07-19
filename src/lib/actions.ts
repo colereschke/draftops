@@ -234,7 +234,7 @@ export async function createDraft(data: {
     await applyProjectionValuesToDraft(tx, {
       draftId: draft.id,
       etrMatches,
-      useBatchTransaction: false,
+      mode: 'transaction',
     });
 
     if (ownerDraftCount === 0) {

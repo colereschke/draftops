@@ -12,6 +12,7 @@ describe('TeamRosterDetail', () => {
     const results: RosterEntry[] = [
       {
         id: 1,
+        playerId: 1,
         player: 'Patrick Mahomes',
         position: 'QB',
         nflTeam: 'KC',
@@ -23,6 +24,7 @@ describe('TeamRosterDetail', () => {
       },
       {
         id: 3,
+        playerId: 3,
         player: 'Bijan Robinson',
         position: 'RB',
         nflTeam: 'ATL',
@@ -48,6 +50,7 @@ describe('TeamRosterDetail', () => {
     const results: RosterEntry[] = [
       {
         id: 1,
+        playerId: 1,
         player: 'Patrick Mahomes',
         position: 'QB',
         nflTeam: 'KC',
@@ -59,6 +62,7 @@ describe('TeamRosterDetail', () => {
       },
       {
         id: 2,
+        playerId: 2,
         player: 'Bijan Robinson',
         position: 'RB',
         nflTeam: 'ATL',
@@ -70,6 +74,7 @@ describe('TeamRosterDetail', () => {
       },
       {
         id: 3,
+        playerId: 3,
         player: 'Justin Jefferson',
         position: 'WR',
         nflTeam: 'MIN',
@@ -94,6 +99,7 @@ describe('TeamRosterDetail', () => {
     const results: RosterEntry[] = [
       {
         id: 1,
+        playerId: 1,
         player: 'Patrick Mahomes',
         position: 'QB',
         nflTeam: 'KC',
@@ -105,6 +111,7 @@ describe('TeamRosterDetail', () => {
       },
       {
         id: 2,
+        playerId: 2,
         player: 'Josh Allen',
         position: 'QB',
         nflTeam: 'BUF',
@@ -126,6 +133,7 @@ describe('TeamRosterDetail', () => {
     const results: RosterEntry[] = [
       {
         id: 1,
+        playerId: 1,
         player: 'Patrick Mahomes',
         position: 'QB',
         nflTeam: 'KC',
@@ -137,6 +145,7 @@ describe('TeamRosterDetail', () => {
       },
       {
         id: 2,
+        playerId: 2,
         player: 'Josh Allen',
         position: 'QB',
         nflTeam: 'BUF',
@@ -158,6 +167,7 @@ describe('TeamRosterDetail', () => {
     const results: RosterEntry[] = [
       {
         id: 1,
+        playerId: 1,
         player: 'Player One',
         position: 'RB',
         nflTeam: 'KC',
@@ -169,6 +179,7 @@ describe('TeamRosterDetail', () => {
       },
       {
         id: 2,
+        playerId: 2,
         player: 'Player Two',
         position: 'RB',
         nflTeam: 'BUF',
@@ -190,6 +201,7 @@ describe('TeamRosterDetail', () => {
     const results: RosterEntry[] = [
       {
         id: 1,
+        playerId: 1,
         player: 'Player One',
         position: 'WR',
         nflTeam: 'KC',
@@ -201,6 +213,7 @@ describe('TeamRosterDetail', () => {
       },
       {
         id: 2,
+        playerId: 2,
         player: 'Player Two',
         position: 'WR',
         nflTeam: 'BUF',
@@ -225,6 +238,7 @@ describe('TeamRosterDetail', () => {
     const results: RosterEntry[] = [
       {
         id: 1,
+        playerId: 1,
         player: 'Patrick Mahomes',
         position: 'QB',
         nflTeam: 'KC',
@@ -248,6 +262,7 @@ describe('TeamRosterDetail', () => {
     const results: RosterEntry[] = [
       {
         id: 1,
+        playerId: 1,
         player: 'Player One',
         position: 'QB',
         nflTeam: 'KC',
@@ -259,6 +274,7 @@ describe('TeamRosterDetail', () => {
       },
       {
         id: 2,
+        playerId: 2,
         player: 'Player Two',
         position: 'QB',
         nflTeam: 'BUF',
@@ -291,6 +307,7 @@ describe('TeamRosterDetail', () => {
     const results: RosterEntry[] = [
       {
         id: 1,
+        playerId: 1,
         player: 'Player One',
         position: 'QB',
         nflTeam: 'KC',
@@ -302,6 +319,7 @@ describe('TeamRosterDetail', () => {
       },
       {
         id: 2,
+        playerId: 2,
         player: 'Player Two',
         position: 'QB',
         nflTeam: 'BUF',

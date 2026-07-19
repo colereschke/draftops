@@ -6,7 +6,6 @@ import {
   type ApplyProjectionValuesResult,
   type ProjectionApplyPrisma,
 } from '@/lib/projectionApplication';
-import { selectActiveDraftValues } from '@/lib/playerValueMapping';
 import { adjustPlayerValues } from '@/lib/valueAdjustment';
 import { getBudgetScale, scaleWholeDollar } from '@/lib/valuationBudget';
 
@@ -37,6 +36,7 @@ export interface BudgetValueBackfillPlayerValue {
   draftId: number;
   playerId: number;
   projectionSourceId: number | null;
+  valueSetId: number;
   projectedPoints: number | null;
   replacementPoints: number | null;
   vor: number | null;
@@ -60,8 +60,24 @@ export interface BudgetValueBackfillDraft {
   startingLineup: unknown;
   scoringSettings: unknown;
   targetRoster: unknown;
+  activeProjectionValueSetId: number | null;
+  projectionValueSets: BudgetValueBackfillValueSet[];
   players: BudgetValueBackfillPlayer[];
   playerValues: BudgetValueBackfillPlayerValue[];
+}
+
+export interface BudgetValueBackfillValueSet {
+  id: number;
+  draftId: number;
+  projectionSourceId: number | null;
+  status: string;
+  expectedPlayerCount: number;
+  appliedPlayerCount: number;
+  createdAt: Date;
+  activatedAt: Date | null;
+  failedAt: Date | null;
+  failureCode: string | null;
+  failureMessage: string | null;
 }
 
 export interface BudgetValuePlayerUpdate {
@@ -116,6 +132,7 @@ export interface BudgetValueBackfillDependencies {
     prisma: ProjectionApplyPrisma,
     options: ApplyProjectionValuesOptions,
   ): Promise<ApplyProjectionValuesResult>;
+  pruneProjectionRows(prisma: BudgetValueBackfillPrisma, draftId: number): Promise<void>;
 }
 
 export function planBudgetValueBackfill(
@@ -149,6 +166,22 @@ export async function runBudgetValueBackfill(
       startingLineup: true,
       scoringSettings: true,
       targetRoster: true,
+      activeProjectionValueSetId: true,
+      projectionValueSets: {
+        select: {
+          id: true,
+          draftId: true,
+          projectionSourceId: true,
+          status: true,
+          expectedPlayerCount: true,
+          appliedPlayerCount: true,
+          createdAt: true,
+          activatedAt: true,
+          failedAt: true,
+          failureCode: true,
+          failureMessage: true,
+        },
+      },
       players: {
         select: {
           id: true,
@@ -178,6 +211,7 @@ export async function runBudgetValueBackfill(
           draftId: true,
           playerId: true,
           projectionSourceId: true,
+          valueSetId: true,
           projectedPoints: true,
           replacementPoints: true,
           vor: true,
@@ -216,7 +250,7 @@ export async function runBudgetValueBackfill(
         }
         return dependencies.applyProjections(tx, {
           draftId: draftPlan.draftId,
-          useBatchTransaction: false,
+          mode: 'transaction',
         });
       },
       { timeout: 60_000 },
@@ -225,7 +259,7 @@ export async function runBudgetValueBackfill(
     const activeValues = await prisma.draftPlayerValue.aggregate({
       where: {
         draftId: draftPlan.draftId,
-        projectionSourceId: projectionResult.projectionSourceId,
+        valueSetId: projectionResult.valueSetId,
       },
       _sum: { activeAuctionValue: true },
     });
@@ -233,6 +267,11 @@ export async function runBudgetValueBackfill(
       ...draftPlan,
       afterActiveTotal: activeValues._sum.activeAuctionValue ?? 0,
     });
+    try {
+      await dependencies.pruneProjectionRows(prisma, draftPlan.draftId);
+    } catch (error) {
+      console.error(`Failed to prune projection value rows for draft ${draftPlan.draftId}`, error);
+    }
   }
 
   return { drafts: appliedDrafts, mode: 'applied', snapshotPath };
@@ -263,7 +302,9 @@ function planDraftBackfill(draft: BudgetValueBackfillDraft): BudgetValueDraftPla
     );
   });
   const proposedPlayersById = new Map(proposedPlayerValues.map((player) => [player.id, player]));
-  const activePlayerValues = selectActiveDraftValues(draft.playerValues);
+  const activePlayerValues = draft.activeProjectionValueSetId
+    ? draft.playerValues.filter((value) => value.valueSetId === draft.activeProjectionValueSetId)
+    : [];
 
   return {
     draftId: draft.id,

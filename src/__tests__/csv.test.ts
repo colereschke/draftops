@@ -1,4 +1,4 @@
-import { parseCsv, parseCsvLine } from '@/lib/csv';
+import { CsvParseError, parseCsv, parseCsvLine } from '@/lib/csv';
 
 describe('parseCsvLine', () => {
   it('splits a simple comma-separated line', () => {
@@ -31,5 +31,26 @@ describe('parseCsv', () => {
   it('fills missing trailing values with empty string', () => {
     const result = parseCsv('Player,Team,Notes\nJosh Allen,BUF');
     expect(result.rows).toEqual([{ Player: 'Josh Allen', Team: 'BUF', Notes: '' }]);
+  });
+
+  it('accepts a BOM, CRLF, escaped quotes, and quoted multiline fields', () => {
+    const result = parseCsv('\ufeffPlayer,Notes\r\nJosh Allen,"Line one\r\nHe said ""hello"""\r\n');
+    expect(result).toEqual({
+      headers: ['Player', 'Notes'],
+      rows: [{ Player: 'Josh Allen', Notes: 'Line one\r\nHe said "hello"' }],
+    });
+  });
+
+  it.each([
+    ['an unterminated quoted field', 'Player,Notes\nJosh,"unfinished'],
+    ['a UTF-8 byte cap', 'Player\nJosh', { maxBytes: 5 }],
+    ['a row cap', 'Player\nJosh\nJoe', { maxRows: 1 }],
+    ['a field cap', 'Player\nJoshua', { maxFieldLength: 3 }],
+  ])('rejects %s', (_label, contents, options = undefined) => {
+    expect(() => parseCsv(contents, options)).toThrow(CsvParseError);
+  });
+
+  it('rejects a bare carriage return after a quoted field', () => {
+    expect(() => parseCsv('Player\n"Josh"\r')).toThrow(CsvParseError);
   });
 });

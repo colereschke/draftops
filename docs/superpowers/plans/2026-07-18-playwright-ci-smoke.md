@@ -121,12 +121,12 @@ export default defineConfig({
   fullyParallel: false,
   workers: process.env.CI ? 1 : undefined,
   forbidOnly: !!process.env.CI,
-  retries: process.env.CI ? 1 : 0,
+  retries: 0,
   reporter: process.env.CI ? [['github'], ['html', { open: 'never' }]] : 'list',
   globalSetup: './e2e/global-setup.ts',
   use: {
     baseURL: BASE_URL,
-    trace: 'on-first-retry',
+    trace: 'retain-on-failure',
   },
   webServer: {
     command: `pnpm start -- -p ${PORT}`,
@@ -150,6 +150,8 @@ export default defineConfig({
 ```
 
 `workers: 1` in CI is deliberate: every authenticated spec mutates the same shared Postgres database (logs a real bid, marks a real nomination). Running spec files serially avoids cross-file write races; this is a 4-file smoke suite, so the serialization cost is negligible.
+
+`retries: 0` (not the more common `CI ? 1 : 0`) is also deliberate: `bid.spec.ts` performs a real, non-idempotent mutation guarded by a unique constraint (`AuctionResult`'s `@@unique([draftId, playerId])`). If a retry re-ran that spec after the bid had already been persisted on attempt one, `logBid` would return `{ ok: false }` on the duplicate insert (it does not throw — see `src/lib/actions.ts`), the modal would stay open with an error, and the retry would fail for a different, more confusing reason than whatever caused the first failure. A flake here should surface as a single clear failure, not a masked/relabeled one. `trace: 'retain-on-failure'` (rather than `'on-first-retry'`, which would never fire with retries disabled) still gets a debuggable trace on any failure.
 
 - [ ] **Step 6: Create `e2e/auth.spec.ts`**
 
@@ -228,6 +230,8 @@ git add package.json pnpm-lock.yaml playwright.config.ts e2e/env.ts e2e/global-s
 git commit -m "test: scaffold Playwright and add the sign-in redirect smoke test"
 ```
 
+No ESLint override block is needed for `e2e/**` — this was verified directly (a scratch Playwright spec file, `import { test, expect } from '@playwright/test'` plus a `test(...)` block, was run through `pnpm eslint` against this repo's actual `eslint.config.mjs` and exited 0 with no errors or warnings) rather than left as an open question. If `pnpm lint` unexpectedly flags something in this task's actual files, that means a real conflict specific to these files' content — fix it inline, don't skip linting.
+
 ---
 
 ### Task 2: Seed script and fixture data
@@ -243,8 +247,8 @@ git commit -m "test: scaffold Playwright and add the sign-in redirect smoke test
 
 - Consumes: `E2E_TEST_USER_ID` from `e2e/env.ts` (Task 1).
 - Produces: `e2e/fixtures/players.ts` exports `FixturePlayer` interface, `FIXTURE_PLAYERS: FixturePlayer[]`, `BID_TARGET: FixturePlayer`, `NOMINATE_TARGET: FixturePlayer` — Tasks 3 and 4 import `BID_TARGET`/`NOMINATE_TARGET` by name so the seeded data and the specs that reference it never drift apart.
-- Produces: `e2e/db.ts` exports `prisma: PrismaClient`, `closeDb(): Promise<void>` — Tasks 3, 4, and 5 use both.
-- Produces: `e2e/fixtures/getDraftId.ts` exports `getSeededDraftId(): Promise<number>`.
+- Produces: `e2e/db.ts` exports `prisma: PrismaClient`, `closeDb(): Promise<void>` — consumed only by `e2e/seed.ts` (this task) and `e2e/fixtures/getDraftId.ts` (`prisma` only). Tasks 3-5's spec files never import `e2e/db.ts` directly or call `closeDb()` — see the note in Task 3 Step 1 for why.
+- Produces: `e2e/fixtures/getDraftId.ts` exports `getSeededDraftId(): Promise<number>` — Tasks 3, 4, and 5 import this.
 
 - [ ] **Step 1: Create `e2e/fixtures/players.ts`**
 
@@ -520,19 +524,14 @@ git commit -m "test: add Playwright e2e seed script and fixture player data"
 
 **Interfaces:**
 
-- Consumes: `closeDb` from `e2e/db.ts`, `getSeededDraftId` from `e2e/fixtures/getDraftId.ts`, `BID_TARGET` from `e2e/fixtures/players.ts` (all from Task 2).
+- Consumes: `getSeededDraftId` from `e2e/fixtures/getDraftId.ts`, `BID_TARGET` from `e2e/fixtures/players.ts` (both from Task 2).
 
 - [ ] **Step 1: Create `e2e/bid.spec.ts`**
 
 ```ts
 import { test, expect } from '@playwright/test';
-import { closeDb } from './db';
 import { getSeededDraftId } from './fixtures/getDraftId';
 import { BID_TARGET } from './fixtures/players';
-
-test.afterAll(async () => {
-  await closeDb();
-});
 
 test('logging a bid is reflected on the value sheet', async ({ page }) => {
   const draftId = await getSeededDraftId();
@@ -552,6 +551,8 @@ test('logging a bid is reflected on the value sheet', async ({ page }) => {
 ```
 
 The bid modal (`src/components/BidModal/BidModal.tsx`) defaults its "Won By" team select to `teams[0]`, so this flow never needs to interact with that select — filling price and submitting is enough to exercise `logBid`. A successful submit closes the modal (`bid-price` unmounts) and the row re-renders with the claimed price via the app's own optimistic update — no page reload needed.
+
+Deliberately no `test.afterAll(() => closeDb())` here (or in Tasks 4/5): with `workers: 1` in CI, Playwright reuses one worker process — and therefore one Node module cache — across `bid.spec.ts`, `nominate.spec.ts`, and `rosters.spec.ts`. `e2e/db.ts`'s `pool`/`prisma` are module-level singletons shared by all three files in that worker. If any one spec's `afterAll` called `pool.end()`, the _next_ spec file's `getSeededDraftId()` would run its query against an already-ended pool and fail — deterministically in CI (`workers: 1`), even though it would look fine locally where each file often lands in its own worker (`workers: undefined`) with its own pool. `closeDb()` stays reserved for `e2e/seed.ts`, a genuinely standalone one-shot process where ending the pool is safe. Leaving the pool open until the worker process exits is harmless for a four-file smoke suite.
 
 - [ ] **Step 2: Run against the scaffold from Tasks 1-2**
 
@@ -592,19 +593,14 @@ git commit -m "test: add bid-logging Playwright smoke spec"
 
 **Interfaces:**
 
-- Consumes: `closeDb`, `getSeededDraftId`, `NOMINATE_TARGET` (Task 2).
+- Consumes: `getSeededDraftId`, `NOMINATE_TARGET` (Task 2).
 
 - [ ] **Step 1: Create `e2e/nominate.spec.ts`**
 
 ```ts
 import { test, expect } from '@playwright/test';
-import { closeDb } from './db';
 import { getSeededDraftId } from './fixtures/getDraftId';
 import { NOMINATE_TARGET } from './fixtures/players';
-
-test.afterAll(async () => {
-  await closeDb();
-});
 
 test('nominating a player removes it from the rival-demand table', async ({ page }) => {
   const draftId = await getSeededDraftId();
@@ -652,18 +648,13 @@ git commit -m "test: add nomination Playwright smoke spec"
 
 **Interfaces:**
 
-- Consumes: `closeDb`, `getSeededDraftId` (Task 2).
+- Consumes: `getSeededDraftId` (Task 2).
 
 - [ ] **Step 1: Create `e2e/rosters.spec.ts`**
 
 ```ts
 import { test, expect } from '@playwright/test';
-import { closeDb } from './db';
 import { getSeededDraftId } from './fixtures/getDraftId';
-
-test.afterAll(async () => {
-  await closeDb();
-});
 
 test('teams and budget pages render seeded data', async ({ page }) => {
   const draftId = await getSeededDraftId();
@@ -772,9 +763,6 @@ e2e:
 
     - uses: ./.github/actions/setup-pnpm-node
 
-    - name: Generate Prisma client
-      run: pnpm prisma generate
-
     - name: Install Playwright browsers
       run: pnpm exec playwright install --with-deps chromium
 
@@ -799,7 +787,7 @@ e2e:
         retention-days: 7
 ```
 
-This mirrors the existing `postgres` job's service-container shape (same image, same health-check options) and the existing `build` job's placeholder-Discord-env pattern — nothing here is a novel CI pattern for this repo.
+This mirrors the existing `postgres` job's service-container shape (same image, same health-check options) and its implicit `prisma generate` via `setup-pnpm-node`'s default `postinstall` (no `--ignore-scripts`, so no separate generate step is needed — the `postgres` job doesn't have one either), plus the existing `build` job's placeholder-Discord-env pattern. Nothing here is a novel CI pattern for this repo.
 
 - [ ] **Step 2: Review the full file for structural correctness**
 

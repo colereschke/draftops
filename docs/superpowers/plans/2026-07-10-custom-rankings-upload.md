@@ -1000,8 +1000,7 @@ export interface ParsedRankingRow {
 }
 
 export type RankingsParseResult =
-  | { ok: true; rows: ParsedRankingRow[] }
-  | { ok: false; errors: string[] };
+  { ok: true; rows: ParsedRankingRow[] } | { ok: false; errors: string[] };
 
 const REQUIRED_HEADERS = ['Player', 'Team', 'Position', 'Age', '2QBAuction'] as const;
 const POSITION_MAP: Record<string, Position> = {

@@ -1,4 +1,5 @@
 import type { StartingSlot, ScoringSettings } from '@/types';
+import { z } from 'zod';
 
 export interface SleeperLeague {
   name: string;
@@ -37,33 +38,120 @@ export interface SleeperImportTeam {
   sleeperRosterId: number;
 }
 
+export type SleeperClientFailureCode =
+  | 'INVALID_LEAGUE_ID'
+  | 'NOT_FOUND'
+  | 'TIMEOUT'
+  | 'RATE_LIMITED'
+  | 'UNAVAILABLE'
+  | 'MALFORMED_RESPONSE';
+
+export class SleeperClientError extends Error {
+  readonly code: SleeperClientFailureCode;
+
+  constructor(code: SleeperClientFailureCode) {
+    super(code);
+    this.name = 'SleeperClientError';
+    this.code = code;
+  }
+}
+
 const SLEEPER_BASE = 'https://api.sleeper.app/v1';
+const REQUEST_TIMEOUT_MS = 5_000;
+const MAX_ATTEMPTS = 2;
 
 const VALID_SLOTS = new Set<string>(['QB', 'RB', 'WR', 'TE', 'FLEX', 'SUPER_FLEX']);
 
-export async function fetchSleeperLeague(leagueId: string): Promise<SleeperLeague> {
-  const res = await fetch(`${SLEEPER_BASE}/league/${leagueId}`);
-  if (res.status === 404) throw new Error('NOT_FOUND');
-  if (!res.ok) throw new Error(`SLEEPER_ERROR:${res.status}`);
-  const data: unknown = await res.json();
-  if (!data || typeof data !== 'object' || !('total_rosters' in data)) {
-    throw new Error('NOT_FOUND');
+const sleeperLeagueSchema = z.object({
+  name: z.string(),
+  total_rosters: z.number().int().positive(),
+  roster_positions: z.array(z.string()),
+  scoring_settings: z.record(z.string(), z.number()),
+});
+
+const sleeperUserSchema = z.object({
+  user_id: z.string().min(1),
+  display_name: z.string().min(1),
+  metadata: z
+    .object({
+      team_name: z.string().optional(),
+    })
+    .optional(),
+});
+
+const sleeperRosterSchema = z.object({
+  roster_id: z.number().int().positive(),
+  owner_id: z.string().nullable(),
+  co_owners: z.array(z.string()).nullable().optional(),
+  players: z.array(z.string()).nullable().optional(),
+});
+
+export function validateSleeperLeagueId(leagueId: string): string {
+  const trimmedLeagueId = leagueId.trim();
+  if (!/^\d{5,25}$/.test(trimmedLeagueId)) {
+    throw new SleeperClientError('INVALID_LEAGUE_ID');
   }
-  return data as SleeperLeague;
+  return trimmedLeagueId;
+}
+
+async function fetchSleeperEndpoint<T>(
+  leagueId: string,
+  endpoint: string,
+  schema: z.ZodType<T>,
+): Promise<T> {
+  const validLeagueId = validateSleeperLeagueId(leagueId);
+  const url = `${SLEEPER_BASE}/league/${validLeagueId}${endpoint}`;
+
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt += 1) {
+    const signal = AbortSignal.timeout(REQUEST_TIMEOUT_MS);
+    let response: Response;
+
+    try {
+      response = await fetch(url, { signal });
+    } catch (error) {
+      if (signal.aborted || (error instanceof Error && error.name === 'TimeoutError')) {
+        throw new SleeperClientError('TIMEOUT');
+      }
+      if (attempt === MAX_ATTEMPTS) throw new SleeperClientError('UNAVAILABLE');
+      continue;
+    }
+
+    if (response.status === 404) throw new SleeperClientError('NOT_FOUND');
+    if (response.status === 429) {
+      if (attempt === MAX_ATTEMPTS) throw new SleeperClientError('RATE_LIMITED');
+      continue;
+    }
+    if (response.status >= 500 && response.status <= 599) {
+      if (attempt === MAX_ATTEMPTS) throw new SleeperClientError('UNAVAILABLE');
+      continue;
+    }
+    if (!response.ok) throw new SleeperClientError('UNAVAILABLE');
+
+    let body: unknown;
+    try {
+      body = await response.json();
+    } catch {
+      throw new SleeperClientError('MALFORMED_RESPONSE');
+    }
+
+    const parsed = schema.safeParse(body);
+    if (!parsed.success) throw new SleeperClientError('MALFORMED_RESPONSE');
+    return parsed.data;
+  }
+
+  throw new SleeperClientError('UNAVAILABLE');
+}
+
+export async function fetchSleeperLeague(leagueId: string): Promise<SleeperLeague> {
+  return fetchSleeperEndpoint(leagueId, '', sleeperLeagueSchema);
 }
 
 export async function fetchSleeperLeagueUsers(leagueId: string): Promise<SleeperUser[]> {
-  const res = await fetch(`${SLEEPER_BASE}/league/${leagueId}/users`);
-  if (res.status === 404) throw new Error('NOT_FOUND');
-  if (!res.ok) throw new Error(`SLEEPER_ERROR:${res.status}`);
-  return res.json() as Promise<SleeperUser[]>;
+  return fetchSleeperEndpoint(leagueId, '/users', z.array(sleeperUserSchema));
 }
 
 export async function fetchSleeperLeagueRosters(leagueId: string): Promise<SleeperRoster[]> {
-  const res = await fetch(`${SLEEPER_BASE}/league/${leagueId}/rosters`);
-  if (res.status === 404) throw new Error('NOT_FOUND');
-  if (!res.ok) throw new Error(`SLEEPER_ERROR:${res.status}`);
-  return res.json() as Promise<SleeperRoster[]>;
+  return fetchSleeperEndpoint(leagueId, '/rosters', z.array(sleeperRosterSchema));
 }
 
 export function mapSleeperLeague(

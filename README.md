@@ -143,11 +143,24 @@ outside version control until the updated fallback and active totals have been v
 make setup          # First-time setup (install + migrate + seed)
 make dev            # Start dev server
 make test           # Run test suite
+make test-e2e       # Run Playwright smoke tests (see below)
 make check          # Full quality pass (typecheck + lint + format + test)
 make db-seed        # Re-seed league teams
 make db-reset       # Wipe and re-seed (destructive)
 make db-studio      # Open Prisma Studio (visual DB browser)
 make help           # Show all commands
+```
+
+### Running Playwright smoke tests locally
+
+The e2e suite (`e2e/*.spec.ts`) needs its own database — never point it at your real dev DB, since
+`e2e/seed.ts` creates a draft/teams/players from scratch:
+
+```bash
+createdb draftops_e2e_scratch
+DATABASE_URL="postgresql://<user>@localhost:5432/draftops_e2e_scratch" pnpm prisma migrate deploy
+DATABASE_URL="postgresql://<user>@localhost:5432/draftops_e2e_scratch" pnpm tsx e2e/seed.ts
+DATABASE_URL="postgresql://<user>@localhost:5432/draftops_e2e_scratch" AUTH_SECRET=<any-value> AUTH_TRUST_HOST=1 make test-e2e
 ```
 
 ## Tech Stack

@@ -128,3 +128,62 @@ jobs:
 
       - name: Projection checks (pytest, ruff, mypy)
         run: make projections-check UV_RUN_ARGS=--no-sync
+
+  e2e:
+    name: Playwright smoke tests
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: draftops
+          POSTGRES_PASSWORD: draftops
+          POSTGRES_DB: draftops_e2e
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    # Placeholder Discord values, same pattern as the `build` job: needed only so
+    # NextAuth's config can be evaluated, never exercised (auth is via a signed
+    # test cookie minted in e2e/global-setup.ts, not real Discord OAuth).
+    env:
+      DATABASE_URL: postgresql://draftops:draftops@localhost:5432/draftops_e2e
+      AUTH_SECRET: ci-e2e-placeholder-secret-not-a-real-credential
+      AUTH_DISCORD_ID: ci-build-placeholder
+      AUTH_DISCORD_SECRET: ci-build-placeholder
+      AUTH_TRUST_HOST: '1'
+      E2E_TEST_USER_ID: e2e-test-user
+      PORT: '3100'
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: ./.github/actions/setup-pnpm-node
+
+      - name: Install Playwright browsers
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Deploy migrations against a clean database
+        run: pnpm prisma migrate deploy
+
+      - name: Seed e2e fixture data
+        run: pnpm tsx e2e/seed.ts
+
+      - name: Build
+        run: pnpm build
+
+      - name: Run Playwright smoke suite
+        run: pnpm test:e2e
+
+      - name: Upload Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 7

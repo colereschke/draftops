@@ -64,6 +64,18 @@ describe('importFromSleeper', () => {
     expect(mockFetchRosters).not.toHaveBeenCalled();
   });
 
+  it('returns the generic error when authentication rejects', async () => {
+    mockAuth.mockRejectedValue(new Error('Auth provider unavailable'));
+
+    await expect(importFromSleeper('1360707683916734464')).resolves.toEqual({
+      ok: false,
+      error: "Couldn't reach Sleeper — try again.",
+    });
+    expect(mockFetchLeague).not.toHaveBeenCalled();
+    expect(mockFetchUsers).not.toHaveBeenCalled();
+    expect(mockFetchRosters).not.toHaveBeenCalled();
+  });
+
   it('calls fetchSleeperLeague, fetchSleeperLeagueUsers, and fetchSleeperLeagueRosters with the provided leagueId', async () => {
     await importFromSleeper('1360707683916734464');
     expect(mockFetchLeague).toHaveBeenCalledWith('1360707683916734464');

@@ -374,6 +374,28 @@ describe('NewDraftPage — Sleeper import banner', () => {
     await waitFor(() => expect(screen.getByTestId('sleeper-import-error')).toBeInTheDocument());
   });
 
+  it('preserves populated form values when a subsequent import fails', async () => {
+    render(<NewDraftPage />);
+    fireEvent.change(screen.getByTestId('sleeper-league-id'), {
+      target: { value: '1360707683916734464' },
+    });
+    fireEvent.click(screen.getByTestId('sleeper-import-button'));
+    await waitFor(() => expect(screen.getByTestId('sleeper-import-confirm')).toBeInTheDocument());
+
+    mockImportFromSleeper.mockResolvedValueOnce({
+      ok: false,
+      error: 'League not found. Check your Sleeper league ID.',
+    });
+    fireEvent.change(screen.getByTestId('sleeper-league-id'), {
+      target: { value: 'bad-id' },
+    });
+    fireEvent.click(screen.getByTestId('sleeper-import-button'));
+
+    await waitFor(() => expect(screen.getByTestId('sleeper-import-error')).toBeInTheDocument());
+    expect(screen.getByTestId<HTMLInputElement>('draft-name-input').value).toBe('Dynasty Warlords');
+    expect(screen.getByTestId<HTMLInputElement>('roster-size-input').value).toBe('30');
+  });
+
   it('updates roster size and team count from non-default import values', async () => {
     mockImportFromSleeper.mockResolvedValueOnce({
       ok: true,

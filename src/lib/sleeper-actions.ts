@@ -16,12 +16,12 @@ export async function importFromSleeper(
   leagueId: string,
   ownerUsername?: string,
 ): Promise<ImportResponse> {
-  const session = await auth();
-  if (!session?.user?.id) {
-    return { ok: false, error: 'Sign in to import a Sleeper league.' };
-  }
-
   try {
+    const session = await auth();
+    if (!session?.user?.id) {
+      return { ok: false, error: 'Sign in to import a Sleeper league.' };
+    }
+
     const [league, users, rosters] = await Promise.all([
       fetchSleeperLeague(leagueId),
       fetchSleeperLeagueUsers(leagueId),

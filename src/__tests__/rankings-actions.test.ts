@@ -182,6 +182,14 @@ describe('resolveRankingMatch', () => {
     mockPlayerFindFirst.mockResolvedValue({ id: 2 });
 
     await expect(resolveRankingMatch(1, 'qb-1')).rejects.toThrow('already assigned');
+    expect(mockPlayerFindFirst).toHaveBeenCalledWith({
+      where: {
+        rankingSetId: 42,
+        sleeperId: 'qb-1',
+        NOT: { id: 1 },
+      },
+      select: { id: true },
+    });
     expect(mockPlayerUpdate).not.toHaveBeenCalled();
   });
 

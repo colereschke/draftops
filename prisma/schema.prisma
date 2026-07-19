@@ -326,4 +326,5 @@ model UserRankingPlayer {
   matchStatus  String         @default("unmatched")
 
   @@index([rankingSetId])
+  @@unique([rankingSetId, sleeperId])
 }

@@ -111,13 +111,42 @@ export async function resolveRankingMatch(
 
   const player = await prisma.userRankingPlayer.findUnique({
     where: { id: rankingPlayerId },
-    select: { rankingSet: { select: { userId: true } } },
+    select: {
+      id: true,
+      pos: true,
+      rankingSetId: true,
+      rankingSet: { select: { userId: true } },
+    },
   });
   if (!player || player.rankingSet.userId !== session.user.id) throw new Error('Not found');
 
-  await prisma.userRankingPlayer.update({
-    where: { id: rankingPlayerId },
-    data: { sleeperId, matchStatus: 'manual' },
+  const sleeperPlayer = await prisma.sleeperPlayer.findUnique({
+    where: { id: sleeperId },
+    select: { id: true, pos: true },
   });
+  if (!sleeperPlayer) throw new Error('Sleeper player not found');
+  if (sleeperPlayer.pos !== player.pos) throw new Error('Position mismatch');
+
+  const assignedPlayer = await prisma.userRankingPlayer.findFirst({
+    where: {
+      rankingSetId: player.rankingSetId,
+      sleeperId,
+      NOT: { id: rankingPlayerId },
+    },
+    select: { id: true },
+  });
+  if (assignedPlayer) throw new Error('Sleeper player is already assigned in this ranking set');
+
+  try {
+    await prisma.userRankingPlayer.update({
+      where: { id: rankingPlayerId },
+      data: { sleeperId, matchStatus: 'manual' },
+    });
+  } catch (error) {
+    if ((error as { code?: unknown }).code === 'P2002') {
+      throw new Error('Sleeper player is already assigned in this ranking set');
+    }
+    throw error;
+  }
   revalidatePath('/rankings');
 }

@@ -6,7 +6,9 @@ const mockSleeperFindMany = jest.fn();
 const mockTransaction = jest.fn();
 const mockRevalidatePath = jest.fn();
 const mockPlayerFindUnique = jest.fn();
+const mockPlayerFindFirst = jest.fn();
 const mockPlayerUpdate = jest.fn();
+const mockSleeperFindUnique = jest.fn();
 
 const mockTxUpsert = jest.fn();
 const mockTxDeleteMany = jest.fn();
@@ -23,9 +25,11 @@ jest.mock('@/lib/db', () => ({
     },
     sleeperPlayer: {
       findMany: (...args: unknown[]) => mockSleeperFindMany(...args),
+      findUnique: (...args: unknown[]) => mockSleeperFindUnique(...args),
     },
     userRankingPlayer: {
       findUnique: (...args: unknown[]) => mockPlayerFindUnique(...args),
+      findFirst: (...args: unknown[]) => mockPlayerFindFirst(...args),
       update: (...args: unknown[]) => mockPlayerUpdate(...args),
     },
     $transaction: (...args: unknown[]) => mockTransaction(...args),
@@ -133,17 +137,62 @@ describe('uploadRankingsCsv', () => {
 });
 
 describe('resolveRankingMatch', () => {
+  const OWNED_QB_RANKING_PLAYER = {
+    id: 1,
+    pos: 'QB',
+    rankingSetId: 42,
+    rankingSet: { userId: '123456789' },
+  };
+
   it('throws when the ranking player does not belong to the session user', async () => {
     mockPlayerFindUnique.mockResolvedValue({ rankingSet: { userId: 'someone-else' } });
     await expect(resolveRankingMatch(1, 's99')).rejects.toThrow('Not found');
   });
 
   it('updates sleeperId and matchStatus to manual', async () => {
-    mockPlayerFindUnique.mockResolvedValue({ rankingSet: { userId: '123456789' } });
+    mockPlayerFindUnique.mockResolvedValue(OWNED_QB_RANKING_PLAYER);
+    mockSleeperFindUnique.mockResolvedValue({ id: 's99', pos: 'QB' });
+    mockPlayerFindFirst.mockResolvedValue(null);
     await resolveRankingMatch(1, 's99');
     expect(mockPlayerUpdate).toHaveBeenCalledWith({
       where: { id: 1 },
       data: { sleeperId: 's99', matchStatus: 'manual' },
     });
+  });
+
+  it('rejects a missing Sleeper player without writing', async () => {
+    mockPlayerFindUnique.mockResolvedValue(OWNED_QB_RANKING_PLAYER);
+    mockSleeperFindUnique.mockResolvedValue(null);
+
+    await expect(resolveRankingMatch(1, 'missing')).rejects.toThrow('Sleeper player not found');
+    expect(mockPlayerUpdate).not.toHaveBeenCalled();
+  });
+
+  it('rejects a Sleeper player at a different position without writing', async () => {
+    mockPlayerFindUnique.mockResolvedValue(OWNED_QB_RANKING_PLAYER);
+    mockSleeperFindUnique.mockResolvedValue({ id: 'wr-1', pos: 'WR' });
+
+    await expect(resolveRankingMatch(1, 'wr-1')).rejects.toThrow('Position mismatch');
+    expect(mockPlayerUpdate).not.toHaveBeenCalled();
+  });
+
+  it('rejects a Sleeper player assigned to another row in the ranking set', async () => {
+    mockPlayerFindUnique.mockResolvedValue(OWNED_QB_RANKING_PLAYER);
+    mockSleeperFindUnique.mockResolvedValue({ id: 'qb-1', pos: 'QB' });
+    mockPlayerFindFirst.mockResolvedValue({ id: 2 });
+
+    await expect(resolveRankingMatch(1, 'qb-1')).rejects.toThrow('already assigned');
+    expect(mockPlayerUpdate).not.toHaveBeenCalled();
+  });
+
+  it('translates a concurrent duplicate assignment to a safe validation error', async () => {
+    mockPlayerFindUnique.mockResolvedValue(OWNED_QB_RANKING_PLAYER);
+    mockSleeperFindUnique.mockResolvedValue({ id: 'qb-1', pos: 'QB' });
+    mockPlayerFindFirst.mockResolvedValue(null);
+    mockPlayerUpdate.mockRejectedValue({ code: 'P2002' });
+
+    await expect(resolveRankingMatch(1, 'qb-1')).rejects.toThrow(
+      'Sleeper player is already assigned in this ranking set',
+    );
   });
 });

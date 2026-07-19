@@ -176,6 +176,10 @@ describe('draft creation against PostgreSQL', () => {
     }
   }, 20_000);
 
+  // Relies on the OnboardingProgress insert being the transaction's last write stage, which
+  // only holds for a fresh owner (ownerDraftCount === 0) — see createDraft's onboarding
+  // transition logic in actions.ts. If a later write stage is ever added after that insert,
+  // this trigger point would need to move with it.
   it('leaves no partial draft when the last write stage fails', async () => {
     await prisma.$executeRawUnsafe(`
       CREATE FUNCTION integration_fail_onboarding_insert() RETURNS trigger AS $$

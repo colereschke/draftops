@@ -12,6 +12,7 @@ import {
   type BudgetValueSnapshot,
 } from '@/lib/budgetValueBackfill';
 import { applyProjectionValuesToDraft } from '@/lib/projectionApplication';
+import { pruneProjectionValueSetRows } from '@/lib/projectionValueSet';
 
 const DEFAULT_SNAPSHOT_DIR = 'valuation-backfill-snapshots';
 const USAGE =
@@ -142,6 +143,8 @@ async function main(): Promise<void> {
     {
       writeSnapshot: writeBudgetValueSnapshot,
       applyProjections: applyProjectionValuesToDraft,
+      pruneProjectionRows: (prisma, draftId) =>
+        pruneProjectionValueSetRows(prisma as never, draftId),
     },
     {
       createPool: (connectionString) => new Pool({ connectionString }),

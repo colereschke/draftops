@@ -37,7 +37,6 @@ export default async function BudgetPage({ params }: { params: Promise<{ draftId
     startingLineup: (draft.startingLineup ?? DEFAULT_STARTING_LINEUP) as StartingSlot[],
     futurePickAuctionMode: fromPrismaFuturePickMode(draft.futurePickAuctionMode),
   });
-  const posByName = new Map(players.map((player) => [player.player, player.pos]));
   const posByPlayerId = new Map(
     players.flatMap((player) =>
       player.id === undefined ? [] : [[player.id, player.pos] as const],
@@ -45,7 +44,7 @@ export default async function BudgetPage({ params }: { params: Promise<{ draftId
   );
 
   // Anchor the board to the most heavily nominated position (ties → most recent).
-  const live = resolveLiveNomination(nominated, posByName, posByPlayerId);
+  const live = resolveLiveNomination(nominated, posByPlayerId);
 
   const tendencies = computeTendencies(teams, players);
   const teamStats = computeDraftTeamStats({

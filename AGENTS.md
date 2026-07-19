@@ -202,11 +202,15 @@ Projection-shaped active values:
 - The CLI `pnpm tsx prisma/apply-projection-values.ts` imports generated CSV data into Postgres.
   Passing `--draft-id <draft-id>` additionally reapplies values to an existing draft.
 - Projection application resolves Sleeper IDs, scores projections under both baseline and draft
-  scoring settings, stores raw projection/VOR context, and writes `DraftPlayerValue` rows.
+  scoring settings, stores raw projection/VOR context, and stages `DraftPlayerValue` rows under a
+  fresh `DraftProjectionValueSet`.
+- `Draft.activeProjectionValueSetId` is the sole activation pointer. A staged set is validated and
+  activated under the shared per-draft advisory lock; a failed or partial reapplication leaves the
+  previous set fully active, including when reapplying the same `ProjectionSource`.
 - `DraftPlayerValue.fallbackAuctionValue` is the draft-denominated `Player.budget` captured for that
   projection source; `projectionAuctionValue` is projection/VOR context, not the surfaced target.
-- The active auction target uses `DraftPlayerValue.activeAuctionValue` only for players with a row
-  in the active projection source.
+- The canonical active-player loader queries only the explicitly active value set. The active
+  auction target uses `DraftPlayerValue.activeAuctionValue` only for players with a row in that set.
 - `activeAuctionValue` is anchored to `fallbackAuctionValue`; projections only shape the market
   value via relative scoring lift within position/value buckets. It is not raw VOR dollars, and
   `valueSource` records whether projection shaping or fallback supplied the value.
@@ -214,6 +218,8 @@ Projection-shaped active values:
   fall back to `Player.budget`.
 - Projection VOR/projection auction values are stored for context and future roster-strength work,
   but the strategy lens is intentionally deferred to a follow-up PR.
+- Activation metadata is retained indefinitely. Full player-value rows are retained for the active
+  set plus the three newest archived sets; failed partial rows are removed immediately.
 
 Existing-draft budget backfill:
 

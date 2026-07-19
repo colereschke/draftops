@@ -21,7 +21,6 @@ export interface DbPlayerValueRow {
 
 export interface DraftPlayerValueRow {
   playerId: number;
-  projectionSourceId: number | null;
   projectedPoints: number | null;
   replacementPoints: number | null;
   vor: number | null;
@@ -29,16 +28,13 @@ export interface DraftPlayerValueRow {
   fallbackAuctionValue: number;
   activeAuctionValue: number;
   valueSource: string;
-  updatedAt: Date;
 }
 
 export function mapPlayersWithDraftValues(
   players: DbPlayerValueRow[],
   draftValues: DraftPlayerValueRow[],
 ): Player[] {
-  const valuesByPlayerId = new Map(
-    selectActiveDraftValues(draftValues).map((value) => [value.playerId, value]),
-  );
+  const valuesByPlayerId = new Map(draftValues.map((value) => [value.playerId, value]));
 
   return players.map((player) => {
     const draftValue = valuesByPlayerId.get(player.id);
@@ -102,52 +98,9 @@ function mapFallbackPlayer(player: DbPlayerValueRow): Player {
   };
 }
 
-export function selectActiveDraftValues<T extends DraftPlayerValueRow>(draftValues: T[]): T[] {
-  const activeProjectionSourceId = getActiveProjectionSourceId(draftValues);
-  const valuesByPlayerId = new Map<number, T>();
-
-  for (const value of draftValues.filter((draftValue) =>
-    isSelectableDraftValue(draftValue, activeProjectionSourceId),
-  )) {
-    const current = valuesByPlayerId.get(value.playerId);
-    if (!current || compareDraftValueRows(value, current) < 0) {
-      valuesByPlayerId.set(value.playerId, value);
-    }
-  }
-
-  return [...valuesByPlayerId.values()];
-}
-
-function getActiveProjectionSourceId<T extends DraftPlayerValueRow>(
-  draftValues: T[],
-): number | null {
-  const projectionValues = draftValues.filter((value) => value.projectionSourceId !== null);
-  if (projectionValues.length === 0) return null;
-
-  return projectionValues.reduce((latest, value) =>
-    value.updatedAt > latest.updatedAt ? value : latest,
-  ).projectionSourceId;
-}
-
-function isSelectableDraftValue(
-  draftValue: DraftPlayerValueRow,
-  activeProjectionSourceId: number | null,
-): boolean {
-  if (draftValue.projectionSourceId === null) return true;
-  return draftValue.projectionSourceId === activeProjectionSourceId;
-}
-
 function normalizeFuturePickAssetKind(value: string | null): FuturePickAssetKind | null {
   if (value === 'package' || value === 'pick') return value;
   return null;
-}
-
-function compareDraftValueRows(a: DraftPlayerValueRow, b: DraftPlayerValueRow): number {
-  const aHasProjection = a.projectionSourceId !== null;
-  const bHasProjection = b.projectionSourceId !== null;
-
-  if (aHasProjection !== bHasProjection) return aHasProjection ? -1 : 1;
-  return b.updatedAt.getTime() - a.updatedAt.getTime();
 }
 
 function calculateFloor(activeTarget: number): number {

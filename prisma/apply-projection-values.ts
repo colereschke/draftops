@@ -198,6 +198,10 @@ export interface ProjectionImportWorkflowResult {
   applyResult: ApplyProjectionValuesResult | null;
 }
 
+export function formatProjectionApplyResult(result: ApplyProjectionValuesResult): string {
+  return `Activated projection value set ${result.valueSetId} from source ${result.projectionSourceId} with ${result.appliedCount} player row(s) at ${result.activatedAt.toISOString()}.`;
+}
+
 export async function importProjectionRows(
   prisma: ProjectionImportPrisma,
   rows: CsvProjectionRow[],
@@ -312,9 +316,7 @@ async function main(): Promise<void> {
 
     console.log(`Imported ${importedCount} projection row(s).`);
     if (result.applyResult) {
-      console.log(
-        `Applied projection values to ${result.applyResult.appliedCount} player-source row(s).`,
-      );
+      console.log(formatProjectionApplyResult(result.applyResult));
     } else {
       console.log('No --draft-id provided; skipped draft-specific projection application.');
     }

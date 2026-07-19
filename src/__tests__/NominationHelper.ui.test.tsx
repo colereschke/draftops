@@ -269,4 +269,56 @@ describe('NominationHelper mutations', () => {
     );
     expect(mockRecordPlayerNominated).not.toHaveBeenCalled();
   });
+
+  it("does not roll back a different player's optimistic update when this mutation fails", async () => {
+    // Regression test: runPlayerMutation used to restore a whole-object `data` snapshot
+    // captured before the mutation started. If a second player's mutation completed while
+    // the first was still pending, the first mutation's failure rollback would wipe out the
+    // second player's already-successful optimistic change. The fix reverts only the failed
+    // mutation's own change against the latest state, keyed by playerId.
+    const user = await renderReady();
+
+    let resolveWatchlistPost: (value: Response) => void = () => {};
+    const watchlistPostPromise = new Promise<Response>((resolve) => {
+      resolveWatchlistPost = resolve;
+    });
+    let resolveRefetch: (value: Response) => void = () => {};
+    const refetchPromise = new Promise<Response>((resolve) => {
+      resolveRefetch = resolve;
+    });
+
+    (global.fetch as jest.Mock)
+      .mockImplementationOnce(() => watchlistPostPromise) // Josh Allen watchlist POST — stays pending
+      .mockResolvedValueOnce({ ok: true, status: 200 } as Response) // Justin Jefferson nominate POST
+      .mockImplementationOnce(() => refetchPromise); // canonical refetch triggered by Josh Allen's failure
+
+    await user.click(watchButtonFor('Josh Allen'));
+    await user.click(nominateButtonFor('Justin Jefferson'));
+
+    await waitFor(() =>
+      expect(screen.getByTestId('mutation-status')).toHaveTextContent(
+        /justin jefferson nominated/i,
+      ),
+    );
+    expect(
+      screen.getByRole('button', { name: /remove justin jefferson from in auction/i }),
+    ).toBeInTheDocument();
+
+    resolveWatchlistPost({ ok: false, status: 409 } as Response);
+
+    await waitFor(() =>
+      expect(screen.getByTestId('mutation-status')).toHaveTextContent(
+        /failed to add josh allen to watchlist/i,
+      ),
+    );
+
+    // Josh Allen's failed watchlist mutation must not roll back Justin Jefferson's
+    // separately in-flight (and by now successful) nomination — he must still be listed
+    // in the "In Auction" sidebar, not reverted back into the available-players table.
+    expect(
+      screen.getByRole('button', { name: /remove justin jefferson from in auction/i }),
+    ).toBeInTheDocument();
+
+    resolveRefetch({ ok: true, status: 200, json: async () => dataWithAuction } as Response);
+  });
 });

@@ -31,6 +31,7 @@ interface PlayerMutationConfig {
   successLabel: string;
   failureLabel: string;
   applyOptimistic: (prev: NomData) => NomData;
+  revertOptimistic: (prev: NomData) => NomData;
   request: () => Promise<Response>;
 }
 
@@ -108,10 +109,10 @@ export default function NominationHelper({
       successLabel,
       failureLabel,
       applyOptimistic,
+      revertOptimistic,
       request,
     }: PlayerMutationConfig): Promise<boolean> => {
       if (pendingIds.has(playerId)) return false;
-      const snapshot = data;
       setPendingIds((prev) => new Set(prev).add(playerId));
       setData((prev) => (prev ? applyOptimistic(prev) : prev));
       setMutationStatus(pendingLabel);
@@ -122,7 +123,11 @@ export default function NominationHelper({
           return false;
         }
         if (!res.ok) {
-          setData(snapshot);
+          // Revert only this player's own optimistic change against the latest state,
+          // rather than restoring a whole-object snapshot — a snapshot captured before
+          // this mutation started would clobber any other player's mutation that was
+          // applied concurrently in the meantime.
+          setData((prev) => (prev ? revertOptimistic(prev) : prev));
           setMutationStatus(failureLabel);
           void fetchData();
           return false;
@@ -130,7 +135,7 @@ export default function NominationHelper({
         setMutationStatus(successLabel);
         return true;
       } catch {
-        setData(snapshot);
+        setData((prev) => (prev ? revertOptimistic(prev) : prev));
         setMutationStatus(failureLabel);
         void fetchData();
         return false;
@@ -142,7 +147,7 @@ export default function NominationHelper({
         });
       }
     },
-    [pendingIds, data, fetchData, router],
+    [pendingIds, fetchData, router],
   );
 
   const addToWatchlist = (player: Player) => {
@@ -154,6 +159,10 @@ export default function NominationHelper({
       successLabel: `${player.player} added to watchlist.`,
       failureLabel: `Failed to add ${player.player} to watchlist. Please try again.`,
       applyOptimistic: (prev) => ({ ...prev, watchlist: [...prev.watchlist, playerId] }),
+      revertOptimistic: (prev) => ({
+        ...prev,
+        watchlist: prev.watchlist.filter((id) => id !== playerId),
+      }),
       request: () =>
         fetch(`/api/draft/${draftId}/watchlist`, {
           method: 'POST',
@@ -173,6 +182,7 @@ export default function NominationHelper({
         ...prev,
         watchlist: prev.watchlist.filter((id) => id !== playerId),
       }),
+      revertOptimistic: (prev) => ({ ...prev, watchlist: [...prev.watchlist, playerId] }),
       request: () =>
         fetch(`/api/draft/${draftId}/watchlist`, {
           method: 'DELETE',
@@ -191,6 +201,10 @@ export default function NominationHelper({
       successLabel: `${player.player} nominated.`,
       failureLabel: `Failed to nominate ${player.player}. Please try again.`,
       applyOptimistic: (prev) => ({ ...prev, nominated: [...prev.nominated, playerId] }),
+      revertOptimistic: (prev) => ({
+        ...prev,
+        nominated: prev.nominated.filter((id) => id !== playerId),
+      }),
       request: () =>
         fetch(`/api/draft/${draftId}/nominated`, {
           method: 'POST',
@@ -211,6 +225,7 @@ export default function NominationHelper({
         ...prev,
         nominated: prev.nominated.filter((id) => id !== playerId),
       }),
+      revertOptimistic: (prev) => ({ ...prev, nominated: [...prev.nominated, playerId] }),
       request: () =>
         fetch(`/api/draft/${draftId}/nominated`, {
           method: 'DELETE',

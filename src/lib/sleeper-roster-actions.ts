@@ -345,10 +345,7 @@ export async function logSleeperRosterCatchUp(input: {
       }
 
       type ConflictReason =
-        | 'already_logged'
-        | 'assignment_changed'
-        | 'roster_full'
-        | 'bid_exceeds_max';
+        'already_logged' | 'assignment_changed' | 'roster_full' | 'bid_exceeds_max';
       const conflictByPlayerId = new Map<number, ConflictReason>();
       const createdPlayerIdSet = new Set<number>();
       for (const entry of input.entries) {

@@ -99,7 +99,12 @@ beforeEach(() => {
     .mockResolvedValueOnce({ id: 10, handle: 'coreschke' })
     .mockResolvedValueOnce({ id: 11, handle: 'team2' });
   mockTxDraftUpdate.mockResolvedValue({});
-  mockApplyProjectionValuesToDraft.mockResolvedValue({ projectionSourceId: 7, appliedCount: 250 });
+  mockApplyProjectionValuesToDraft.mockResolvedValue({
+    valueSetId: 11,
+    projectionSourceId: 7,
+    appliedCount: 250,
+    activatedAt: new Date('2026-07-18T12:00:00.000Z'),
+  });
   mockTxExecuteRaw.mockResolvedValue(1);
   mockTxOnboardingCreate.mockResolvedValue({});
   mockTxOnboardingFindUnique.mockResolvedValue(null);
@@ -231,7 +236,7 @@ describe('createDraft', () => {
     expect(mockApplyProjectionValuesToDraft).toHaveBeenCalledWith(mockTx, {
       draftId: 5,
       etrMatches: expect.any(Map),
-      useBatchTransaction: false,
+      mode: 'transaction',
     });
     expect(mockRedirect).toHaveBeenCalledWith('/draft/5');
   });

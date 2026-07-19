@@ -70,13 +70,14 @@ The `players` array and `claimedBids` prop are merged in a single `useMemo`. A `
 Single component handles add and edit modes via an `existingBid` prop.
 
 **Fields:**
-| Field | Type | Behavior |
-|-------|------|----------|
-| Player | Text | Read-only, pre-filled from clicked row |
-| Position | Badge | Read-only, pre-filled from clicked row |
-| NFL Team | Text | Read-only, pre-filled from clicked row |
-| Price | Number input | Auto-focused on open for fast entry |
-| Won By | Dropdown | All 12 league teams from `LEAGUE_TEAMS` |
+
+| Field    | Type         | Behavior                                |
+| -------- | ------------ | --------------------------------------- |
+| Player   | Text         | Read-only, pre-filled from clicked row  |
+| Position | Badge        | Read-only, pre-filled from clicked row  |
+| NFL Team | Text         | Read-only, pre-filled from clicked row  |
+| Price    | Number input | Auto-focused on open for fast entry     |
+| Won By   | Dropdown     | All 12 league teams from `LEAGUE_TEAMS` |
 
 **Modes:**
 

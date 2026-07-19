@@ -268,7 +268,7 @@ export async function createDraft(
         await applyProjectionValuesToDraft(tx, {
           draftId: draft.id,
           etrMatches,
-          useBatchTransaction: false,
+          mode: 'transaction',
         });
         stageMark = logStage(stageMark, 'projection-application');
 

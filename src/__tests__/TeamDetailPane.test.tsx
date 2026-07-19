@@ -18,6 +18,7 @@ const team: TeamWithRoster = {
   results: [
     {
       id: 1,
+      playerId: 1,
       player: 'Patrick Mahomes',
       position: 'QB',
       nflTeam: 'KC',

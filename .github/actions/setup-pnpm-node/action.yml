@@ -1,0 +1,29 @@
+name: Set up pnpm & Node
+description: Checkout-adjacent pnpm/Node toolchain setup shared across CI jobs
+
+inputs:
+  install-args:
+    description: Extra flags passed to `pnpm install` (e.g. --ignore-scripts)
+    required: false
+    default: ''
+  install:
+    description: Set to 'false' to skip `pnpm install` (e.g. jobs that only need the pnpm binary, like `pnpm audit`)
+    required: false
+    default: 'true'
+
+runs:
+  using: composite
+  steps:
+    - uses: pnpm/action-setup@v4
+      with:
+        version: 11
+
+    - uses: actions/setup-node@v4
+      with:
+        node-version: 22
+        cache: ${{ inputs.install != 'false' && 'pnpm' || '' }}
+
+    - name: Install dependencies
+      if: inputs.install != 'false'
+      shell: bash
+      run: pnpm install --frozen-lockfile ${{ inputs.install-args }}

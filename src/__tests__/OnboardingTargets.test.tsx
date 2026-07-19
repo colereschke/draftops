@@ -23,7 +23,7 @@ jest.mock('@/lib/onboarding', () => ({
 }));
 
 jest.mock('next/navigation', () => ({
-  useRouter: () => ({ replace: jest.fn() }),
+  useRouter: () => ({ replace: jest.fn(), refresh: jest.fn() }),
   notFound: jest.fn(),
   redirect: jest.fn(),
 }));

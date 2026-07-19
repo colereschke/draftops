@@ -71,7 +71,7 @@ export const CANONICAL_STATS_TEAMS: DraftTeamStatsInput[] = [
       },
       {
         id: 102,
-        playerId: null,
+        playerId: 12,
         player: 'Legacy WR',
         position: 'WR',
         nflTeam: 'LAR',

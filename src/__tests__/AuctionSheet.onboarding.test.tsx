@@ -20,6 +20,10 @@ jest.mock('@/components/Onboarding/OnboardingContext', () => ({
   useOnboarding: jest.fn(),
 }));
 
+jest.mock('next/navigation', () => ({
+  useRouter: () => ({ refresh: jest.fn() }),
+}));
+
 const mockUseOnboarding = jest.mocked(useOnboarding);
 const mockLogBid = jest.mocked(logBid);
 

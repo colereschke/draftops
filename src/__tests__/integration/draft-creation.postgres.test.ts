@@ -104,7 +104,9 @@ const VALID_INPUT = {
 
 async function deleteDraftFixture(draftId: number): Promise<void> {
   await prisma.$transaction([
+    prisma.draft.update({ where: { id: draftId }, data: { activeProjectionValueSetId: null } }),
     prisma.draftPlayerValue.deleteMany({ where: { draftId } }),
+    prisma.draftProjectionValueSet.deleteMany({ where: { draftId } }),
     prisma.player.deleteMany({ where: { draftId } }),
     prisma.onboardingProgress.deleteMany({ where: { draftId } }),
     prisma.draft.update({ where: { id: draftId }, data: { ownerTeamId: null } }),
@@ -124,7 +126,7 @@ describe('draft creation against PostgreSQL', () => {
   afterEach(async () => {
     while (createdDraftIds.length > 0) {
       const id = createdDraftIds.pop()!;
-      await deleteDraftFixture(id).catch(() => undefined);
+      await deleteDraftFixture(id);
     }
   });
 
@@ -167,6 +169,15 @@ describe('draft creation against PostgreSQL', () => {
         expect(draft).not.toBeNull();
         expect(teams).toHaveLength(2);
         expect(playerCount).toBeGreaterThan(BASE_PLAYERS.length);
+        if (!draft?.activeProjectionValueSetId) {
+          throw new Error('Draft creation did not activate its projection value set');
+        }
+        await expect(
+          prisma.draftProjectionValueSet.findUnique({
+            where: { id: draft.activeProjectionValueSetId },
+            select: { status: true, expectedPlayerCount: true },
+          }),
+        ).resolves.toEqual({ status: 'ACTIVE', expectedPlayerCount: 1 });
       }
     } finally {
       await prisma.$executeRawUnsafe(`

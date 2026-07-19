@@ -87,7 +87,12 @@ beforeEach(() => {
     { id: 11, handle: 'team2' },
   ]);
   mockTxDraftUpdate.mockResolvedValue({});
-  mockApplyProjectionValuesToDraft.mockResolvedValue({ projectionSourceId: 7, appliedCount: 250 });
+  mockApplyProjectionValuesToDraft.mockResolvedValue({
+    valueSetId: 11,
+    projectionSourceId: 7,
+    appliedCount: 250,
+    activatedAt: new Date('2026-07-18T12:00:00.000Z'),
+  });
   mockTxExecuteRaw.mockResolvedValue(1);
   mockTxOnboardingCreateMany.mockResolvedValue({ count: 1 });
   mockTxOnboardingUpdateMany.mockResolvedValue({ count: 0 });
@@ -320,7 +325,7 @@ describe('createDraft — happy path', () => {
     expect(mockApplyProjectionValuesToDraft).toHaveBeenCalledWith(mockTx, {
       draftId: 5,
       etrMatches: expect.any(Map),
-      useBatchTransaction: false,
+      mode: 'transaction',
     });
   });
 

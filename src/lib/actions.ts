@@ -1,7 +1,6 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { redirect } from 'next/navigation';
 import { auth } from '@/auth';
 import { prisma } from '@/lib/db';
 import {
@@ -10,16 +9,20 @@ import {
   getNextFuturePickYear,
   inferFuturePickBaselines,
 } from '@/lib/futurePickAssets';
-import type { FuturePickAuctionMode, Position, StartingSlot, ScoringSettings } from '@/types';
+import type { FuturePickAuctionMode, Position } from '@/types';
 import { players as BASE_PLAYERS } from '@/data/players';
 import { adjustPlayerValues } from '@/lib/valueAdjustment';
 import { applyProjectionValuesToDraft } from '@/lib/projectionApplication';
 import { getCustomPlayerKey } from '@/lib/playerIdentity';
 import { buildSleeperPlayerIndex, matchToSleeperIndexed } from '@/lib/sleeperMatch';
 import { DEFAULT_RANKING_SOURCE_BUDGET } from '@/lib/valuationBudget';
-import { completeOwnedDraft } from '@/lib/draftMutation';
-import type { DraftMutationResult } from '@/lib/draftMutation';
+import {
+  completeOwnedDraft,
+  DraftMutationFailure,
+  type DraftMutationResult,
+} from '@/lib/draftMutation';
 import { createBidRecord, deleteBidRecord, updateBidRecord } from '@/lib/bidMutation';
+import { draftInputSchema, type DraftInput } from '@/lib/draftInputSchema';
 
 export async function logBid(data: {
   playerId: number;
@@ -74,13 +77,6 @@ export async function deleteBid(data: {
   return result;
 }
 
-interface TeamInput {
-  handle: string;
-  displayName: string;
-  isMine: boolean;
-  sleeperRosterId?: number;
-}
-
 function toPrismaFuturePickMode(mode: FuturePickAuctionMode): 'PACKAGES' | 'INDIVIDUAL' | 'NONE' {
   if (mode === 'individual') return 'INDIVIDUAL';
   if (mode === 'none') return 'NONE';
@@ -100,174 +96,214 @@ async function resolveEtrSleeperMatches(): Promise<Map<string, string>> {
   return matches;
 }
 
-export async function createDraft(data: {
-  name: string;
-  budgetPerTeam: number;
-  rosterSize: number;
-  futurePickAuctionMode: FuturePickAuctionMode;
-  targetRoster: Partial<Record<Position, number>>;
-  startingLineup: StartingSlot[];
-  scoringSettings: ScoringSettings;
-  teams: TeamInput[];
-  playerSource?: 'etr' | 'custom';
-  sleeperLeagueId?: string;
-}): Promise<void> {
+// Measured baseline against local Postgres (2026-07-18, draft-creation.postgres.test.ts): the full
+// no-injected-latency stage sequence (advisory-lock + owner-draft-count + draft-create + team-insert
+// + owner-team-update + player-insert + projection-application) totaled ~99ms; with an injected 2s
+// AFTER INSERT ... FOR EACH STATEMENT sleep on the player-insert stage, total wall time was ~2.2s.
+// 15s leaves >100x headroom above the unloaded local baseline and comfortably covers Neon cold-path
+// latency on top of it, so the provisional value stands unchanged.
+const TRANSACTION_TIMEOUT_MS = 15_000;
+
+function logStage(previousMark: number, stage: string): number {
+  const now = performance.now();
+  console.info(`[createDraft] stage=${stage} durationMs=${Math.round(now - previousMark)}`);
+  return now;
+}
+
+function isTeamConflictError(error: unknown): boolean {
+  if (typeof error !== 'object' || error === null || !('code' in error)) return false;
+  if ((error as { code?: unknown }).code !== 'P2002') return false;
+  const target = (error as { meta?: { target?: unknown } }).meta?.target;
+  if (!Array.isArray(target)) return false;
+  return (
+    (target.includes('handle') && target.includes('draftId')) ||
+    (target.includes('draftId') && target.includes('sleeperRosterId'))
+  );
+}
+
+export async function createDraft(
+  data: DraftInput,
+): Promise<DraftMutationResult<{ draftId: number }>> {
   const session = await auth();
-  if (!session) throw new Error('Unauthorized');
+  if (!session) return { ok: false, code: 'UNAUTHORIZED' };
 
-  const handles = data.teams.map((t) => t.handle.trim());
-  if (new Set(handles).size !== handles.length) throw new Error('Duplicate handles');
-  if (!data.teams.some((t) => t.isMine)) throw new Error('No team marked as mine');
+  const parsed = draftInputSchema.safeParse(data);
+  if (!parsed.success) return { ok: false, code: 'INVALID_INPUT' };
+  const input = parsed.data;
 
-  const coerced = data.teams.map((t) => ({
-    handle: t.handle.trim(),
-    displayName: t.displayName.trim() || t.handle.trim(),
-    isMine: t.isMine,
-    sleeperRosterId: t.sleeperRosterId,
+  const coerced = input.teams.map((team) => ({
+    handle: team.handle,
+    displayName: team.displayName || team.handle,
+    isMine: team.isMine,
+    sleeperRosterId: team.sleeperRosterId,
   }));
+
   const etrMatches =
-    data.playerSource === 'custom' ? new Map<string, string>() : await resolveEtrSleeperMatches();
+    input.playerSource === 'custom' ? new Map<string, string>() : await resolveEtrSleeperMatches();
 
-  const draftId = await prisma.$transaction(async (tx) => {
-    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${session.user.id}))`;
-    const ownerDraftCount = await tx.draft.count({ where: { ownerId: session.user.id } });
-    const rankingSet =
-      data.playerSource === 'custom'
-        ? await tx.userRankingSet.findUnique({
-            where: { userId: session.user.id },
-            include: { players: true },
-          })
-        : null;
-    if (data.playerSource === 'custom' && !rankingSet) {
-      throw new Error('No custom ranking set found');
-    }
-
-    const sourceBudget = rankingSet?.sourceBudget ?? DEFAULT_RANKING_SOURCE_BUDGET;
-    const basePlayers = rankingSet
-      ? rankingSet.players.map((player) => ({
-          player: player.name,
-          team: player.team,
-          pos: player.pos as Position,
-          age: player.age,
-          sfRank: player.sfRank,
-          budget: player.budget,
-          ceiling: player.ceiling,
-          floor: player.floor,
-          notes: player.notes,
-          sleeperId: player.sleeperId,
-        }))
-      : BASE_PLAYERS;
-    const draft = await tx.draft.create({
-      data: {
-        name: data.name.trim(),
-        ownerId: session.user.id,
-        status: 'ACTIVE',
-        teamCount: data.teams.length,
-        rosterSize: data.rosterSize,
-        budget: data.budgetPerTeam,
-        playerValueSourceBudget: sourceBudget,
-        futurePickAuctionMode: toPrismaFuturePickMode(data.futurePickAuctionMode),
-        startingLineup: data.startingLineup,
-        scoringSettings: data.scoringSettings,
-        targetRoster: data.targetRoster,
-        sleeperLeagueId: data.sleeperLeagueId,
-      },
-    });
-
-    let ownerTeamId: number | null = null;
-    for (const team of coerced) {
-      const created = await tx.team.create({
-        data: {
-          handle: team.handle,
-          displayName: team.displayName,
-          budget: data.budgetPerTeam,
-          draftId: draft.id,
-          sleeperRosterId: team.sleeperRosterId,
-        },
-      });
-      if (team.isMine) ownerTeamId = created.id;
-    }
-
-    await tx.draft.update({ where: { id: draft.id }, data: { ownerTeamId } });
-
-    const nextPickYear = getNextFuturePickYear(draft.createdAt);
-    const futurePickAssets = generateFuturePickAssets({
-      teams: coerced,
-      year: nextPickYear,
-      startingRank: 900,
-      sourceBudget,
-      baselines: inferFuturePickBaselines(basePlayers),
-    });
-    const sourcePlayers = [...excludeStaticFuturePickRows(basePlayers), ...futurePickAssets];
-    const seededPlayers = adjustPlayerValues(sourcePlayers, {
-      startingLineup: data.startingLineup,
-      scoringSettings: data.scoringSettings,
-      teamCount: data.teams.length,
-      sourceBudget,
-      draftBudget: data.budgetPerTeam,
-    });
-
-    await tx.player.createMany({
-      data: seededPlayers.map((p, index) => ({
-        name: p.player,
-        nflTeam: p.team,
-        pos: p.pos,
-        age: p.age,
-        sfRank: p.sfRank,
-        budget: p.budget,
-        ceiling: p.ceiling,
-        floor: p.floor,
-        baseBudget: p.baseBudget ?? p.budget,
-        baseCeiling: p.baseCeiling ?? p.ceiling,
-        baseFloor: p.baseFloor ?? p.floor,
-        sleeperId: p.sleeperId ?? etrMatches.get(p.player) ?? null,
-        customKey: getCustomPlayerKey(p, index),
-        notes: p.notes,
-        futurePickYear: p.futurePickYear ?? null,
-        futurePickRound: p.futurePickRound ?? null,
-        futurePickOriginHandle: p.futurePickOriginHandle ?? null,
-        futurePickAssetKind: p.futurePickAssetKind ?? null,
-        draftId: draft.id,
-      })),
-    });
-
-    await applyProjectionValuesToDraft(tx, {
-      draftId: draft.id,
-      etrMatches,
-      mode: 'transaction',
-    });
-
-    if (ownerDraftCount === 0) {
-      const transition = await tx.onboardingProgress.updateMany({
-        where: { userId: session.user.id, phase: 'DRAFT_SETUP' },
-        data: {
-          phase: 'FEATURE_TOUR',
-          draftId: draft.id,
-          step: 'VALUE_SHEET_INTRO',
-          subjectPlayerName: null,
-        },
-      });
-      if (transition.count === 0) {
-        const onboarding = await tx.onboardingProgress.findUnique({
+  const rankingSet =
+    input.playerSource === 'custom'
+      ? await prisma.userRankingSet.findUnique({
           where: { userId: session.user.id },
+          include: { players: true },
+        })
+      : null;
+  if (input.playerSource === 'custom' && !rankingSet) {
+    return { ok: false, code: 'NO_RANKING_SET' };
+  }
+
+  const sourceBudget = rankingSet?.sourceBudget ?? DEFAULT_RANKING_SOURCE_BUDGET;
+  const basePlayers = rankingSet
+    ? rankingSet.players.map((player) => ({
+        player: player.name,
+        team: player.team,
+        pos: player.pos as Position,
+        age: player.age,
+        sfRank: player.sfRank,
+        budget: player.budget,
+        ceiling: player.ceiling,
+        floor: player.floor,
+        notes: player.notes,
+        sleeperId: player.sleeperId,
+      }))
+    : BASE_PLAYERS;
+
+  const creationTimestamp = new Date();
+  const nextPickYear = getNextFuturePickYear(creationTimestamp);
+  const futurePickAssets = generateFuturePickAssets({
+    teams: coerced,
+    year: nextPickYear,
+    startingRank: 900,
+    sourceBudget,
+    baselines: inferFuturePickBaselines(basePlayers),
+  });
+  const sourcePlayers = [...excludeStaticFuturePickRows(basePlayers), ...futurePickAssets];
+  const seededPlayers = adjustPlayerValues(sourcePlayers, {
+    startingLineup: input.startingLineup,
+    scoringSettings: input.scoringSettings,
+    teamCount: input.teams.length,
+    sourceBudget,
+    draftBudget: input.budgetPerTeam,
+  });
+
+  let draftId: number;
+  try {
+    draftId = await prisma.$transaction(
+      async (tx) => {
+        let stageMark = performance.now();
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${session.user.id}))`;
+        stageMark = logStage(stageMark, 'advisory-lock');
+
+        const ownerDraftCount = await tx.draft.count({ where: { ownerId: session.user.id } });
+        stageMark = logStage(stageMark, 'owner-draft-count');
+
+        const draft = await tx.draft.create({
+          data: {
+            name: input.name,
+            ownerId: session.user.id,
+            createdAt: creationTimestamp,
+            status: 'ACTIVE',
+            teamCount: input.teams.length,
+            rosterSize: input.rosterSize,
+            budget: input.budgetPerTeam,
+            playerValueSourceBudget: sourceBudget,
+            futurePickAuctionMode: toPrismaFuturePickMode(input.futurePickAuctionMode),
+            startingLineup: input.startingLineup,
+            scoringSettings: input.scoringSettings,
+            targetRoster: input.targetRoster,
+            sleeperLeagueId: input.sleeperLeagueId,
+          },
         });
-        if (!onboarding) {
-          await tx.onboardingProgress.create({
+        stageMark = logStage(stageMark, 'draft-create');
+
+        let createdTeams: Array<{ id: number; handle: string }>;
+        try {
+          createdTeams = await tx.team.createManyAndReturn({
+            data: coerced.map((team) => ({
+              handle: team.handle,
+              displayName: team.displayName,
+              budget: input.budgetPerTeam,
+              draftId: draft.id,
+              sleeperRosterId: team.sleeperRosterId,
+            })),
+            select: { id: true, handle: true },
+          });
+        } catch (error) {
+          if (isTeamConflictError(error)) throw new DraftMutationFailure('DUPLICATE_TEAM');
+          throw error;
+        }
+        stageMark = logStage(stageMark, 'team-insert');
+
+        const teamIdByHandle = new Map(createdTeams.map((team) => [team.handle, team.id]));
+        const mineTeam = coerced.find((team) => team.isMine);
+        const ownerTeamId = mineTeam ? (teamIdByHandle.get(mineTeam.handle) ?? null) : null;
+        await tx.draft.update({ where: { id: draft.id }, data: { ownerTeamId } });
+        stageMark = logStage(stageMark, 'owner-team-update');
+
+        await tx.player.createMany({
+          data: seededPlayers.map((p, index) => ({
+            name: p.player,
+            nflTeam: p.team,
+            pos: p.pos,
+            age: p.age,
+            sfRank: p.sfRank,
+            budget: p.budget,
+            ceiling: p.ceiling,
+            floor: p.floor,
+            baseBudget: p.baseBudget ?? p.budget,
+            baseCeiling: p.baseCeiling ?? p.ceiling,
+            baseFloor: p.baseFloor ?? p.floor,
+            sleeperId: p.sleeperId ?? etrMatches.get(p.player) ?? null,
+            customKey: getCustomPlayerKey(p, index),
+            notes: p.notes,
+            futurePickYear: p.futurePickYear ?? null,
+            futurePickRound: p.futurePickRound ?? null,
+            futurePickOriginHandle: p.futurePickOriginHandle ?? null,
+            futurePickAssetKind: p.futurePickAssetKind ?? null,
+            draftId: draft.id,
+          })),
+        });
+        stageMark = logStage(stageMark, 'player-insert');
+
+        await applyProjectionValuesToDraft(tx, {
+          draftId: draft.id,
+          etrMatches,
+          mode: 'transaction',
+        });
+        stageMark = logStage(stageMark, 'projection-application');
+
+        if (ownerDraftCount === 0) {
+          await tx.onboardingProgress.createMany({
             data: {
               userId: session.user.id,
               phase: 'FEATURE_TOUR',
               draftId: draft.id,
               step: 'VALUE_SHEET_INTRO',
             },
+            skipDuplicates: true,
+          });
+          await tx.onboardingProgress.updateMany({
+            where: { userId: session.user.id, phase: 'DRAFT_SETUP' },
+            data: {
+              phase: 'FEATURE_TOUR',
+              draftId: draft.id,
+              step: 'VALUE_SHEET_INTRO',
+              subjectPlayerName: null,
+            },
           });
         }
-      }
-    }
+        logStage(stageMark, 'onboarding-transition');
 
-    return draft.id;
-  });
+        return draft.id;
+      },
+      { timeout: TRANSACTION_TIMEOUT_MS },
+    );
+  } catch (error) {
+    if (error instanceof DraftMutationFailure) return { ok: false, code: error.code };
+    throw error;
+  }
 
-  redirect(`/draft/${draftId}`);
+  return { ok: true, data: { draftId } };
 }
 
 export async function completeDraft(draftId: number): Promise<void> {

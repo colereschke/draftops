@@ -12,7 +12,9 @@ export type DraftMutationCode =
   | 'BID_NOT_FOUND'
   | 'PLAYER_ALREADY_CLAIMED'
   | 'ROSTER_FULL'
-  | 'BID_EXCEEDS_MAX';
+  | 'BID_EXCEEDS_MAX'
+  | 'NO_RANKING_SET'
+  | 'DUPLICATE_TEAM';
 
 export type DraftMutationResult<T> = { ok: true; data: T } | { ok: false; code: DraftMutationCode };
 

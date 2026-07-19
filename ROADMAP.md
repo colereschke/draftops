@@ -560,6 +560,14 @@ with origin team, current owner, component picks, package grouping, and transfer
 system would better support trades, package splitting, and ownership edits, but it is intentionally
 out of scope for the initial dynamic valuation work.
 
+**Rookie-draft timing and asset identity:**
+Rookie drafts usually run in May or June, but winter and early-spring drafts can happen before the
+NFL Draft. Those leagues may draft rookies directly while they are still teamless, or draft slot
+assets such as `1.01`, `2.02`, and `3.03` instead of named players. A future rookie-draft feature
+must therefore make the rookie season explicit rather than inferring it only from the calendar or a
+draft creation timestamp, support players without an NFL team, and distinguish named rookies from
+draft-slot assets that later resolve to players.
+
 ---
 
 ## 9. Sleeper Roster Sync

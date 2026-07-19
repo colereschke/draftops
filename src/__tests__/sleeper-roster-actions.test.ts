@@ -167,6 +167,19 @@ describe('Sleeper roster actions', () => {
     expect(mockTransaction).not.toHaveBeenCalled();
   });
 
+  it('rejects an invalid league ID before calling Sleeper when saving mappings', async () => {
+    await expect(
+      saveSleeperRosterMapping({
+        draftId: 4,
+        leagueId: '1234',
+        mappings: [{ teamId: 7, sleeperRosterId: 9 }],
+      }),
+    ).resolves.toEqual({ ok: false, code: 'invalid_league_id' });
+    expect(mockFetchLeague).not.toHaveBeenCalled();
+    expect(mockFetchUsers).not.toHaveBeenCalled();
+    expect(mockFetchRosters).not.toHaveBeenCalled();
+  });
+
   it('rejects mappings for roster IDs missing from Sleeper', async () => {
     await expect(
       saveSleeperRosterMapping({

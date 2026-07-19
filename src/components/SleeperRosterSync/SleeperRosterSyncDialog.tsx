@@ -10,6 +10,11 @@ import {
   previewSleeperRosterSync,
   saveSleeperRosterMapping,
 } from '@/lib/sleeper-roster-actions';
+import type {
+  SleeperRosterCatchUpResponse,
+  SleeperRosterMatchResponse,
+  SleeperRosterSyncResponse,
+} from '@/lib/sleeper-roster-actions';
 import type { SleeperRosterPreview } from '@/lib/sleeperRosterSync';
 import { POS_COLORS } from '@/lib/posColors';
 import { Button } from '@/components/ui/button';
@@ -27,7 +32,12 @@ interface SleeperRosterSyncDialogProps {
 
 type SyncView = 'loading' | 'configuration' | 'preview' | 'error';
 
-function responseMessage(code: string): string {
+type SleeperRosterActionFailureCode =
+  | Exclude<SleeperRosterSyncResponse, { ok: true }>['code']
+  | Exclude<SleeperRosterCatchUpResponse, { ok: true }>['code']
+  | Exclude<SleeperRosterMatchResponse, { ok: true }>['code'];
+
+function responseMessage(code: SleeperRosterActionFailureCode): string {
   switch (code) {
     case 'mapping_required':
       return 'Sleeper roster mapping needs repair before this roster can be reconciled.';
@@ -47,8 +57,10 @@ function responseMessage(code: string): string {
       return 'Enter a whole-dollar price greater than zero.';
     case 'not_found':
       return 'This draft is no longer available.';
+    case 'draft_complete':
+      return 'This draft is complete and can no longer be changed.';
     default:
-      return 'Unable to reconcile this roster. Please try again.';
+      return code satisfies never;
   }
 }
 

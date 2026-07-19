@@ -65,7 +65,7 @@ export default function AuctionSheet({
   const [modalError, setModalError] = useState<string>('');
   const [mutationStatus, setMutationStatus] = useState<string>('');
   const [isPending, startTransition] = useTransition();
-  const [isNominating, setIsNominating] = useState<boolean>(false);
+  const [nominatingIds, setNominatingIds] = useState<Set<number>>(new Set());
   const [extraNominated, setExtraNominated] = useState<Array<number | string>>([]);
   const [clearedNominations, setClearedNominations] = useState<Set<number | string>>(new Set());
   const [showSleeperSync, setShowSleeperSync] = useState<boolean>(false);
@@ -230,8 +230,8 @@ export default function AuctionSheet({
 
   function handleNominate(player: Player) {
     const key = playerIdentityKey(player);
-    if (typeof key !== 'number' || isNominating) return;
-    setIsNominating(true);
+    if (typeof key !== 'number' || nominatingIds.has(key)) return;
+    setNominatingIds((prev) => new Set(prev).add(key));
     setExtraNominated((prev) => [...prev, key]);
     setMutationStatus('Nominating player…');
     fetch(`/api/draft/${draftId}/nominated`, {
@@ -257,7 +257,13 @@ export default function AuctionSheet({
         setMutationStatus('Failed to nominate player. Please try again.');
         router.refresh();
       })
-      .finally(() => setIsNominating(false));
+      .finally(() =>
+        setNominatingIds((prev) => {
+          const next = new Set(prev);
+          next.delete(key);
+          return next;
+        }),
+      );
   }
 
   const remaining = ownerBudget - mySpent;

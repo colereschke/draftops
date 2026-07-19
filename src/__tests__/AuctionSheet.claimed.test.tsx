@@ -512,6 +512,38 @@ describe('AuctionSheet with claimed bids', () => {
     expect(mockRouterRefresh).toHaveBeenCalled();
   });
 
+  it('allows nominating a different player while an earlier nomination is still in flight', async () => {
+    // Regression test: handleNominate used to guard duplicate submits with a single global
+    // `isNominating` boolean instead of tracking pending state per player, so nominating a
+    // second player while a first player's nomination request was still in flight would
+    // silently no-op — no fetch call, no error, no feedback.
+    const user = userEvent.setup();
+    let resolveFirstNominate: (value: Response) => void = () => {};
+    const firstNominatePromise = new Promise<Response>((resolve) => {
+      resolveFirstNominate = resolve;
+    });
+    (global.fetch as jest.Mock).mockImplementationOnce(() => firstNominatePromise);
+    renderSheet();
+
+    await user.click(screen.getByText('Josh Allen'));
+    await user.click(screen.getByRole('button', { name: /^nom$/i }));
+
+    await user.click(screen.getByText('Justin Jefferson'));
+    await user.click(screen.getByRole('button', { name: /^nom$/i }));
+
+    expect(global.fetch).toHaveBeenCalledTimes(2);
+    expect(global.fetch).toHaveBeenNthCalledWith(
+      2,
+      '/api/draft/1/nominated',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({ playerId: 11 }),
+      }),
+    );
+
+    resolveFirstNominate({ ok: true } as Response);
+  });
+
   it('breaks a tie in the sorted column using SF rank ascending', () => {
     const { container } = renderSheet({
       players: [

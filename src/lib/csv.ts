@@ -53,7 +53,7 @@ export function parseCsv(contents: string, options: CsvParseOptions = {}): Parse
     if (
       parsedRows.length > 0 &&
       options.maxRows !== undefined &&
-      parsedRows.length >= options.maxRows
+      parsedRows.length - 1 >= options.maxRows
     ) {
       throw new CsvParseError('CSV file exceeds the maximum allowed row count.');
     }

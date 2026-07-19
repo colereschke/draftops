@@ -64,4 +64,15 @@ describe('parseCsv', () => {
       rows: [{ Player: 'Joshua' }],
     });
   });
+
+  it('permits exactly maxRows data rows in addition to the header', () => {
+    expect(parseCsv('Player\nJosh', { maxRows: 1 })).toEqual({
+      headers: ['Player'],
+      rows: [{ Player: 'Josh' }],
+    });
+  });
+
+  it('rejects maxRows plus one data rows', () => {
+    expect(() => parseCsv('Player\nJosh\nJoe', { maxRows: 1 })).toThrow(CsvParseError);
+  });
 });

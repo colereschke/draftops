@@ -181,6 +181,19 @@ describe('parseRankingsCsv', () => {
     }
   });
 
+  it('accepts an upload with exactly 2,000 data rows', () => {
+    const result = parseRankingsCsv(
+      [HEADER, ...Array.from({ length: 2000 }, (_, index) => `Player ${index},BUF,QB,30,$51`)].join(
+        '\n',
+      ),
+    );
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.rows).toHaveLength(2000);
+    }
+  });
+
   it('caps row validation errors at 25 and appends a truncation message', () => {
     const result = parseRankingsCsv(
       [HEADER, ...Array.from({ length: 30 }, () => ',BUF,QB,30,$51')].join('\n'),

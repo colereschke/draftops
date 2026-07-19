@@ -79,7 +79,7 @@ describe('mapSleeperLeague — teamCount and rosterSize', () => {
   it('counts benches but excludes non-auction slots with a warning', () => {
     const league: SleeperLeague = {
       ...MINIMAL_LEAGUE,
-      roster_positions: ['QB', 'SUPER_FLEX', 'BN', 'IR', 'TAXI', 'K', 'DEF', 'DL', 'WEIRD'],
+      roster_positions: ['QB', 'SUPER_FLEX', 'BN', 'IR', 'TAXI', 'K', 'DEF', 'DL', 'WEIRD', 'IR'],
       scoring_settings: { ...MINIMAL_LEAGUE.scoring_settings, idp_tkl: 1 },
     };
 
@@ -87,9 +87,14 @@ describe('mapSleeperLeague — teamCount and rosterSize', () => {
 
     expect(result.rosterSize).toBe(3);
     expect(result.startingLineup).toEqual(['QB', 'SUPER_FLEX']);
-    expect(result.warnings).toEqual(
-      expect.arrayContaining([expect.stringContaining('IR'), expect.stringContaining('idp_tkl')]),
-    );
+    const excludedSlotsWarning = result.warnings.find((warning) => warning.includes('IR')) ?? '';
+    expect(excludedSlotsWarning).toEqual(expect.stringContaining('IR, TAXI, K, DEF, DL, WEIRD'));
+    const excludedSlotNames = excludedSlotsWarning
+      .replace('Ignored unsupported roster slots: ', '')
+      .replace('.', '')
+      .split(', ');
+    expect(excludedSlotNames.filter((slot) => slot === 'IR')).toHaveLength(1);
+    expect(result.warnings).toEqual(expect.arrayContaining([expect.stringContaining('idp_tkl')]));
   });
 });
 

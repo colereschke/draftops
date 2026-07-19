@@ -30,6 +30,7 @@ export interface SleeperImportResult {
   scoringSettings: ScoringSettings;
   teams: SleeperImportTeam[];
   ownerIndex: number | null;
+  warnings: string[];
 }
 
 export interface SleeperImportTeam {
@@ -61,6 +62,22 @@ const REQUEST_TIMEOUT_MS = 5_000;
 const MAX_ATTEMPTS = 2;
 
 const VALID_SLOTS = new Set<string>(['QB', 'RB', 'WR', 'TE', 'FLEX', 'SUPER_FLEX']);
+const BENCH_SLOT = 'BN';
+const SUPPORTED_SCORING_KEYS = new Set<string>([
+  'pass_yd',
+  'pass_td',
+  'pass_int',
+  'rush_att',
+  'rush_fd',
+  'rec',
+  'bonus_rec_rb',
+  'bonus_rec_wr',
+  'bonus_rec_te',
+  'rec_fd',
+  'bonus_fd_rb',
+  'bonus_fd_wr',
+  'bonus_fd_te',
+]);
 
 const sleeperLeagueSchema = z.object({
   name: z.string(),
@@ -183,6 +200,22 @@ export function mapSleeperLeague(
   const startingLineup = league.roster_positions
     .filter((pos) => VALID_SLOTS.has(pos))
     .map((pos) => pos as StartingSlot);
+  const excludedSlots = [
+    ...new Set(
+      league.roster_positions.filter((pos) => !VALID_SLOTS.has(pos) && pos !== BENCH_SLOT),
+    ),
+  ];
+  const unsupportedScoringKeys = Object.entries(s)
+    .filter(([key, value]) => !SUPPORTED_SCORING_KEYS.has(key) && value !== 0)
+    .map(([key]) => key);
+  const warnings: string[] = [];
+
+  if (excludedSlots.length > 0) {
+    warnings.push(`Ignored unsupported roster slots: ${excludedSlots.join(', ')}.`);
+  }
+  if (unsupportedScoringKeys.length > 0) {
+    warnings.push(`Ignored unsupported scoring settings: ${unsupportedScoringKeys.join(', ')}.`);
+  }
 
   // Build exactly one team per roster (keyed by roster_id for stable order), resolving each
   // roster's primary owner_id to a user. This is the only reliable one-team-per-roster mapping:
@@ -225,11 +258,13 @@ export function mapSleeperLeague(
     leagueId,
     leagueName: league.name ?? '',
     teamCount: teams.length,
-    rosterSize: league.roster_positions.length,
+    rosterSize: league.roster_positions.filter((pos) => VALID_SLOTS.has(pos) || pos === BENCH_SLOT)
+      .length,
     startingLineup,
     scoringSettings,
     teams,
     ownerIndex,
+    warnings,
   };
 }
 

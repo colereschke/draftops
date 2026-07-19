@@ -76,9 +76,20 @@ describe('mapSleeperLeague — teamCount and rosterSize', () => {
     expect(result.teams).toHaveLength(12);
   });
 
-  it('counts ALL roster_positions including BN/IR/K for rosterSize', () => {
-    const result = mapSleeperLeague(FULL_LEAGUE, MOCK_USERS, FULL_ROSTERS);
-    expect(result.rosterSize).toBe(12); // 7 starters + BN×3 + IR + K
+  it('counts benches but excludes non-auction slots with a warning', () => {
+    const league: SleeperLeague = {
+      ...MINIMAL_LEAGUE,
+      roster_positions: ['QB', 'SUPER_FLEX', 'BN', 'IR', 'TAXI', 'K', 'DEF', 'DL', 'WEIRD'],
+      scoring_settings: { ...MINIMAL_LEAGUE.scoring_settings, idp_tkl: 1 },
+    };
+
+    const result = mapSleeperLeague(league, MOCK_USERS, FULL_ROSTERS);
+
+    expect(result.rosterSize).toBe(3);
+    expect(result.startingLineup).toEqual(['QB', 'SUPER_FLEX']);
+    expect(result.warnings).toEqual(
+      expect.arrayContaining([expect.stringContaining('IR'), expect.stringContaining('idp_tkl')]),
+    );
   });
 });
 

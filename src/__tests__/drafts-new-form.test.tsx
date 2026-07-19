@@ -61,6 +61,7 @@ const MOCK_IMPORT_RESULT: SleeperImportResult = {
     sleeperRosterId: i + 1,
   })),
   ownerIndex: 0,
+  warnings: [],
 };
 
 describe('NewDraftPage — roster settings and lineup', () => {

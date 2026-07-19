@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, type FormEvent } from 'react';
 import type { Player, ClaimedBid, LeagueTeam } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
@@ -25,6 +25,7 @@ interface BidModalProps {
   onNominate?: () => void;
   isNominated?: boolean;
   serverError?: string;
+  isSubmitting?: boolean;
 }
 
 export default function BidModal({
@@ -37,16 +38,20 @@ export default function BidModal({
   onNominate,
   isNominated,
   serverError,
+  isSubmitting = false,
 }: BidModalProps) {
   const isEdit = !!existingBid;
   const [price, setPrice] = useState<string>(existingBid ? String(existingBid.price) : '');
   const [teamId, setTeamId] = useState<number>(existingBid?.teamId ?? teams[0]?.id ?? 0);
   const [error, setError] = useState<string>('');
+  const [deleteArmed, setDeleteArmed] = useState<boolean>(false);
   const selectedTeam = teams.find((team) => team.id === teamId);
   const hasProjectionContext =
     player.projectionAuctionValue !== null && player.projectionAuctionValue !== undefined;
 
-  function handleSubmit() {
+  function handleFormSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (isSubmitting) return;
     const p = Number(price);
     if (!price || isNaN(p) || p <= 0) {
       setError('Enter a valid price.');
@@ -167,105 +172,138 @@ export default function BidModal({
           </div>
         )}
 
-        {/* Price */}
-        <div className="gap-xs flex flex-col">
-          <Label
-            htmlFor="bid-price"
-            className="font-label text-label-xs text-muted-foreground font-bold tracking-wide uppercase"
-          >
-            Price
-          </Label>
-          <Input
-            data-testid="bid-price"
-            id="bid-price"
-            aria-label="Price"
-            type="number"
-            min={1}
-            value={price}
-            onChange={(e) => setPrice(e.target.value)}
-            autoFocus
-            className="font-mono text-body-lg rounded-md bg-background font-bold focus-visible:border-border focus-visible:ring-1 focus-visible:ring-border"
-          />
-        </div>
-
-        {/* Won By */}
-        <div className="gap-xs flex flex-col">
-          <Label
-            htmlFor="bid-team"
-            className="font-label text-label-xs text-muted-foreground font-bold tracking-wide uppercase"
-          >
-            Won By
-          </Label>
-          <Select
-            value={String(teamId)}
-            onValueChange={(value) => value != null && setTeamId(Number(value))}
-          >
-            <SelectTrigger
-              id="bid-team"
-              aria-label="Won By"
-              className="w-full focus-visible:border-border focus-visible:ring-1 focus-visible:ring-border"
+        <form onSubmit={handleFormSubmit} className="contents">
+          {/* Price */}
+          <div className="gap-xs flex flex-col">
+            <Label
+              htmlFor="bid-price"
+              className="font-label text-label-xs text-muted-foreground font-bold tracking-wide uppercase"
             >
-              <SelectValue>
-                {selectedTeam
-                  ? `${selectedTeam.displayName ?? selectedTeam.handle} (${selectedTeam.handle})`
-                  : 'Select team'}
-              </SelectValue>
-            </SelectTrigger>
-            <SelectContent>
-              {teams.map((t) => (
-                <SelectItem key={t.id} value={String(t.id)}>
-                  {t.displayName ?? t.handle} ({t.handle})
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-
-        {(error || serverError) && (
-          <div
-            data-testid="bid-server-error"
-            className="text-body-sm"
-            style={{ color: 'var(--age-old)' }}
-          >
-            {error || serverError}
+              Price
+            </Label>
+            <Input
+              data-testid="bid-price"
+              id="bid-price"
+              aria-label="Price"
+              type="number"
+              min={1}
+              value={price}
+              onChange={(e) => setPrice(e.target.value)}
+              autoFocus
+              disabled={isSubmitting}
+              className="font-mono text-body-lg rounded-md bg-background font-bold focus-visible:border-border focus-visible:ring-1 focus-visible:ring-border"
+            />
           </div>
-        )}
 
-        {/* Actions */}
-        <div className="gap-sm flex items-center justify-end">
-          <div className="mr-auto flex items-center gap-sm">
-            {isEdit && onDelete && (
-              <Button variant="destructive" size="sm" onClick={onDelete}>
-                Remove
-              </Button>
-            )}
-            {onNominate && !isNominated && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  onNominate();
-                  onClose();
-                }}
-                style={{ borderColor: 'var(--pos-pick)', color: 'var(--pos-pick)' }}
+          {/* Won By */}
+          <div className="gap-xs flex flex-col">
+            <Label
+              htmlFor="bid-team"
+              className="font-label text-label-xs text-muted-foreground font-bold tracking-wide uppercase"
+            >
+              Won By
+            </Label>
+            <Select
+              value={String(teamId)}
+              onValueChange={(value) => value != null && setTeamId(Number(value))}
+            >
+              <SelectTrigger
+                id="bid-team"
+                aria-label="Won By"
+                disabled={isSubmitting}
+                className="w-full focus-visible:border-border focus-visible:ring-1 focus-visible:ring-border"
               >
-                Nom
-              </Button>
-            )}
-            {onNominate && isNominated && (
-              <span className="text-body-sm" style={{ color: 'var(--pos-pick)' }}>
-                In Auction
-              </span>
-            )}
+                <SelectValue>
+                  {selectedTeam
+                    ? `${selectedTeam.displayName ?? selectedTeam.handle} (${selectedTeam.handle})`
+                    : 'Select team'}
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                {teams.map((t) => (
+                  <SelectItem key={t.id} value={String(t.id)}>
+                    {t.displayName ?? t.handle} ({t.handle})
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
 
-          <Button variant="outline" size="sm" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button data-testid="bid-submit" size="sm" onClick={handleSubmit}>
-            {isEdit ? 'Update Bid' : 'Log Bid'}
-          </Button>
-        </div>
+          {(error || serverError) && (
+            <div
+              data-testid="bid-server-error"
+              className="text-body-sm"
+              style={{ color: 'var(--age-old)' }}
+            >
+              {error || serverError}
+            </div>
+          )}
+
+          {/* Actions */}
+          <div className="gap-sm flex items-center justify-end">
+            <div className="mr-auto flex items-center gap-sm">
+              {isEdit && onDelete && !deleteArmed && (
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  type="button"
+                  disabled={isSubmitting}
+                  onClick={() => setDeleteArmed(true)}
+                >
+                  Remove
+                </Button>
+              )}
+              {isEdit && onDelete && deleteArmed && (
+                <>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    type="button"
+                    disabled={isSubmitting}
+                    onClick={() => setDeleteArmed(false)}
+                  >
+                    Keep
+                  </Button>
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    type="button"
+                    disabled={isSubmitting}
+                    onClick={onDelete}
+                  >
+                    Confirm Remove
+                  </Button>
+                </>
+              )}
+              {onNominate && !isNominated && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  type="button"
+                  onClick={() => {
+                    onNominate();
+                    onClose();
+                  }}
+                  style={{ borderColor: 'var(--pos-pick)', color: 'var(--pos-pick)' }}
+                >
+                  Nom
+                </Button>
+              )}
+              {onNominate && isNominated && (
+                <span className="text-body-sm" style={{ color: 'var(--pos-pick)' }}>
+                  In Auction
+                </span>
+              )}
+            </div>
+
+            <Button variant="outline" size="sm" type="button" onClick={onClose}>
+              Cancel
+            </Button>
+            <Button data-testid="bid-submit" size="sm" type="submit" disabled={isSubmitting}>
+              {isSubmitting ? 'Saving…' : isEdit ? 'Update Bid' : 'Log Bid'}
+            </Button>
+          </div>
+        </form>
       </DialogContent>
     </Dialog>
   );

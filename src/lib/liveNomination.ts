@@ -10,6 +10,11 @@ export interface LiveNomination {
   name: string;
 }
 
+interface LiveNominationInput {
+  playerId: number;
+  playerName: string;
+}
+
 /**
  * Resolve the position the threat board should anchor to from the currently
  * nominated players. The board tracks one appetite position at a time, but
@@ -18,18 +23,17 @@ export interface LiveNomination {
  * `name` is the winning position's most recent nominee.
  *
  * `nominated` MUST be ordered most-recent-first (createdAt desc); PICK/PKG and
- * any player missing from `posByName` are ignored.
+ * any player missing from `posByPlayerId` are ignored.
  */
 export function resolveLiveNomination(
-  nominated: { playerId?: number | null; playerName: string }[],
-  posByName: Map<string, string>,
-  posByPlayerId = new Map<number, string>(),
+  nominated: LiveNominationInput[],
+  posByPlayerId: ReadonlyMap<number, string>,
 ): LiveNomination | null {
   const counts = new Map<AppetitePos, number>();
   const recentName = new Map<AppetitePos, string>();
 
   for (const n of nominated) {
-    const pos = resolveNominationPosition(n, posByName, posByPlayerId);
+    const pos = resolveNominationPosition(n, posByPlayerId);
     if (!pos || !APPETITE_SET.has(pos)) continue;
     const ap = pos as AppetitePos;
     counts.set(ap, (counts.get(ap) ?? 0) + 1);
@@ -42,7 +46,7 @@ export function resolveLiveNomination(
   // Walk in recency order and only replace on a strictly higher count, so equal
   // counts resolve to the position encountered first — the most recent nomination.
   for (const n of nominated) {
-    const pos = resolveNominationPosition(n, posByName, posByPlayerId);
+    const pos = resolveNominationPosition(n, posByPlayerId);
     if (!pos || !APPETITE_SET.has(pos)) continue;
     const ap = pos as AppetitePos;
     const c = counts.get(ap) ?? 0;
@@ -56,10 +60,8 @@ export function resolveLiveNomination(
 }
 
 function resolveNominationPosition(
-  nomination: { playerId?: number | null; playerName: string },
-  posByName: Map<string, string>,
-  posByPlayerId: Map<number, string>,
+  nomination: LiveNominationInput,
+  posByPlayerId: ReadonlyMap<number, string>,
 ): string | undefined {
-  if (typeof nomination.playerId === 'number') return posByPlayerId.get(nomination.playerId);
-  return posByName.get(nomination.playerName);
+  return posByPlayerId.get(nomination.playerId);
 }

@@ -1,4 +1,5 @@
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { randomUUID } from 'node:crypto';
 import { resolve } from 'node:path';
 import { config } from 'dotenv';
 import { Client } from 'pg';
@@ -6,6 +7,13 @@ import { Client } from 'pg';
 const LOCAL_DATABASE_HOSTS = new Set(['localhost', '127.0.0.1', '::1']);
 const TEST_DATABASE_SAFETY_ERROR =
   'Integration tests require a local PostgreSQL database ending in _test';
+
+export interface MigrationTestSchema {
+  client: Client;
+  schemaName: string;
+  applyMigration: (migrationName: string) => Promise<void>;
+  dispose: () => Promise<void>;
+}
 
 function normalizeHost(host: string): string {
   return host.startsWith('[') && host.endsWith(']') ? host.slice(1, -1) : host;
@@ -70,6 +78,80 @@ export function configureTestDatabaseUrl(): string {
   return testUrl.toString();
 }
 
+function listMigrationDirectories(): string[] {
+  const migrationsRoot = resolve('prisma/migrations');
+  return readdirSync(migrationsRoot, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => entry.name)
+    .sort();
+}
+
+function readMigration(migrationName: string): string {
+  const migrationPath = resolve('prisma/migrations', migrationName, 'migration.sql');
+  if (!existsSync(migrationPath)) {
+    throw new Error(`Migration ${migrationName} does not exist`);
+  }
+  return readFileSync(migrationPath, 'utf8');
+}
+
+export async function createIsolatedMigrationSchema(
+  beforeMigration: string,
+): Promise<MigrationTestSchema> {
+  const databaseUrl = configureTestDatabaseUrl();
+  const schemaName = `migration_${process.pid}_${randomUUID().replaceAll('-', '')}`;
+  const client = new Client({ connectionString: databaseUrl });
+  await client.connect();
+  await client.query(`CREATE SCHEMA "${schemaName}"`);
+  await client.query(`SET search_path TO "${schemaName}", public`);
+
+  try {
+    for (const directory of listMigrationDirectories()) {
+      if (directory.localeCompare(beforeMigration) >= 0) break;
+      await client.query(readMigration(directory));
+    }
+  } catch (error) {
+    await runCleanupSteps([
+      async () => {
+        await client.query('ROLLBACK');
+      },
+      async () => {
+        await client.query('SET search_path TO public');
+      },
+      async () => {
+        await client.query(`DROP SCHEMA IF EXISTS "${schemaName}" CASCADE`);
+      },
+      async () => {
+        await client.end();
+      },
+    ]);
+    throw error;
+  }
+
+  return {
+    client,
+    schemaName,
+    applyMigration: async (migrationName) => {
+      await client.query(readMigration(migrationName));
+    },
+    dispose: async () => {
+      await runCleanupSteps([
+        async () => {
+          await client.query('ROLLBACK');
+        },
+        async () => {
+          await client.query('SET search_path TO public');
+        },
+        async () => {
+          await client.query(`DROP SCHEMA IF EXISTS "${schemaName}" CASCADE`);
+        },
+        async () => {
+          await client.end();
+        },
+      ]);
+    },
+  };
+}
+
 export async function resetTestDatabase(): Promise<void> {
   const databaseUrl = configureTestDatabaseUrl();
   const parsedUrl = new URL(databaseUrl);
@@ -99,15 +181,8 @@ export async function resetTestDatabase(): Promise<void> {
     await client.query('DROP SCHEMA public CASCADE');
     await client.query('CREATE SCHEMA public');
 
-    const migrationsRoot = resolve('prisma/migrations');
-    const migrationDirectories = readdirSync(migrationsRoot, { withFileTypes: true })
-      .filter((entry) => entry.isDirectory())
-      .map((entry) => entry.name)
-      .sort();
-    for (const directory of migrationDirectories) {
-      const migrationPath = resolve(migrationsRoot, directory, 'migration.sql');
-      if (!existsSync(migrationPath)) continue;
-      await client.query(readFileSync(migrationPath, 'utf8'));
+    for (const directory of listMigrationDirectories()) {
+      await client.query(readMigration(directory));
     }
   } finally {
     await client.end();

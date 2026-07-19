@@ -77,10 +77,12 @@ projection value.
    starting lineup, team count, and scoring settings. This produces draft-denominated fallback
    values. PICK and PKG assets receive draft-budget scaling but bypass the league-setting
    multipliers.
-4. Draft creation resolves ETR players to Sleeper IDs, applies the latest stored
-   `ProjectionSource` from Postgres, and writes `DraftPlayerValue` rows inside the same
-   transaction. Projections shape the market value by comparing each player's draft-scored points
-   against baseline scoring and normalizing that lift against positional peers.
+4. Draft creation resolves ETR players to Sleeper IDs and applies the latest stored
+   `ProjectionSource` inside the draft transaction. Existing-draft refreshes stage immutable
+   `DraftPlayerValue` rows under a fresh `DraftProjectionValueSet`, validate the complete set, and
+   atomically update `Draft.activeProjectionValueSetId`. Projections shape the market value by
+   comparing each player's draft-scored points against baseline scoring and normalizing that lift
+   against positional peers.
 
 The persisted value fields have distinct semantics:
 
@@ -93,6 +95,10 @@ The persisted value fields have distinct semantics:
 - `DraftPlayerValue.activeAuctionValue` is the surfaced projection-shaped market target. It remains
   anchored to `fallbackAuctionValue`; `valueSource` records whether projection shaping or the
   fallback supplied it.
+- Readers query only the value set referenced by `Draft.activeProjectionValueSetId`; a player
+  missing from that set uses the fallback `Player` fields. Partial or failed refreshes never change
+  the pointer. Activation metadata is retained indefinitely, while full rows are kept for the
+  active set and three newest archived sets.
 
 Projection source data must be imported into Postgres before creating drafts. Draft creation fails
 loudly if no usable projection source exists.
@@ -126,10 +132,10 @@ Dry-run mode is the default and neither writes a snapshot nor opens a transactio
 `--draft-id <id>` after `--` to limit either mode to one draft. In apply mode,
 `--snapshot-dir <dir>` overrides the default `valuation-backfill-snapshots/` directory, which is
 gitignored. Apply mode writes one complete timestamped JSON snapshot before the first database
-transaction, then updates fallback values and reapplies the latest projection source in a separate
-transaction for each draft. It does not rewrite the persisted source budget or `Player.base*`
-values. Retain the snapshots outside version control until the updated fallback and active totals
-have been verified.
+transaction, then updates fallback values and activates a new value set in a separate transaction
+for each draft. Snapshots include the prior activation pointer, value-set metadata, and value rows.
+It does not rewrite the persisted source budget or `Player.base*` values. Retain the snapshots
+outside version control until the updated fallback and active totals have been verified.
 
 ## Make Commands
 

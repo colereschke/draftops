@@ -26,6 +26,7 @@ interface NominationTableProps {
   posFilter: 'ALL' | Position;
   onPosFilterChange: (pos: 'ALL' | Position) => void;
   hasAuctionData: boolean;
+  pendingIds?: Set<number>;
   onWatch: (player: Player) => void;
   onNominate: (player: Player) => void;
   isReadOnly?: boolean;
@@ -36,6 +37,7 @@ export default function NominationTable({
   posFilter,
   onPosFilterChange,
   hasAuctionData,
+  pendingIds = new Set<number>(),
   onWatch,
   onNominate,
   isReadOnly = false,
@@ -179,6 +181,8 @@ export default function NominationTable({
                       <Button
                         variant="outline"
                         size="xs"
+                        type="button"
+                        disabled={player.id !== undefined && pendingIds.has(player.id)}
                         onClick={() => onWatch(player)}
                         className="font-label tracking-wide hover:border-[var(--pos-rb)]"
                         style={{ color: 'var(--pos-rb)' }}
@@ -190,6 +194,8 @@ export default function NominationTable({
                       <Button
                         variant="outline"
                         size="xs"
+                        type="button"
+                        disabled={player.id !== undefined && pendingIds.has(player.id)}
                         onClick={() => onNominate(player)}
                         data-testid={`nominate-player-${player.player}`}
                         data-onboarding-target="nominate-practice"

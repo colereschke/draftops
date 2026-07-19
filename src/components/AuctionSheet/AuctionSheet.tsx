@@ -3,6 +3,7 @@
 
 import { useState, useMemo, useOptimistic, useTransition } from 'react';
 import dynamic from 'next/dynamic';
+import { useRouter } from 'next/navigation';
 import type { Player, Position, ClaimedBid, LeagueTeam, ScoringSettings } from '@/types';
 import { logBid, updateBid, deleteBid } from '@/lib/actions';
 import BidModal from '@/components/BidModal';
@@ -11,6 +12,7 @@ import AuctionHeader from './AuctionHeader';
 import FilterControls, { type PositionFilter, type StrategyFilter } from './FilterControls';
 import PlayerTable, { type SortKey } from './PlayerTable';
 import DraftReadOnlyBanner from '@/components/DraftReadOnlyBanner';
+import MutationStatus from '@/components/MutationStatus';
 import type { DraftMutationCode } from '@/lib/draftMutation';
 
 const SleeperRosterSyncDialog = dynamic(
@@ -50,6 +52,7 @@ export default function AuctionSheet({
   sleeperLeagueId = null,
   isReadOnly = false,
 }: AuctionSheetProps) {
+  const router = useRouter();
   const { progress, recordBidLogged } = useOnboarding();
   const [posFilter, setPosFilter] = useState<PositionFilter>('ALL');
   const [strategyFilter, setStrategyFilter] = useState<StrategyFilter>('ALL');
@@ -60,7 +63,9 @@ export default function AuctionSheet({
   const [availableOnly, setAvailableOnly] = useState<boolean>(false);
   const [modalPlayer, setModalPlayer] = useState<Player | null>(null);
   const [modalError, setModalError] = useState<string>('');
-  const [, startTransition] = useTransition();
+  const [mutationStatus, setMutationStatus] = useState<string>('');
+  const [isPending, startTransition] = useTransition();
+  const [nominatingIds, setNominatingIds] = useState<Set<number>>(new Set());
   const [extraNominated, setExtraNominated] = useState<Array<number | string>>([]);
   const [clearedNominations, setClearedNominations] = useState<Set<number | string>>(new Set());
   const [showSleeperSync, setShowSleeperSync] = useState<boolean>(false);
@@ -122,11 +127,14 @@ export default function AuctionSheet({
       ROSTER_FULL: 'That team has no open roster spots for another player.',
       BID_EXCEEDS_MAX: 'This bid must leave at least $1 for every open roster spot.',
     };
-    setModalError(messages[code] ?? 'Unable to save this bid. Please try again.');
+    const message = messages[code] ?? 'Unable to save this bid. Please try again.';
+    setModalError(message);
+    setMutationStatus(message);
+    router.refresh();
   }
 
   function handleModalSubmit({ price, teamId }: { price: number; teamId: number }) {
-    if (!modalPlayer) return;
+    if (!modalPlayer || isPending) return;
     const existingBid = claimMap.get(playerIdentityKey(modalPlayer));
     const team = teams.find((t) => t.id === teamId);
     if (!team) return;
@@ -136,15 +144,19 @@ export default function AuctionSheet({
       const updated: ClaimedBid = { ...existingBid, price, teamId, teamHandle: team.handle };
       startTransition(async () => {
         dispatchOptimistic({ type: 'update', bid: updated });
+        setMutationStatus('Saving bid…');
         try {
           const result = await updateBid({ id: existingBid.id, price, teamId, draftId });
           if (!result.ok) {
             handleMutationFailure(result.code);
             return;
           }
+          setMutationStatus('Bid saved.');
           setModalPlayer(null);
         } catch {
           setModalError('Failed to save bid. Please try again.');
+          setMutationStatus('Failed to save bid. Please try again.');
+          router.refresh();
         }
       });
     } else {
@@ -164,6 +176,7 @@ export default function AuctionSheet({
       };
       startTransition(async () => {
         dispatchOptimistic({ type: 'add', bid: tempBid });
+        setMutationStatus('Saving bid…');
         try {
           const result = await logBid({
             playerId,
@@ -175,6 +188,7 @@ export default function AuctionSheet({
             handleMutationFailure(result.code);
             return;
           }
+          setMutationStatus('Bid saved.');
           setClearedNominations((previous) => new Set(previous).add(playerId));
           setExtraNominated((previous) =>
             previous.filter((nominatedId) => nominatedId !== playerId),
@@ -183,48 +197,73 @@ export default function AuctionSheet({
           setModalPlayer(null);
         } catch {
           setModalError('Failed to log bid. Please try again.');
+          setMutationStatus('Failed to log bid. Please try again.');
+          router.refresh();
         }
       });
     }
   }
 
   function handleModalDelete() {
-    if (!modalPlayer) return;
+    if (!modalPlayer || isPending) return;
     const existingBid = claimMap.get(playerIdentityKey(modalPlayer));
     if (!existingBid) return;
     setModalError('');
     startTransition(async () => {
       dispatchOptimistic({ type: 'delete', id: existingBid.id });
+      setMutationStatus('Removing bid…');
       try {
         const result = await deleteBid({ id: existingBid.id, draftId });
         if (!result.ok) {
           handleMutationFailure(result.code);
           return;
         }
+        setMutationStatus('Bid removed.');
         setModalPlayer(null);
       } catch {
         setModalError('Failed to remove bid. Please try again.');
+        setMutationStatus('Failed to remove bid. Please try again.');
+        router.refresh();
       }
     });
   }
 
   function handleNominate(player: Player) {
     const key = playerIdentityKey(player);
-    if (typeof key !== 'number') return;
+    if (typeof key !== 'number' || nominatingIds.has(key)) return;
+    setNominatingIds((prev) => new Set(prev).add(key));
     setExtraNominated((prev) => [...prev, key]);
-    void fetch(`/api/draft/${draftId}/nominated`, {
+    setMutationStatus('Nominating player…');
+    fetch(`/api/draft/${draftId}/nominated`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ playerId: key }),
-    }).then((res) => {
-      if (res.status === 401) {
-        window.location.href = '/sign-in';
-        return;
-      }
-      if (!res.ok) {
+    })
+      .then((res) => {
+        if (res.status === 401) {
+          window.location.href = '/sign-in';
+          return;
+        }
+        if (!res.ok) {
+          setExtraNominated((prev) => prev.filter((n) => n !== key));
+          setMutationStatus('Failed to nominate player. Please try again.');
+          router.refresh();
+          return;
+        }
+        setMutationStatus('Player nominated.');
+      })
+      .catch(() => {
         setExtraNominated((prev) => prev.filter((n) => n !== key));
-      }
-    });
+        setMutationStatus('Failed to nominate player. Please try again.');
+        router.refresh();
+      })
+      .finally(() =>
+        setNominatingIds((prev) => {
+          const next = new Set(prev);
+          next.delete(key);
+          return next;
+        }),
+      );
   }
 
   const remaining = ownerBudget - mySpent;
@@ -309,6 +348,7 @@ export default function AuctionSheet({
 
   return (
     <div className="min-h-screen bg-background text-foreground">
+      <MutationStatus message={mutationStatus} />
       {isReadOnly ? <DraftReadOnlyBanner /> : null}
       <div data-onboarding-target="value-sheet">
         <AuctionHeader
@@ -370,6 +410,7 @@ export default function AuctionSheet({
           onSubmit={handleModalSubmit}
           onDelete={claimMap.has(playerIdentityKey(modalPlayer)) ? handleModalDelete : undefined}
           serverError={modalError}
+          isSubmitting={isPending}
           isNominated={nominatedSet.has(playerIdentityKey(modalPlayer))}
           onNominate={() => handleNominate(modalPlayer)}
         />

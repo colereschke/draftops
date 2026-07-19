@@ -23,25 +23,28 @@ export async function getActiveDraftPlayers({
   futurePickAuctionMode,
   bids,
 }: GetActiveDraftPlayersInput): Promise<Player[]> {
-  const [players, draftValues] = await Promise.all([
+  const [players, draft] = await Promise.all([
     prisma.player.findMany({ where: { draftId }, orderBy: { sfRank: 'asc' } }),
-    prisma.draftPlayerValue.findMany({
-      where: { draftId },
-      select: {
-        playerId: true,
-        projectionSourceId: true,
-        projectedPoints: true,
-        replacementPoints: true,
-        vor: true,
-        projectionAuctionValue: true,
-        fallbackAuctionValue: true,
-        activeAuctionValue: true,
-        valueSource: true,
-        updatedAt: true,
-      },
-      orderBy: { updatedAt: 'desc' },
+    prisma.draft.findUnique({
+      where: { id: draftId },
+      select: { activeProjectionValueSetId: true },
     }),
   ]);
+  const draftValues = draft?.activeProjectionValueSetId
+    ? await prisma.draftPlayerValue.findMany({
+        where: { draftId, valueSetId: draft.activeProjectionValueSetId },
+        select: {
+          playerId: true,
+          projectedPoints: true,
+          replacementPoints: true,
+          vor: true,
+          projectionAuctionValue: true,
+          fallbackAuctionValue: true,
+          activeAuctionValue: true,
+          valueSource: true,
+        },
+      })
+    : [];
 
   const dynamicPlayers = applyDynamicPickValues({
     players: mapPlayersWithDraftValues(players, draftValues),

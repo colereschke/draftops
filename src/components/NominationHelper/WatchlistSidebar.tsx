@@ -13,6 +13,7 @@ interface WatchlistSidebarProps {
   watchlist: Array<number | string>;
   wonIds?: Set<number>;
   wonNames?: Set<string>;
+  pendingIds?: Set<number>;
   onAddToWatchlist: (player: Player) => void;
   onRemoveFromWatchlist: (playerId: number | string) => void;
   onUnNominate: (playerId: number | string) => void;
@@ -26,6 +27,7 @@ export default function WatchlistSidebar({
   watchlist,
   wonIds = new Set(),
   wonNames = new Set(),
+  pendingIds = new Set<number>(),
   onAddToWatchlist,
   onRemoveFromWatchlist,
   onUnNominate,
@@ -108,6 +110,7 @@ export default function WatchlistSidebar({
                     <button
                       type="button"
                       onClick={() => onUnNominate(playerId)}
+                      disabled={typeof playerId === 'number' && pendingIds.has(playerId)}
                       title="Remove from in auction"
                       aria-label={`Remove ${name} from in auction`}
                       data-testid={
@@ -118,7 +121,7 @@ export default function WatchlistSidebar({
                       data-onboarding-target={
                         name === onboardingSubjectPlayerName ? 'nominate-undo' : undefined
                       }
-                      className="shrink-0 text-muted-foreground transition-colors hover:text-primary"
+                      className="shrink-0 text-muted-foreground transition-colors hover:text-primary disabled:pointer-events-none disabled:opacity-40"
                     >
                       <X className="size-3.5" />
                     </button>
@@ -197,9 +200,10 @@ export default function WatchlistSidebar({
                   <button
                     type="button"
                     onClick={() => onRemoveFromWatchlist(playerId)}
+                    disabled={typeof playerId === 'number' && pendingIds.has(playerId)}
                     title="Remove from watchlist"
                     aria-label={`Remove ${name} from watchlist`}
-                    className="shrink-0 text-muted-foreground transition-colors hover:text-destructive"
+                    className="shrink-0 text-muted-foreground transition-colors hover:text-destructive disabled:pointer-events-none disabled:opacity-40"
                   >
                     <X className="size-3.5" />
                   </button>

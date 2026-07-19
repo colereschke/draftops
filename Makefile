@@ -64,6 +64,11 @@ test-watch: ## Run tests in watch mode
 test-coverage: ## Run tests with coverage report
 	pnpm test:coverage
 
+.PHONY: test-e2e
+test-e2e: ## Run Playwright smoke tests (point DATABASE_URL at a disposable DB first, then `pnpm tsx e2e/seed.ts`)
+	pnpm exec playwright install --with-deps chromium
+	pnpm test:e2e
+
 .PHONY: check
 check: typecheck lint format-check test ## Run all checks (typecheck, lint, format, test)
 
@@ -119,4 +124,4 @@ help: ## Show this help message
 	@echo ""
 	@echo "Usage: make [target]"
 	@echo ""
-	@awk 'BEGIN {FS = ":.*##"} /^[a-zA-Z_-]+:.*##/ { printf "  \033[36m%-18s\033[0m %s\n", $$1, $$2 }' $(MAKEFILE_LIST)
+	@awk 'BEGIN {FS = ":.*##"} /^[a-zA-Z0-9_-]+:.*##/ { printf "  \033[36m%-18s\033[0m %s\n", $$1, $$2 }' $(MAKEFILE_LIST)

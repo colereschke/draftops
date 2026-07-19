@@ -57,7 +57,7 @@ model Draft {
   onboardingProgress      OnboardingProgress?
 
   teams            Team[]            @relation("DraftTeams")
-  ownerTeam        Team?             @relation("DraftOwnerTeam", fields: [ownerTeamId], references: [id])
+  ownerTeam        Team?             @relation("DraftOwnerTeam", fields: [ownerTeamId, id], references: [id, draftId], onDelete: Restrict, onUpdate: Restrict)
   auctionResults   AuctionResult[]
   watchlistEntries PlayerWatchlist[]
   nominatedPlayers NominatedPlayer[]
@@ -90,6 +90,7 @@ model Team {
   results         AuctionResult[]
   ownedByDraft    Draft[]         @relation("DraftOwnerTeam")
 
+  @@unique([id, draftId])
   @@unique([handle, draftId])
   @@unique([draftId, sleeperRosterId])
 }
@@ -97,15 +98,15 @@ model Team {
 model AuctionResult {
   id        Int      @id @default(autoincrement())
   player    String
-  playerId  Int?
-  playerRow Player?  @relation(fields: [playerId], references: [id], onDelete: SetNull)
+  playerId  Int
+  playerRow Player   @relation(fields: [playerId, draftId], references: [id, draftId], onDelete: Restrict, onUpdate: Restrict)
   position  String
   nflTeam   String
   price     Int
   sfRank    Int?
   notes     String?
   teamId    Int
-  team      Team     @relation(fields: [teamId], references: [id])
+  team      Team     @relation(fields: [teamId, draftId], references: [id, draftId], onDelete: Restrict, onUpdate: Restrict)
   draftId   Int
   draft     Draft    @relation(fields: [draftId], references: [id])
   createdAt DateTime @default(now())
@@ -117,28 +118,30 @@ model AuctionResult {
 model PlayerWatchlist {
   id         Int      @id @default(autoincrement())
   playerName String
-  playerId   Int?
-  player     Player?  @relation(fields: [playerId], references: [id], onDelete: SetNull)
+  playerId   Int
+  player     Player   @relation(fields: [playerId, draftId], references: [id, draftId], onDelete: Restrict, onUpdate: Restrict)
   draftId    Int
   draft      Draft    @relation(fields: [draftId], references: [id])
   createdAt  DateTime @default(now())
 
   @@unique([playerName, draftId])
   @@unique([playerId, draftId])
+  @@index([draftId])
   @@index([playerId])
 }
 
 model NominatedPlayer {
   id         Int      @id @default(autoincrement())
   playerName String
-  playerId   Int?
-  player     Player?  @relation(fields: [playerId], references: [id], onDelete: SetNull)
+  playerId   Int
+  player     Player   @relation(fields: [playerId, draftId], references: [id, draftId], onDelete: Restrict, onUpdate: Restrict)
   draftId    Int
   draft      Draft    @relation(fields: [draftId], references: [id])
   createdAt  DateTime @default(now())
 
   @@unique([playerName, draftId])
   @@unique([playerId, draftId])
+  @@index([draftId])
   @@index([playerId])
 }
 
@@ -169,6 +172,7 @@ model Player {
   watchlistEntries       PlayerWatchlist[]
   nominatedEntries       NominatedPlayer[]
 
+  @@unique([id, draftId])
   @@unique([sleeperId, draftId])
   @@unique([customKey, draftId])
   @@index([name, draftId])
@@ -235,7 +239,7 @@ model DraftPlayerValue {
   updatedAt              DateTime @updatedAt
 
   draft            Draft             @relation(fields: [draftId], references: [id])
-  player           Player            @relation(fields: [playerId], references: [id])
+  player           Player            @relation(fields: [playerId, draftId], references: [id, draftId], onDelete: Restrict, onUpdate: Restrict)
   projectionSource ProjectionSource? @relation(fields: [projectionSourceId], references: [id])
 
   @@unique([draftId, playerId, projectionSourceId])

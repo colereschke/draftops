@@ -22,6 +22,7 @@ const mockTeams: LeagueTeam[] = [
 
 const mockExistingBid: ClaimedBid = {
   id: 10,
+  playerId: 10,
   player: 'Josh Allen',
   position: 'QB',
   price: 115,

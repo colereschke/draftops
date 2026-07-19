@@ -299,9 +299,34 @@ on the page.
 
 ### HARD-005 - Enforce same-draft relationships in PostgreSQL
 
-- **Status:** READY
+- **Status:** READY FOR INTEGRATION
 - **Effort:** Large
 - **Sequence:** After HARD-001 and a production data audit
+
+#### Implementation checkpoint (2026-07-18)
+
+A read-only production Neon audit found zero orphaned or cross-draft references across the owner
+team, bid team/player, watchlist player, nomination player, and draft-value player relationships.
+One historical bid has a null player ID with exactly one same-draft name match; the guarded
+migration will backfill that identity when deployed.
+
+The implementation adds `Team(id, draftId)` and `Player(id, draftId)` candidate keys and replaces
+the six redundant scalar relationships with compound PostgreSQL foreign keys. Bid, watchlist, and
+nomination player IDs become required. Compound relationships restrict deletes and updates so
+draft membership cannot move through an implicit cascade, while existing application ownership
+checks remain in place. The transactional migration locks relationship writes, aborts with
+relationship-specific aggregate messages for unsafe legacy data, backfills only unique matches,
+validates every new constraint, and rolls back without partial schema changes on failure.
+
+`PlayerWatchlist(draftId)` and `NominatedPlayer(draftId)` indexes fill the only missing
+draft-leading query paths; real-PostgreSQL catalog and `EXPLAIN` tests verify they are usable.
+
+Verification on the branch:
+
+- `make check`: typecheck, ESLint, and Prettier passed; 89 Jest suites and 758 tests passed.
+- `pnpm test:integration`: 4 real-PostgreSQL suites and 25 tests passed, covering all six
+  cross-draft rejections, same-draft controls, restricted identity changes/deletes, unique legacy
+  backfill, preflight aborts, transactional rollback, and index plans.
 
 #### Problem
 

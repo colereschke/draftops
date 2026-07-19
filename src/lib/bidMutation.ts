@@ -59,6 +59,7 @@ interface CreateBidInTransactionInput {
   player: BidPlayerMetadata;
   teamId: number;
   price: number;
+  actorId: string;
 }
 
 function hasValidCreateInput(input: CreateBidRecordInput): boolean {
@@ -138,7 +139,7 @@ export async function createBidInTransaction(
     price: input.price,
   });
 
-  let bid: { id: number };
+  let bid: AuditableBid;
   try {
     bid = await tx.auctionResult.create({
       data: {
@@ -158,6 +159,15 @@ export async function createBidInTransaction(
     }
     throw error;
   }
+
+  await createBidAuditEvent(tx, {
+    draftId: draft.id,
+    bidId: bid.id,
+    actorId: input.actorId,
+    type: 'CREATE',
+    before: null,
+    after: toBidSnapshot(bid),
+  });
 
   await tx.nominatedPlayer.deleteMany({
     where: { playerId: input.player.id, draftId: draft.id },
@@ -188,6 +198,7 @@ export async function createBidRecord(
       player,
       teamId: input.teamId,
       price: input.price,
+      actorId: input.userId,
     });
   });
 }

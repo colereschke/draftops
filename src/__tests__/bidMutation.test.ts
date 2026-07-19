@@ -84,7 +84,22 @@ beforeEach(() => {
   mockPlayerFindFirst.mockResolvedValue(PLAYER);
   mockAuctionFindFirst.mockResolvedValue(null);
   mockAuctionFindMany.mockResolvedValue([]);
-  mockAuctionCreate.mockResolvedValue({ id: 99 });
+  mockAuctionCreate.mockResolvedValue({
+    id: 99,
+    draftId: 4,
+    playerId: 10,
+    player: 'Josh Allen',
+    position: 'QB',
+    nflTeam: 'BUF',
+    price: 120,
+    sfRank: 1,
+    notes: null,
+    teamId: 7,
+    createdAt: new Date('2026-07-19T12:00:00.000Z'),
+    updatedAt: new Date('2026-07-19T12:00:00.000Z'),
+    deletedAt: null,
+    supersededAt: null,
+  });
   mockAuctionUpdate.mockResolvedValue({ id: 12 });
   mockAuctionDeleteMany.mockResolvedValue({ count: 1 });
   mockNominationDeleteMany.mockResolvedValue({ count: 1 });
@@ -135,6 +150,9 @@ describe('createBidRecord', () => {
     expect(mockNominationDeleteMany).toHaveBeenCalledWith({
       where: { playerId: 10, draftId: 4 },
     });
+    expect(mockAuditCreate).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ type: 'CREATE', bidId: 99 }) }),
+    );
     expect(mockTransaction).toHaveBeenCalledTimes(1);
   });
 

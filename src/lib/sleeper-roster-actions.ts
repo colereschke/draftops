@@ -409,6 +409,7 @@ export async function logSleeperRosterCatchUp(input: {
             player,
             teamId: team.id,
             price: entry.price,
+            actorId: draft.userId,
           });
           createdPlayerIdSet.add(player.id);
         } catch (error) {

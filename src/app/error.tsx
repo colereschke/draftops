@@ -15,7 +15,9 @@ export default function Error({
   }, [error]);
 
   return (
-    <div
+    <main
+      id="main-content"
+      tabIndex={-1}
       style={{
         display: 'flex',
         flexDirection: 'column',
@@ -49,6 +51,6 @@ export default function Error({
       >
         Try Again
       </button>
-    </div>
+    </main>
   );
 }

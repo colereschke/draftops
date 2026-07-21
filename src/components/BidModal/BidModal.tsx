@@ -240,8 +240,8 @@ export default function BidModal({
           )}
 
           {/* Actions */}
-          <div className="gap-sm flex items-center justify-end">
-            <div className="mr-auto flex items-center gap-sm">
+          <div className="gap-sm flex flex-wrap items-center justify-end">
+            <div className="mr-auto flex flex-wrap items-center gap-sm">
               {isEdit && onDelete && !deleteArmed && (
                 <Button
                   variant="destructive"
@@ -280,6 +280,7 @@ export default function BidModal({
                   variant="outline"
                   size="touch"
                   type="button"
+                  disabled={isSubmitting}
                   onClick={() => {
                     onNominate();
                     onClose();

@@ -42,6 +42,8 @@
   --muted-foreground: var(--text-muted);
   --accent: #202328;
   --accent-foreground: var(--text-primary);
+  /* Aliased to --age-old (not a standalone red) — tuning age-band color here also
+     recolors every system error surface (ErrorText, error boundaries, form errors). */
   --destructive: var(--age-old);
   --border: var(--border-default);
   --input: var(--border-default);
@@ -140,9 +142,7 @@ body {
   .ticker-scroll {
     animation: none;
   }
-}
 
-@media (prefers-reduced-motion: reduce) {
   *,
   *::before,
   *::after {

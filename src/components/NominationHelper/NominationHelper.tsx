@@ -237,13 +237,15 @@ export default function NominationHelper({
 
   if (!data) {
     return (
-      <div
+      <main
+        id="main-content"
+        tabIndex={-1}
         data-onboarding-nomination-state={draftError ? 'error' : 'loading'}
         data-testid="nomination-helper-state"
         className="flex h-[400px] items-center justify-center text-muted-foreground"
       >
         {draftError ?? 'Loading nomination data...'}
-      </div>
+      </main>
     );
   }
 

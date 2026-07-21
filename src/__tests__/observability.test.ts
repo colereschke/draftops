@@ -144,4 +144,27 @@ describe('server observability', () => {
       errorSummary: 'safe failure',
     });
   });
+
+  it('redacts sensitive paths, bearer tokens, and credentialed URLs from server logs', () => {
+    const error = jest.spyOn(console, 'error').mockImplementation();
+
+    logServerError({
+      incidentId: 'incident-123',
+      action: 'render',
+      routePath: '/draft/ckv2x4n9j0000qwertyuiop12/teams/secret-token',
+      error: new Error(
+        'Authorization: Bearer very-secret-token failed for postgres://draftops:db-password@db.example.test/app',
+      ),
+    });
+
+    expect(JSON.parse(error.mock.calls[0]?.[0] as string)).toEqual(
+      expect.objectContaining({
+        routePath: '/draft/[redacted]/teams/[redacted]',
+        errorSummary: 'authorization=[redacted] failed for [redacted-credential-url]',
+      }),
+    );
+    expect(error.mock.calls[0]?.[0]).not.toMatch(
+      /ckv2x4n9j|secret-token|very-secret-token|db-password|db\.example/i,
+    );
+  });
 });

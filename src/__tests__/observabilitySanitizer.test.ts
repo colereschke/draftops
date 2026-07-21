@@ -124,4 +124,34 @@ describe('sanitizeSentryEvent', () => {
       expect(JSON.stringify(event)).not.toMatch(/cole@example|secret/i);
     },
   );
+
+  it('redacts sensitive and opaque path segments while retaining route structure', () => {
+    const event = sanitizeSentryEvent({
+      request: {
+        url: 'https://draftops.app/draft/ckv2x4n9j0000qwertyuiop12/teams/secret-token',
+      },
+    });
+
+    expect(event?.request).toEqual({ url: '/draft/[redacted]/teams/[redacted]' });
+    expect(JSON.stringify(event)).not.toMatch(/ckv2x4n9j|secret-token/i);
+  });
+
+  it('fully redacts authorization bearer tokens and credentialed URLs from summaries', () => {
+    const event = sanitizeSentryEvent({
+      exception: {
+        values: [
+          {
+            type: 'DatabaseError',
+            value:
+              'Authorization: Bearer very-secret-token failed for postgres://draftops:db-password@db.example.test/app',
+          },
+        ],
+      },
+    });
+
+    expect(event?.exception?.values?.[0]?.value).toBe(
+      'authorization=[redacted] failed for [redacted-credential-url]',
+    );
+    expect(JSON.stringify(event)).not.toMatch(/very-secret-token|db-password|db\.example/i);
+  });
 });

@@ -17,6 +17,12 @@ const SAFE_ACTION = /^[a-z][a-z0-9_.-]*$/;
 const SAFE_ENVIRONMENTS = new Set(['development', 'preview', 'production', 'test']);
 const HMAC_SHA256 = /^[a-f0-9]{64}$/;
 const DISCORD_SNOWFLAKE = /\d{17,20}/;
+const EMAIL_ADDRESS = /^[\w.+-]+@[\w-]+(?:\.[\w-]+)+$/;
+const SENSITIVE_PATH_SEGMENT =
+  /(?:api[-_]?key|authorization|bearer|cookie|credential|password|secret|token)/i;
+const UUID_PATH_SEGMENT = /^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$/i;
+const SAFE_PATH_SEGMENT = /^(?:[A-Za-z0-9._~-]{1,64}|\[[A-Za-z][A-Za-z0-9]*\])$/;
+const OPAQUE_PATH_SEGMENT = /^(?:[A-Za-z0-9_-]{17,}|(?=.*[A-Za-z])(?=.*\d)[A-Za-z0-9_-]{12,})$/;
 
 export interface SentryEvent {
   type?: string;
@@ -44,9 +50,39 @@ function toPathname(url: unknown): string | undefined {
       return undefined;
     }
 
-    return parsedUrl.pathname.slice(0, MAX_ROUTE_PATH_LENGTH);
+    const pathname = parsedUrl.pathname
+      .split('/')
+      .map((segment) => sanitizePathSegment(segment))
+      .join('/');
+
+    return pathname.slice(0, MAX_ROUTE_PATH_LENGTH);
   } catch {
     return undefined;
+  }
+}
+
+function sanitizePathSegment(segment: string): string {
+  if (!segment) {
+    return segment;
+  }
+
+  try {
+    const decodedSegment = decodeURIComponent(segment);
+
+    if (
+      !SAFE_PATH_SEGMENT.test(decodedSegment) ||
+      EMAIL_ADDRESS.test(decodedSegment) ||
+      DISCORD_SNOWFLAKE.test(decodedSegment) ||
+      SENSITIVE_PATH_SEGMENT.test(decodedSegment) ||
+      UUID_PATH_SEGMENT.test(decodedSegment) ||
+      OPAQUE_PATH_SEGMENT.test(decodedSegment)
+    ) {
+      return '[redacted]';
+    }
+
+    return decodedSegment;
+  } catch {
+    return '[redacted]';
   }
 }
 
@@ -95,6 +131,8 @@ function sanitizeSummary(value: unknown): string | undefined {
   }
 
   return value
+    .replace(/\b[a-z][a-z0-9+.-]*:\/\/[^\s@/]+@[^\s]+/gi, '[redacted-credential-url]')
+    .replace(/\bauthorization\s*[=:]\s*bearer\s+[^\s,;]+/gi, 'authorization=[redacted]')
     .replace(/(password|token|secret|authorization|cookie)\s*[=:]\s*[^\s,;]+/gi, '$1=[redacted]')
     .replace(/\b[\w.+-]+@[\w-]+(?:\.[\w-]+)+\b/g, '[redacted-email]')
     .replace(/\bdiscord(?:[_\s-]?id)?\s*[=:]\s*[^\s,;]+/gi, 'discord=[redacted]')

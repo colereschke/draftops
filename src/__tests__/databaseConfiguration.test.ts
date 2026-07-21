@@ -29,6 +29,18 @@ describe('getDatabasePoolConfiguration', () => {
   );
 
   it.each([
+    ['1', 1],
+    ['10', 10],
+  ])('accepts DATABASE_POOL_MAX value %s', (databasePoolMax, expectedMaximum) => {
+    expect(
+      getDatabasePoolConfiguration({
+        DATABASE_POOL_MAX: databasePoolMax,
+        DATABASE_URL: RUNTIME_URL,
+      }).max,
+    ).toBe(expectedMaximum);
+  });
+
+  it.each([
     [{ DATABASE_URL: RUNTIME_URL, NODE_ENV: 'test' }, 'draftops-test'],
     [{ DATABASE_URL: RUNTIME_URL, VERCEL: '1', VERCEL_ENV: 'production' }, 'draftops-production'],
     [{ DATABASE_URL: RUNTIME_URL, VERCEL: '1', VERCEL_ENV: 'preview' }, 'draftops-preview'],

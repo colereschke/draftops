@@ -147,6 +147,8 @@ export default function WatchlistSidebar({
               value={search}
               onValueChange={setSearch}
               placeholder="Add player I want..."
+              aria-label="Add player to watchlist"
+              autoComplete="off"
             />
             {search.trim() !== '' && searchResults.length > 0 && (
               <CommandList className="absolute top-full right-0 left-0 z-10 mt-1 rounded-[5px] border border-border bg-popover">

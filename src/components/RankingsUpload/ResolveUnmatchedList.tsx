@@ -116,6 +116,8 @@ function UnmatchedRow({
         <CommandInput
           data-testid={`unmatched-search-${player.id}`}
           placeholder="Search Sleeper players…"
+          aria-label={`Search Sleeper players to match ${player.name}`}
+          autoComplete="off"
           value={search}
           onValueChange={setSearch}
         />

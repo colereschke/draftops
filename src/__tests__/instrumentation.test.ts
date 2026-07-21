@@ -5,7 +5,7 @@
 import * as Sentry from '@sentry/nextjs';
 
 import { onRequestError } from '@/instrumentation';
-import { logServerError } from '@/lib/observability';
+import { logServerError } from '@/lib/observabilityLogger';
 
 const mockSetTag = jest.fn();
 
@@ -18,7 +18,7 @@ jest.mock('@sentry/nextjs', () => ({
   ),
 }));
 
-jest.mock('@/lib/observability', () => ({
+jest.mock('@/lib/observabilityLogger', () => ({
   logServerError: jest.fn(),
 }));
 
@@ -68,5 +68,22 @@ describe('onRequestError', () => {
     expect(incidentId).toMatch(/^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$/i);
     expect(incidentId).not.toContain('password');
     expect(logServerError).toHaveBeenCalledWith(expect.objectContaining({ incidentId }));
+  });
+
+  it('registers the Edge Sentry configuration without loading Node-only observability', async () => {
+    const originalRuntime = process.env.NEXT_RUNTIME;
+    process.env.NEXT_RUNTIME = 'edge';
+
+    jest.resetModules();
+    jest.doMock('@/sentry.edge.config', () => ({}));
+    const { register } = await import('@/instrumentation');
+
+    await expect(register()).resolves.toBeUndefined();
+
+    if (originalRuntime === undefined) {
+      delete process.env.NEXT_RUNTIME;
+    } else {
+      process.env.NEXT_RUNTIME = originalRuntime;
+    }
   });
 });

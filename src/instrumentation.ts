@@ -2,7 +2,7 @@ import * as Sentry from '@sentry/nextjs';
 import type { Instrumentation } from 'next';
 
 import { deriveIncidentDetails } from '@/lib/incident';
-import { logServerError } from '@/lib/observability';
+import { logServerError } from '@/lib/observabilityLogger';
 
 export async function register(): Promise<void> {
   if (process.env.NEXT_RUNTIME === 'edge') {

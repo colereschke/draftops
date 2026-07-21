@@ -88,6 +88,11 @@ function isPlayerClaimUniqueConflict(error: unknown): boolean {
   return Array.isArray(target) && target.includes('draftId') && target.includes('playerId');
 }
 
+async function getTransactionTimestamp(tx: Prisma.TransactionClient): Promise<Date> {
+  const clock = await tx.$queryRaw<Array<{ now: Date }>>`SELECT transaction_timestamp() AS now`;
+  return clock[0].now;
+}
+
 export async function assertBidLegalInTransaction(
   tx: Prisma.TransactionClient,
   draft: Draft,
@@ -148,10 +153,12 @@ export async function createBidInTransaction(
       supersededAt: null,
     },
   });
+  const transactionTimestamp =
+    deletedClaims.length > 0 ? await getTransactionTimestamp(tx) : undefined;
   for (const deletedClaim of deletedClaims) {
     const superseded = await tx.auctionResult.update({
       where: { id: deletedClaim.id },
-      data: { supersededAt: new Date() },
+      data: { supersededAt: transactionTimestamp, updatedAt: transactionTimestamp },
     });
     await createBidAuditEvent(tx, {
       draftId: draft.id,
@@ -274,9 +281,10 @@ export async function deleteBidRecord(
     });
     if (!existingBid) throw new DraftMutationFailure('BID_NOT_FOUND');
 
+    const transactionTimestamp = await getTransactionTimestamp(tx);
     const deleted = await tx.auctionResult.update({
       where: { id: existingBid.id },
-      data: { deletedAt: new Date() },
+      data: { deletedAt: transactionTimestamp, updatedAt: transactionTimestamp },
     });
     await createBidAuditEvent(tx, {
       draftId: draft.id,
@@ -305,8 +313,8 @@ export async function restoreBidRecord(
     if (bid.deletedAt === null) throw new DraftMutationFailure('BID_NOT_DELETED');
     if (bid.supersededAt !== null) throw new DraftMutationFailure('BID_SUPERSEDED');
 
-    const clock = await tx.$queryRaw<Array<{ now: Date }>>`SELECT transaction_timestamp() AS now`;
-    if (bid.deletedAt.getTime() <= clock[0].now.getTime() - 30 * 60 * 1000) {
+    const transactionTimestamp = await getTransactionTimestamp(tx);
+    if (bid.deletedAt.getTime() <= transactionTimestamp.getTime() - 30 * 60 * 1000) {
       throw new DraftMutationFailure('RESTORE_WINDOW_EXPIRED');
     }
     const activeClaim = await tx.auctionResult.findFirst({

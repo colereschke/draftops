@@ -208,10 +208,55 @@ describe('createBidRecord', () => {
     });
     expect(mockAuctionUpdate).toHaveBeenCalledWith({
       where: { id: 8 },
-      data: { supersededAt: expect.any(Date) },
+      data: { supersededAt: expect.any(Date), updatedAt: expect.any(Date) },
     });
     expect(mockAuditCreate).toHaveBeenCalledWith(
       expect.objectContaining({ data: expect.objectContaining({ type: 'SUPERSEDE', bidId: 8 }) }),
+    );
+  });
+
+  it('uses the transaction clock for a supersession timestamp and audit snapshot', async () => {
+    const transactionTime = new Date('2026-07-19T12:20:00.000Z');
+    const deletedBid = {
+      id: 8,
+      draftId: 4,
+      playerId: 10,
+      player: 'Josh Allen',
+      position: 'QB',
+      nflTeam: 'BUF',
+      price: 100,
+      sfRank: 1,
+      notes: null,
+      teamId: 6,
+      createdAt: new Date('2026-07-19T12:00:00.000Z'),
+      updatedAt: new Date('2026-07-19T12:05:00.000Z'),
+      deletedAt: new Date('2026-07-19T12:05:00.000Z'),
+      supersededAt: null,
+    };
+    mockQueryRaw.mockResolvedValueOnce([{ now: transactionTime }]);
+    mockAuctionFindMany.mockResolvedValueOnce([]).mockResolvedValueOnce([deletedBid]);
+    mockAuctionUpdate.mockResolvedValueOnce({
+      ...deletedBid,
+      supersededAt: transactionTime,
+      updatedAt: transactionTime,
+    });
+
+    await createBidRecord(CREATE_INPUT);
+
+    expect(mockAuctionUpdate).toHaveBeenCalledWith({
+      where: { id: 8 },
+      data: { supersededAt: transactionTime, updatedAt: transactionTime },
+    });
+    expect(mockAuditCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          type: 'SUPERSEDE',
+          after: expect.objectContaining({
+            supersededAt: transactionTime.toISOString(),
+            updatedAt: transactionTime.toISOString(),
+          }),
+        }),
+      }),
     );
   });
 
@@ -301,6 +346,13 @@ describe('createBidRecord', () => {
     mockNominationDeleteMany.mockRejectedValue(new Error('nomination cleanup failed'));
 
     await expect(createBidRecord(CREATE_INPUT)).rejects.toThrow('nomination cleanup failed');
+  });
+
+  it('propagates an audit-write failure before committing a created bid', async () => {
+    mockAuditCreate.mockRejectedValue(new Error('audit write failed'));
+
+    await expect(createBidRecord(CREATE_INPUT)).rejects.toThrow('audit write failed');
+    expect(mockNominationDeleteMany).not.toHaveBeenCalled();
   });
 });
 
@@ -411,11 +463,56 @@ describe('deleteBidRecord', () => {
     expect(mockAuctionUpdate).toHaveBeenCalledWith(
       expect.objectContaining({
         where: { id: 12 },
-        data: { deletedAt: expect.any(Date) },
+        data: { deletedAt: expect.any(Date), updatedAt: expect.any(Date) },
       }),
     );
     expect(mockAuditCreate).toHaveBeenCalledWith(
       expect.objectContaining({ data: expect.objectContaining({ type: 'DELETE', bidId: 12 }) }),
+    );
+  });
+
+  it('uses the transaction clock for the deletion timestamp and audit snapshot', async () => {
+    const transactionTime = new Date('2026-07-19T12:20:00.000Z');
+    const activeBid = {
+      id: 12,
+      draftId: 4,
+      playerId: 10,
+      player: 'Josh Allen',
+      position: 'QB',
+      nflTeam: 'BUF',
+      price: 120,
+      sfRank: 1,
+      notes: null,
+      teamId: 7,
+      createdAt: new Date('2026-07-19T12:00:00.000Z'),
+      updatedAt: new Date('2026-07-19T12:00:00.000Z'),
+      deletedAt: null,
+      supersededAt: null,
+    };
+    mockQueryRaw.mockResolvedValueOnce([{ now: transactionTime }]);
+    mockAuctionFindFirst.mockResolvedValue(activeBid);
+    mockAuctionUpdate.mockResolvedValue({
+      ...activeBid,
+      deletedAt: transactionTime,
+      updatedAt: transactionTime,
+    });
+
+    await deleteBidRecord({ userId: 'owner-1', draftId: 4, bidId: 12 });
+
+    expect(mockAuctionUpdate).toHaveBeenCalledWith({
+      where: { id: 12 },
+      data: { deletedAt: transactionTime, updatedAt: transactionTime },
+    });
+    expect(mockAuditCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          type: 'DELETE',
+          after: expect.objectContaining({
+            deletedAt: transactionTime.toISOString(),
+            updatedAt: transactionTime.toISOString(),
+          }),
+        }),
+      }),
     );
   });
 
@@ -430,6 +527,49 @@ describe('deleteBidRecord', () => {
 });
 
 describe('restoreBidRecord', () => {
+  it('permanently rejects restore after delete, replacement, and supersession', async () => {
+    const activeBid = {
+      id: 12,
+      draftId: 4,
+      playerId: 10,
+      player: 'Josh Allen',
+      position: 'QB',
+      nflTeam: 'BUF',
+      price: 120,
+      sfRank: 1,
+      notes: null,
+      teamId: 7,
+      createdAt: new Date('2026-07-19T12:00:00.000Z'),
+      updatedAt: new Date('2026-07-19T12:00:00.000Z'),
+      deletedAt: null,
+      supersededAt: null,
+    };
+    const deletedBid = { ...activeBid, deletedAt: new Date('2026-07-19T12:10:00.000Z') };
+    const supersededBid = {
+      ...deletedBid,
+      supersededAt: new Date('2026-07-19T12:11:00.000Z'),
+    };
+    mockAuctionFindFirst
+      .mockResolvedValueOnce(activeBid)
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(supersededBid);
+    mockAuctionFindMany.mockResolvedValueOnce([]).mockResolvedValueOnce([deletedBid]);
+    mockAuctionUpdate.mockResolvedValueOnce(deletedBid).mockResolvedValueOnce(supersededBid);
+
+    await expect(deleteBidRecord({ userId: 'owner-1', draftId: 4, bidId: 12 })).resolves.toEqual({
+      ok: true,
+      data: null,
+    });
+    await expect(createBidRecord(CREATE_INPUT)).resolves.toEqual({
+      ok: true,
+      data: { bidId: 99 },
+    });
+    await expect(restoreBidRecord({ userId: 'owner-1', draftId: 4, bidId: 12 })).resolves.toEqual({
+      ok: false,
+      code: 'BID_SUPERSEDED',
+    });
+  });
+
   it('restores an unsuperseded deleted bid within the database recovery window and audits it', async () => {
     const deletedBid = {
       id: 12,
@@ -479,6 +619,7 @@ describe('restoreBidRecord', () => {
       code: 'RESTORE_WINDOW_EXPIRED',
     });
     expect(mockAuctionUpdate).not.toHaveBeenCalled();
+    expect(mockQueryRaw).toHaveBeenCalledTimes(1);
   });
 
   it('rejects restoration when a replacement has permanently superseded the deleted bid', async () => {

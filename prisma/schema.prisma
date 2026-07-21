@@ -137,6 +137,7 @@ model AuctionResult {
   supersededAt DateTime?
   auditEvents BidAuditEvent[]
 
+  @@unique([id, draftId])
   @@index([playerId])
   @@index([draftId, deletedAt])
 }
@@ -151,7 +152,7 @@ model BidAuditEvent {
   after      Json?
   occurredAt DateTime          @default(now())
   draft      Draft             @relation(fields: [draftId], references: [id], onDelete: Restrict)
-  bid        AuctionResult     @relation(fields: [bidId], references: [id], onDelete: Restrict)
+  bid        AuctionResult     @relation(fields: [bidId, draftId], references: [id, draftId], onDelete: Restrict)
 
   @@index([draftId, occurredAt, id])
   @@index([bidId])

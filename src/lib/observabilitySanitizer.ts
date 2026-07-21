@@ -37,7 +37,13 @@ function toPathname(url: unknown): string | undefined {
   }
 
   try {
-    return new URL(url, 'https://draftops.invalid').pathname.slice(0, MAX_ROUTE_PATH_LENGTH);
+    const parsedUrl = url.startsWith('/') ? new URL(url, 'https://draftops.invalid') : new URL(url);
+
+    if (!['http:', 'https:'].includes(parsedUrl.protocol)) {
+      return undefined;
+    }
+
+    return parsedUrl.pathname.slice(0, MAX_ROUTE_PATH_LENGTH);
   } catch {
     return undefined;
   }
@@ -90,6 +96,7 @@ function sanitizeSummary(value: unknown): string | undefined {
     .replace(/(password|token|secret|authorization|cookie)\s*[=:]\s*[^\s,;]+/gi, '$1=[redacted]')
     .replace(/\b[\w.+-]+@[\w-]+(?:\.[\w-]+)+\b/g, '[redacted-email]')
     .replace(/\bdiscord(?:[_\s-]?id)?\s*[=:]\s*[^\s,;]+/gi, 'discord=[redacted]')
+    .replace(/\b\d{17,20}\b/g, '[redacted-user-id]')
     .replace(/(https?:\/\/[^\s?#]+)\?[^\s]*/gi, '$1')
     .slice(0, MAX_ERROR_SUMMARY_LENGTH);
 }

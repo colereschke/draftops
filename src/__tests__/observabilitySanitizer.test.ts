@@ -77,4 +77,26 @@ describe('sanitizeSentryEvent', () => {
       },
     });
   });
+
+  it('redacts unlabelled Discord-style snowflakes from error summaries', () => {
+    const event = sanitizeSentryEvent({
+      exception: {
+        values: [{ type: 'Error', value: 'Failed for user 123456789012345678 with token=secret' }],
+      },
+    });
+
+    expect(event?.exception?.values?.[0]?.value).toBe(
+      'Failed for user [redacted-user-id] with token=[redacted]',
+    );
+  });
+
+  it.each(['mailto:cole@example.test', 'javascript:alert(secret)', 'data:text/plain,secret'])(
+    'rejects opaque request URL schemes: %s',
+    (url) => {
+      const event = sanitizeSentryEvent({ request: { url } });
+
+      expect(event?.request).toBeUndefined();
+      expect(JSON.stringify(event)).not.toMatch(/cole@example|secret/i);
+    },
+  );
 });

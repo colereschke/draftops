@@ -107,4 +107,19 @@ describe('server observability', () => {
       errorSummary: 'safe failure',
     });
   });
+
+  it('redacts unlabelled Discord-style snowflakes from server error summaries', () => {
+    const error = jest.spyOn(console, 'error').mockImplementation();
+
+    logServerError({
+      incidentId: 'incident-123',
+      action: 'render',
+      routePath: '/draft/7',
+      error: new Error('Failed for user 123456789012345678'),
+    });
+
+    expect(JSON.parse(error.mock.calls[0]?.[0] as string)).toEqual(
+      expect.objectContaining({ errorSummary: 'Failed for user [redacted-user-id]' }),
+    );
+  });
 });

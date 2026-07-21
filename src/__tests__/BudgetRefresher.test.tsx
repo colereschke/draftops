@@ -3,6 +3,11 @@ import BudgetRefresher from '@/components/BudgetPressure/BudgetRefresher';
 
 const mockRefresh = jest.fn();
 
+function setVisibilityState(value: DocumentVisibilityState) {
+  Object.defineProperty(document, 'visibilityState', { configurable: true, value });
+  document.dispatchEvent(new Event('visibilitychange'));
+}
+
 jest.mock('next/navigation', () => ({
   useRouter: () => ({ refresh: mockRefresh }),
 }));
@@ -11,6 +16,7 @@ describe('BudgetRefresher', () => {
   beforeEach(() => {
     jest.useFakeTimers();
     mockRefresh.mockClear();
+    Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'visible' });
   });
 
   afterEach(() => {
@@ -60,5 +66,16 @@ describe('BudgetRefresher', () => {
       jest.advanceTimersByTime(50);
     });
     expect(screen.getByTestId('mutation-status')).toHaveTextContent(/threat board refreshed/i);
+  });
+
+  it('does not refresh while hidden and refreshes once on visibility restore', () => {
+    render(<BudgetRefresher intervalMs={20000} />);
+
+    act(() => setVisibilityState('hidden'));
+    act(() => jest.advanceTimersByTime(60000));
+    expect(mockRefresh).not.toHaveBeenCalled();
+
+    act(() => setVisibilityState('visible'));
+    expect(mockRefresh).toHaveBeenCalledTimes(1);
   });
 });

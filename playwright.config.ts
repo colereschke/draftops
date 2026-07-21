@@ -16,7 +16,7 @@ export default defineConfig({
   webServer: {
     command: `pnpm start -p ${PORT}`,
     url: BASE_URL,
-    reuseExistingServer: !process.env.CI,
+    reuseExistingServer: !process.env.CI && process.env.PLAYWRIGHT_FORCE_NEW_SERVER !== '1',
     timeout: 60_000,
   },
   projects: [
@@ -28,6 +28,11 @@ export default defineConfig({
     {
       name: 'authenticated',
       testMatch: /(bid|nominate|rosters)\.spec\.ts/,
+      use: { ...devices['Desktop Chrome'], storageState: './e2e/.auth/user.json' },
+    },
+    {
+      name: 'performance',
+      testMatch: /performance\.spec\.ts/,
       use: { ...devices['Desktop Chrome'], storageState: './e2e/.auth/user.json' },
     },
   ],

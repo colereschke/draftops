@@ -13,17 +13,22 @@ export default async function RankingsPage() {
 
   const rankingSet = await prisma.userRankingSet.findUnique({
     where: { userId: session.user.id },
-    include: { players: true },
+    select: {
+      fileName: true,
+      uploadedAt: true,
+      players: {
+        select: {
+          id: true,
+          name: true,
+          team: true,
+          pos: true,
+          matchStatus: true,
+        },
+      },
+    },
   });
 
   const unmatched = rankingSet?.players.filter((p) => p.matchStatus === 'unmatched') ?? [];
-  const sleeperPlayers =
-    unmatched.length > 0
-      ? await prisma.sleeperPlayer.findMany({
-          select: { id: true, name: true, normalizedName: true, team: true, pos: true },
-          orderBy: { name: 'asc' },
-        })
-      : [];
 
   const missingFromEtr = rankingSet
     ? computeMissingFromEtr(rankingSet.players.map((p) => p.name))
@@ -87,7 +92,6 @@ export default async function RankingsPage() {
             team: p.team,
             pos: p.pos,
           }))}
-          sleeperPlayers={sleeperPlayers}
         />
       )}
       {rankingSet && <MissingFromEtrList names={missingFromEtr.map((p) => p.player)} />}

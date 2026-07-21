@@ -1,7 +1,14 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { useEffect, useState, useCallback, useRef } from 'react';
+import {
+  useEffect,
+  useState,
+  useCallback,
+  useRef,
+  useSyncExternalStore,
+  useTransition,
+} from 'react';
 import { Button } from '@/components/ui/button';
 import MutationStatus from '@/components/MutationStatus';
 
@@ -9,13 +16,34 @@ interface BudgetRefresherProps {
   intervalMs?: number;
 }
 
+function subscribeToVisibility(callback: () => void): () => void {
+  document.addEventListener('visibilitychange', callback);
+  return () => document.removeEventListener('visibilitychange', callback);
+}
+
+function getVisibilitySnapshot(): boolean {
+  return document.visibilityState === 'visible';
+}
+
+function getServerVisibilitySnapshot(): boolean {
+  return true;
+}
+
 export default function BudgetRefresher({ intervalMs = 20000 }: BudgetRefresherProps) {
   const router = useRouter();
   const [elapsed, setElapsed] = useState(0);
   const [mutationStatus, setMutationStatus] = useState('');
+  const [isRefreshing, startRefreshTransition] = useTransition();
+  const isDocumentVisible = useSyncExternalStore(
+    subscribeToVisibility,
+    getVisibilitySnapshot,
+    getServerVisibilitySnapshot,
+  );
   const intervalSecs = intervalMs / 1000;
   const tickRef = useRef(0);
   const routerRef = useRef(router);
+  const refreshPendingRef = useRef(false);
+  const wasDocumentVisibleRef = useRef(isDocumentVisible);
   const announceTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
     routerRef.current = router;
@@ -29,22 +57,28 @@ export default function BudgetRefresher({ intervalMs = 20000 }: BudgetRefresherP
     }, 50);
   }, []);
 
-  const doRefresh = useCallback(() => {
-    routerRef.current.refresh();
+  const requestRefresh = useCallback(() => {
+    if (document.visibilityState !== 'visible' || refreshPendingRef.current) return;
+    refreshPendingRef.current = true;
     tickRef.current = 0;
     setElapsed(0);
-    announceRefresh();
-  }, [announceRefresh]);
+    startRefreshTransition(() => {
+      routerRef.current.refresh();
+      announceRefresh();
+    });
+  }, [announceRefresh, startRefreshTransition]);
+
+  useEffect(() => {
+    if (!isRefreshing) refreshPendingRef.current = false;
+  }, [isRefreshing]);
 
   useEffect(() => {
     tickRef.current = 0;
+    if (!isDocumentVisible) return;
     const timer = setInterval(() => {
       tickRef.current += 1;
       if (tickRef.current >= intervalSecs) {
-        routerRef.current.refresh();
-        tickRef.current = 0;
-        setElapsed(0);
-        announceRefresh();
+        requestRefresh();
       } else {
         setElapsed(tickRef.current);
       }
@@ -53,13 +87,18 @@ export default function BudgetRefresher({ intervalMs = 20000 }: BudgetRefresherP
       clearInterval(timer);
       if (announceTimeoutRef.current) clearTimeout(announceTimeoutRef.current);
     };
-  }, [intervalSecs, announceRefresh]);
+  }, [intervalSecs, isDocumentVisible, requestRefresh]);
+
+  useEffect(() => {
+    if (isDocumentVisible && !wasDocumentVisibleRef.current) requestRefresh();
+    wasDocumentVisibleRef.current = isDocumentVisible;
+  }, [isDocumentVisible, requestRefresh]);
 
   return (
     <div className="flex items-center gap-2">
       <MutationStatus message={mutationStatus} />
       <span className="font-mono text-[10px] text-muted-foreground">Updated {elapsed}s ago</span>
-      <Button variant="outline" size="sm" onClick={doRefresh}>
+      <Button variant="outline" size="sm" onClick={requestRefresh} disabled={isRefreshing}>
         Refresh
       </Button>
     </div>

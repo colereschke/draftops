@@ -61,6 +61,7 @@ const MOCK_IMPORT_RESULT: SleeperImportResult = {
     sleeperRosterId: i + 1,
   })),
   ownerIndex: 0,
+  warnings: [],
 };
 
 describe('NewDraftPage — roster settings and lineup', () => {
@@ -329,6 +330,37 @@ describe('NewDraftPage — Sleeper import banner', () => {
     await waitFor(() => expect(screen.getByTestId('sleeper-import-warning')).toBeInTheDocument());
   });
 
+  it('shows source warnings alongside an unmatched-owner warning', async () => {
+    mockImportFromSleeper.mockResolvedValueOnce({
+      ok: true,
+      data: {
+        ...MOCK_IMPORT_RESULT,
+        ownerIndex: null,
+        warnings: [
+          'Ignored unsupported roster slots: K.',
+          'Ignored unsupported scoring settings: foo.',
+        ],
+      },
+    });
+    render(<NewDraftPage />);
+    fireEvent.change(screen.getByTestId('sleeper-league-id'), {
+      target: { value: '1360707683916734464' },
+    });
+    fireEvent.change(screen.getByTestId('sleeper-owner-username'), {
+      target: { value: 'coreschke' },
+    });
+    fireEvent.click(screen.getByTestId('sleeper-import-button'));
+
+    await waitFor(() => {
+      const warning = screen.getByTestId('sleeper-import-warning');
+      expect(warning).toHaveTextContent('Ignored unsupported roster slots: K.');
+      expect(warning).toHaveTextContent('Ignored unsupported scoring settings: foo.');
+      expect(warning).toHaveTextContent(
+        "Couldn't match 'coreschke' to a team in this league — select yours manually.",
+      );
+    });
+  });
+
   it('shows error message when importFromSleeper returns ok:false', async () => {
     mockImportFromSleeper.mockResolvedValueOnce({
       ok: false,
@@ -340,6 +372,28 @@ describe('NewDraftPage — Sleeper import banner', () => {
     });
     fireEvent.click(screen.getByTestId('sleeper-import-button'));
     await waitFor(() => expect(screen.getByTestId('sleeper-import-error')).toBeInTheDocument());
+  });
+
+  it('preserves populated form values when a subsequent import fails', async () => {
+    render(<NewDraftPage />);
+    fireEvent.change(screen.getByTestId('sleeper-league-id'), {
+      target: { value: '1360707683916734464' },
+    });
+    fireEvent.click(screen.getByTestId('sleeper-import-button'));
+    await waitFor(() => expect(screen.getByTestId('sleeper-import-confirm')).toBeInTheDocument());
+
+    mockImportFromSleeper.mockResolvedValueOnce({
+      ok: false,
+      error: 'League not found. Check your Sleeper league ID.',
+    });
+    fireEvent.change(screen.getByTestId('sleeper-league-id'), {
+      target: { value: 'bad-id' },
+    });
+    fireEvent.click(screen.getByTestId('sleeper-import-button'));
+
+    await waitFor(() => expect(screen.getByTestId('sleeper-import-error')).toBeInTheDocument());
+    expect(screen.getByTestId<HTMLInputElement>('draft-name-input').value).toBe('Dynasty Warlords');
+    expect(screen.getByTestId<HTMLInputElement>('roster-size-input').value).toBe('30');
   });
 
   it('updates roster size and team count from non-default import values', async () => {

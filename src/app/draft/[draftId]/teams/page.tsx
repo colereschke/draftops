@@ -6,8 +6,8 @@ import { getActiveDraftPlayers } from '@/lib/activeDraftPlayers';
 import { computeDraftTeamStats } from '@/lib/computeDraftTeamStats';
 import { computeTendencies } from '@/lib/tendencies';
 import RosterTracker from '@/components/RosterTracker';
-import { DEFAULT_STARTING_LINEUP, type StartingSlot } from '@/types';
 import { fromPrismaFuturePickMode } from '@/lib/futurePickAssets';
+import { toStartingLineup } from '@/lib/startingLineup';
 
 export const dynamic = 'force-dynamic';
 
@@ -31,7 +31,7 @@ export default async function TeamsPage({ params }: { params: Promise<{ draftId:
       teamHandle: team.handle,
     })),
   );
-  const startingLineup = (draft.startingLineup ?? DEFAULT_STARTING_LINEUP) as StartingSlot[];
+  const startingLineup = toStartingLineup(draft.startingLineup);
 
   const players = await getActiveDraftPlayers({
     draftId,

@@ -4,7 +4,13 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import AuctionSheet from '@/components/AuctionSheet/AuctionSheet';
 import type { Player, ClaimedBid, LeagueTeam } from '@/types';
-import { DEFAULT_SCORING_SETTINGS } from '@/types';
+import {
+  DEFAULT_BUDGET,
+  DEFAULT_ROSTER_SIZE,
+  DEFAULT_SCORING_SETTINGS,
+  DEFAULT_STARTING_LINEUP,
+  DEFAULT_TEAM_COUNT,
+} from '@/types';
 
 const MOCK_PLAYERS: Player[] = [
   {
@@ -95,6 +101,10 @@ function renderSheet(overrides: Partial<React.ComponentProps<typeof AuctionSheet
       ownerHandle="coreschke"
       ownerBudget={1000}
       scoringSettings={{ ...DEFAULT_SCORING_SETTINGS }}
+      teamCount={DEFAULT_TEAM_COUNT}
+      budget={DEFAULT_BUDGET}
+      rosterSize={DEFAULT_ROSTER_SIZE}
+      startingLineup={DEFAULT_STARTING_LINEUP}
       {...overrides}
     />,
   );

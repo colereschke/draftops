@@ -1,5 +1,10 @@
 import type { ScoringSettings, StartingSlot } from '@/types';
-import { DEFAULT_STARTING_LINEUP } from '@/types';
+import {
+  DEFAULT_BUDGET,
+  DEFAULT_ROSTER_SIZE,
+  DEFAULT_STARTING_LINEUP,
+  DEFAULT_TEAM_COUNT,
+} from '@/types';
 import { POS_COLORS } from '@/lib/posColors';
 import { formatLineupFormat, hasTePremium } from '@/lib/describeDraftSettings';
 
@@ -36,9 +41,9 @@ export default function AuctionHeader({
   grandTotal,
   totalPlayerCount,
   scoringSettings,
-  teamCount = 12,
-  budget = 1000,
-  rosterSize = 30,
+  teamCount = DEFAULT_TEAM_COUNT,
+  budget = DEFAULT_BUDGET,
+  rosterSize = DEFAULT_ROSTER_SIZE,
   startingLineup = DEFAULT_STARTING_LINEUP,
 }: AuctionHeaderProps) {
   const safeGrandTotal = grandTotal || 1;

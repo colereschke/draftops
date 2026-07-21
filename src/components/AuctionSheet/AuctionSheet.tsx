@@ -12,7 +12,6 @@ import type {
   ScoringSettings,
   StartingSlot,
 } from '@/types';
-import { DEFAULT_STARTING_LINEUP } from '@/types';
 import { logBid, updateBid, deleteBid } from '@/lib/actions';
 import BidModal from '@/components/BidModal';
 import { useOnboarding } from '@/components/Onboarding/OnboardingContext';
@@ -42,10 +41,10 @@ interface AuctionSheetProps {
   ownerHandle: string | null;
   ownerBudget: number;
   scoringSettings: ScoringSettings;
-  teamCount?: number;
-  budget?: number;
-  rosterSize?: number;
-  startingLineup?: StartingSlot[];
+  teamCount: number;
+  budget: number;
+  rosterSize: number;
+  startingLineup: StartingSlot[];
   sleeperSyncConfigured?: boolean;
   sleeperLeagueId?: string | null;
   isReadOnly?: boolean;
@@ -60,10 +59,10 @@ export default function AuctionSheet({
   ownerHandle,
   ownerBudget,
   scoringSettings,
-  teamCount = 12,
-  budget = 1000,
-  rosterSize = 30,
-  startingLineup = DEFAULT_STARTING_LINEUP,
+  teamCount,
+  budget,
+  rosterSize,
+  startingLineup,
   sleeperSyncConfigured = false,
   sleeperLeagueId = null,
   isReadOnly = false,

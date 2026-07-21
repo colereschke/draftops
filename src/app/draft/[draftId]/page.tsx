@@ -7,12 +7,8 @@ import { getDraft } from '@/lib/draft';
 import { getActiveDraftPlayers } from '@/lib/activeDraftPlayers';
 import { fromPrismaFuturePickMode } from '@/lib/futurePickAssets';
 import { computeSpreads } from '@/lib/valueSpread';
-import {
-  DEFAULT_STARTING_LINEUP,
-  DEFAULT_SCORING_SETTINGS,
-  type StartingSlot,
-  type ScoringSettings,
-} from '@/types';
+import { toStartingLineup } from '@/lib/startingLineup';
+import { DEFAULT_SCORING_SETTINGS, type ScoringSettings } from '@/types';
 
 export default async function DraftHomePage({ params }: { params: Promise<{ draftId: string }> }) {
   const draftId = parseInt((await params).draftId, 10);
@@ -55,7 +51,7 @@ export default async function DraftHomePage({ params }: { params: Promise<{ draf
     teamHandle: r.team.handle,
   }));
 
-  const startingLineup = (draft.startingLineup ?? DEFAULT_STARTING_LINEUP) as StartingSlot[];
+  const startingLineup = toStartingLineup(draft.startingLineup);
 
   const activePlayers = await getActiveDraftPlayers({
     draftId,

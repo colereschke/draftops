@@ -3,12 +3,15 @@ import type { ScoringSettings, StartingSlot } from '@/types';
 export function formatLineupFormat(startingLineup: StartingSlot[]): string {
   if (startingLineup.includes('SUPER_FLEX')) return 'Superflex';
   const qbSlots = startingLineup.filter((slot) => slot === 'QB').length;
-  return `${Math.max(qbSlots, 1)}QB`;
+  return `${qbSlots}QB`;
 }
 
 export function hasTePremium(scoringSettings: ScoringSettings): boolean {
-  return (
+  const teNeverWorse =
+    scoringSettings.pprTE >= scoringSettings.pprWR &&
+    scoringSettings.teFDBonus >= scoringSettings.wrFDBonus;
+  const teStrictlyBetter =
     scoringSettings.pprTE > scoringSettings.pprWR ||
-    scoringSettings.teFDBonus > scoringSettings.wrFDBonus
-  );
+    scoringSettings.teFDBonus > scoringSettings.wrFDBonus;
+  return teNeverWorse && teStrictlyBetter;
 }

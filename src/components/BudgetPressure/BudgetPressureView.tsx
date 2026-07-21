@@ -1,5 +1,5 @@
 import type { TeamStats, StartingSlot } from '@/types';
-import { DEFAULT_STARTING_LINEUP } from '@/types';
+import { DEFAULT_BUDGET, DEFAULT_STARTING_LINEUP } from '@/types';
 import type { ManagerTendency, AppetitePos } from '@/lib/tendencies';
 import { formatLineupFormat } from '@/lib/describeDraftSettings';
 import BudgetRefresher from './BudgetRefresher';
@@ -21,7 +21,7 @@ export default function BudgetPressureView({
   livePosition,
   liveName,
   ownerHandle,
-  budget = 1000,
+  budget = DEFAULT_BUDGET,
   startingLineup = DEFAULT_STARTING_LINEUP,
 }: BudgetPressureViewProps) {
   const roomLiquidity = teams.reduce((sum, team) => sum + team.buyingPower, 0);

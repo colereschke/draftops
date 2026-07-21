@@ -15,6 +15,11 @@ describe('formatLineupFormat', () => {
     const lineup: StartingSlot[] = ['QB', 'QB', 'RB', 'RB', 'WR', 'WR', 'TE'];
     expect(formatLineupFormat(lineup)).toBe('2QB');
   });
+
+  it('returns 0QB for a lineup with no QB or SUPER_FLEX slot rather than fabricating a minimum', () => {
+    const lineup: StartingSlot[] = ['RB', 'RB', 'WR', 'WR', 'TE', 'FLEX'];
+    expect(formatLineupFormat(lineup)).toBe('0QB');
+  });
 });
 
 describe('hasTePremium', () => {
@@ -32,5 +37,15 @@ describe('hasTePremium', () => {
 
   it('is false when TE and WR receiving settings are identical but both non-zero', () => {
     expect(hasTePremium({ ...DEFAULT_SCORING_SETTINGS, pprTE: 1.5, pprWR: 1.5 })).toBe(false);
+  });
+
+  it('is false when TE is penalized on PPR even though it gains a first-down bonus', () => {
+    expect(
+      hasTePremium({ ...DEFAULT_SCORING_SETTINGS, pprTE: 0.5, pprWR: 1, teFDBonus: 0.1 }),
+    ).toBe(false);
+  });
+
+  it('is true when TE matches WR on PPR but gains a first-down bonus', () => {
+    expect(hasTePremium({ ...DEFAULT_SCORING_SETTINGS, teFDBonus: 0.25 })).toBe(true);
   });
 });

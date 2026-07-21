@@ -22,10 +22,10 @@ stable incident ID that follows one rule:
 - If Next.js supplies `error.digest`, the boundary displays that digest. The server capture and
   structured log attach the same value as `incident.id`, and the client boundary does not capture
   the processed server error a second time.
-- If no digest exists, the boundary captures the client error once with `Sentry.captureException`
-  and displays the returned Sentry event ID.
-- If Sentry is disabled or does not return an event ID, the boundary creates one opaque UUID,
-  retains it for the lifetime of that error instance, and displays it as a local-only incident ID.
+- If no digest exists, the boundary creates one opaque UUID, retains it for the lifetime of that
+  error instance, displays it, and tags the single `Sentry.captureException` call with the same
+  `incident.id`. This avoids capture side effects during render and makes the user-visible ID
+  stable even when Sentry is unavailable.
 
 Users can share the identifier without seeing provider, database, or application error messages.
 
@@ -93,8 +93,8 @@ Unit and route tests prove that:
 
 - error boundaries render generic text and an incident ID, never `error.message`;
 - a processed server error is captured once and its digest is used consistently as `incident.id`;
-- a client error is captured once and displays the returned Sentry event ID;
-- the fallback incident UUID remains stable across re-renders when Sentry is disabled;
+- a client error is captured once with the displayed UUID attached as `incident.id`;
+- the client incident UUID remains stable across re-renders whether or not Sentry is enabled;
 - sanitizer redacts known secrets, drops URL query strings, and bounds every retained field; and
 - structured reports include safe correlation fields while excluding raw user identity;
 - the user correlation helper produces a keyed HMAC and never returns the source user ID; and

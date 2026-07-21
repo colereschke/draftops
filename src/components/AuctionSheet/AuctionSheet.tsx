@@ -13,6 +13,7 @@ import FilterControls, { type PositionFilter, type StrategyFilter } from './Filt
 import PlayerTable, { type SortKey } from './PlayerTable';
 import DraftReadOnlyBanner from '@/components/DraftReadOnlyBanner';
 import MutationStatus from '@/components/MutationStatus';
+import BidHistoryPanel, { type DeletedBid } from '@/components/BidHistory/BidHistoryPanel';
 import type { DraftMutationCode } from '@/lib/draftMutation';
 
 const SleeperRosterSyncDialog = dynamic(
@@ -37,6 +38,7 @@ interface AuctionSheetProps {
   sleeperSyncConfigured?: boolean;
   sleeperLeagueId?: string | null;
   isReadOnly?: boolean;
+  deletedBids?: DeletedBid[];
 }
 
 export default function AuctionSheet({
@@ -51,6 +53,7 @@ export default function AuctionSheet({
   sleeperSyncConfigured = false,
   sleeperLeagueId = null,
   isReadOnly = false,
+  deletedBids = [],
 }: AuctionSheetProps) {
   const router = useRouter();
   const { progress, recordBidLogged } = useOnboarding();
@@ -401,6 +404,7 @@ export default function AuctionSheet({
           PKG target = {futurePickYear ?? 'future'} 1st+2nd+3rd package
         </span>
       </div>
+      <BidHistoryPanel draftId={draftId} deletedBids={deletedBids} isReadOnly={isReadOnly} />
       {!isReadOnly && modalPlayer ? (
         <BidModal
           player={modalPlayer}

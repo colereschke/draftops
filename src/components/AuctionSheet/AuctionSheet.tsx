@@ -4,7 +4,15 @@
 import { useState, useMemo, useOptimistic, useTransition } from 'react';
 import dynamic from 'next/dynamic';
 import { useRouter } from 'next/navigation';
-import type { Player, Position, ClaimedBid, LeagueTeam, ScoringSettings } from '@/types';
+import type {
+  Player,
+  Position,
+  ClaimedBid,
+  LeagueTeam,
+  ScoringSettings,
+  StartingSlot,
+} from '@/types';
+import { DEFAULT_STARTING_LINEUP } from '@/types';
 import { logBid, updateBid, deleteBid } from '@/lib/actions';
 import BidModal from '@/components/BidModal';
 import { useOnboarding } from '@/components/Onboarding/OnboardingContext';
@@ -34,6 +42,10 @@ interface AuctionSheetProps {
   ownerHandle: string | null;
   ownerBudget: number;
   scoringSettings: ScoringSettings;
+  teamCount?: number;
+  budget?: number;
+  rosterSize?: number;
+  startingLineup?: StartingSlot[];
   sleeperSyncConfigured?: boolean;
   sleeperLeagueId?: string | null;
   isReadOnly?: boolean;
@@ -48,6 +60,10 @@ export default function AuctionSheet({
   ownerHandle,
   ownerBudget,
   scoringSettings,
+  teamCount = 12,
+  budget = 1000,
+  rosterSize = 30,
+  startingLineup = DEFAULT_STARTING_LINEUP,
   sleeperSyncConfigured = false,
   sleeperLeagueId = null,
   isReadOnly = false,
@@ -359,6 +375,10 @@ export default function AuctionSheet({
           grandTotal={grandTotal}
           totalPlayerCount={totalPlayerCount}
           scoringSettings={scoringSettings}
+          teamCount={teamCount}
+          budget={budget}
+          rosterSize={rosterSize}
+          startingLineup={startingLineup}
         />
         <FilterControls
           posFilter={posFilter}

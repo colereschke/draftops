@@ -558,4 +558,15 @@ describe('AuctionSheet with claimed bids', () => {
     // tie ascending, so the better-ranked player (rank 2) is shown first.
     expect(order).toEqual(['player-row-2', 'player-row-5']);
   });
+
+  it('threads league settings through to the header caption', () => {
+    renderSheet({
+      teamCount: 8,
+      budget: 200,
+      rosterSize: 16,
+      startingLineup: ['QB', 'RB', 'RB', 'WR', 'WR', 'TE', 'FLEX'],
+    });
+
+    expect(screen.getByText('8-Team · 1QB · $200 Budget · 16-Man Rosters')).toBeInTheDocument();
+  });
 });

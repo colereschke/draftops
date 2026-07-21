@@ -10,15 +10,24 @@ describe('Sentry client configuration', () => {
     jest.clearAllMocks();
   });
 
-  it('initializes without PII, tracing, or log forwarding', async () => {
-    await import('@/instrumentation-client');
+  it.each([
+    ['client', '@/instrumentation-client'],
+    ['server', '@/sentry.server.config'],
+    ['edge', '@/sentry.edge.config'],
+  ])(
+    'initializes the %s runtime without PII, tracing, logs, or replay',
+    async (_runtime, module) => {
+      await import(module);
 
-    expect(Sentry.init).toHaveBeenCalledWith(
-      expect.objectContaining({
-        sendDefaultPii: false,
-        tracesSampleRate: 0,
-        enableLogs: false,
-      }),
-    );
-  });
+      expect(Sentry.init).toHaveBeenCalledWith(
+        expect.objectContaining({
+          sendDefaultPii: false,
+          tracesSampleRate: 0,
+          enableLogs: false,
+          replaysSessionSampleRate: 0,
+          replaysOnErrorSampleRate: 0,
+        }),
+      );
+    },
+  );
 });

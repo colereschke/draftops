@@ -2,7 +2,14 @@ import 'server-only';
 
 import { createHmac } from 'node:crypto';
 
-import { sanitizeErrorSummary, sanitizeRoutePath } from '@/lib/observabilitySanitizer';
+import {
+  isUserCorrelationId,
+  sanitizeErrorSummary,
+  sanitizeObservabilityAction,
+  sanitizeObservabilityEnvironment,
+  sanitizeObservabilityIdentifier,
+  sanitizeRoutePath,
+} from '@/lib/observabilitySanitizer';
 
 export interface ServerErrorLogInput {
   incidentId: string;
@@ -16,8 +23,8 @@ export interface ServerErrorLogInput {
 
 interface ServerErrorLogRecord {
   event: 'server_error';
-  incidentId: string;
-  action: string;
+  incidentId?: string;
+  action?: string;
   routePath: string;
   errorSummary?: string;
   deploymentEnvironment?: string;
@@ -34,24 +41,31 @@ export function createUserCorrelationId(userId: string): string | undefined {
     return undefined;
   }
 
-  return createHmac('sha256', hashKey).update(userId).digest('hex');
+  const userCorrelationId = createHmac('sha256', hashKey).update(userId).digest('hex');
+  return isUserCorrelationId(userCorrelationId) ? userCorrelationId : undefined;
 }
 
 /** Emits a single JSON log record with only approved, scrubbed context. */
 export function logServerError(input: ServerErrorLogInput): void {
   const errorSummary = sanitizeErrorSummary(input.error);
   const userCorrelationId = input.userId ? createUserCorrelationId(input.userId) : undefined;
+  const incidentId = sanitizeObservabilityIdentifier(input.incidentId);
+  const action = sanitizeObservabilityAction(input.action);
+  const draftId = sanitizeObservabilityIdentifier(input.draftId);
+  const requestId = sanitizeObservabilityIdentifier(input.requestId);
+  const deploymentId = sanitizeObservabilityIdentifier(process.env.VERCEL_DEPLOYMENT_ID);
+  const deploymentEnvironment = sanitizeObservabilityEnvironment(process.env.VERCEL_ENV);
   const record: ServerErrorLogRecord = {
     event: 'server_error',
-    incidentId: input.incidentId,
-    action: input.action,
     routePath: sanitizeRoutePath(input.routePath),
-    ...(input.draftId ? { draftId: input.draftId } : {}),
-    ...(input.requestId ? { requestId: input.requestId } : {}),
+    ...(incidentId ? { incidentId } : {}),
+    ...(action ? { action } : {}),
+    ...(draftId ? { draftId } : {}),
+    ...(requestId ? { requestId } : {}),
     ...(errorSummary ? { errorSummary } : {}),
     ...(userCorrelationId ? { userCorrelationId } : {}),
-    ...(process.env.VERCEL_DEPLOYMENT_ID ? { deploymentId: process.env.VERCEL_DEPLOYMENT_ID } : {}),
-    ...(process.env.VERCEL_ENV ? { deploymentEnvironment: process.env.VERCEL_ENV } : {}),
+    ...(deploymentId ? { deploymentId } : {}),
+    ...(deploymentEnvironment ? { deploymentEnvironment } : {}),
   };
 
   console.error(JSON.stringify(record));

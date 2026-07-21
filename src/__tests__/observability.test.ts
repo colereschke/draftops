@@ -86,4 +86,25 @@ describe('server observability', () => {
       }),
     );
   });
+
+  it('drops malformed and oversized correlation values from server logs', () => {
+    const error = jest.spyOn(console, 'error').mockImplementation();
+    process.env.VERCEL_DEPLOYMENT_ID = 'deployment?token=secret';
+    process.env.VERCEL_ENV = 'production?token=secret';
+
+    logServerError({
+      incidentId: 'incident?token=secret',
+      action: 'render?token=secret',
+      routePath: '/draft/7?token=secret#fragment',
+      draftId: 'draft?token=secret',
+      requestId: 'request-7'.repeat(50),
+      error: new Error('safe failure'),
+    });
+
+    expect(JSON.parse(error.mock.calls[0]?.[0] as string)).toEqual({
+      event: 'server_error',
+      routePath: '/draft/7',
+      errorSummary: 'safe failure',
+    });
+  });
 });

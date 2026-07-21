@@ -9,6 +9,13 @@ const APPROVED_TAGS = new Set([
   'user.correlation_id',
 ]);
 const MAX_ERROR_SUMMARY_LENGTH = 500;
+const MAX_ROUTE_PATH_LENGTH = 200;
+const MAX_IDENTIFIER_LENGTH = 128;
+const MAX_ACTION_LENGTH = 64;
+const SAFE_IDENTIFIER = /^[A-Za-z0-9:_-]+$/;
+const SAFE_ACTION = /^[a-z][a-z0-9_.-]*$/;
+const SAFE_ENVIRONMENTS = new Set(['development', 'preview', 'production', 'test']);
+const HMAC_SHA256 = /^[a-f0-9]{64}$/;
 
 export interface SentryEvent {
   type?: string;
@@ -30,10 +37,48 @@ function toPathname(url: unknown): string | undefined {
   }
 
   try {
-    return new URL(url, 'https://draftops.invalid').pathname;
+    return new URL(url, 'https://draftops.invalid').pathname.slice(0, MAX_ROUTE_PATH_LENGTH);
   } catch {
     return undefined;
   }
+}
+
+function sanitizeIdentifier(value: unknown): string | undefined {
+  if (
+    typeof value !== 'string' ||
+    value.length === 0 ||
+    value.length > MAX_IDENTIFIER_LENGTH ||
+    !SAFE_IDENTIFIER.test(value)
+  ) {
+    return undefined;
+  }
+
+  return value;
+}
+
+function sanitizeAction(value: unknown): string | undefined {
+  if (
+    typeof value !== 'string' ||
+    value.length === 0 ||
+    value.length > MAX_ACTION_LENGTH ||
+    !SAFE_ACTION.test(value)
+  ) {
+    return undefined;
+  }
+
+  return value;
+}
+
+function sanitizeEnvironment(value: unknown): string | undefined {
+  return typeof value === 'string' && SAFE_ENVIRONMENTS.has(value) ? value : undefined;
+}
+
+function sanitizeExceptionType(value: unknown): string | undefined {
+  if (typeof value !== 'string') {
+    return undefined;
+  }
+
+  return value.match(/^[A-Za-z][A-Za-z0-9_.:-]{0,99}/)?.[0];
 }
 
 function sanitizeSummary(value: unknown): string | undefined {
@@ -56,11 +101,12 @@ function sanitizeException(event: SentryEvent): SentryEvent['exception'] | undef
     return undefined;
   }
 
+  const exceptionType = sanitizeExceptionType(firstValue.type);
   const value = sanitizeSummary(firstValue.value);
   return {
     values: [
       {
-        type: firstValue.type?.slice(0, 100),
+        ...(exceptionType ? { type: exceptionType } : {}),
         ...(value ? { value } : {}),
       },
     ],
@@ -73,9 +119,26 @@ function sanitizeTags(tags: SentryEvent['tags']): SentryEvent['tags'] | undefine
   }
 
   const approvedTags = Object.fromEntries(
-    Object.entries(tags).filter(
-      ([key, value]) => APPROVED_TAGS.has(key) && typeof value === 'string' && value.length <= 200,
-    ),
+    Object.entries(tags).flatMap(([key, value]) => {
+      if (!APPROVED_TAGS.has(key)) {
+        return [];
+      }
+
+      const sanitizedValue =
+        key === 'route.path'
+          ? toPathname(value)
+          : key === 'action'
+            ? sanitizeAction(value)
+            : key === 'deployment.environment'
+              ? sanitizeEnvironment(value)
+              : key === 'user.correlation_id'
+                ? typeof value === 'string' && HMAC_SHA256.test(value)
+                  ? value
+                  : undefined
+                : sanitizeIdentifier(value);
+
+      return sanitizedValue ? [[key, sanitizedValue]] : [];
+    }),
   );
 
   return Object.keys(approvedTags).length > 0 ? approvedTags : undefined;
@@ -89,9 +152,10 @@ export function sanitizeSentryEvent(event: SentryEvent): SentryEvent | null {
   const pathname = toPathname(event.request?.url);
   const exception = sanitizeException(event);
   const tags = sanitizeTags(event.tags);
+  const eventType = sanitizeExceptionType(event.type);
 
   return {
-    ...(event.type ? { type: event.type } : {}),
+    ...(eventType ? { type: eventType } : {}),
     ...(pathname ? { request: { url: pathname } } : {}),
     ...(exception ? { exception } : {}),
     ...(tags ? { tags } : {}),
@@ -100,6 +164,22 @@ export function sanitizeSentryEvent(event: SentryEvent): SentryEvent | null {
 
 export function sanitizeRoutePath(routePath: string): string {
   return toPathname(routePath) ?? '/';
+}
+
+export function sanitizeObservabilityIdentifier(value: unknown): string | undefined {
+  return sanitizeIdentifier(value);
+}
+
+export function sanitizeObservabilityAction(value: unknown): string | undefined {
+  return sanitizeAction(value);
+}
+
+export function sanitizeObservabilityEnvironment(value: unknown): string | undefined {
+  return sanitizeEnvironment(value);
+}
+
+export function isUserCorrelationId(value: unknown): value is string {
+  return typeof value === 'string' && HMAC_SHA256.test(value);
 }
 
 export function sanitizeErrorSummary(error: unknown): string | undefined {

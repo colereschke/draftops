@@ -51,4 +51,30 @@ describe('sanitizeSentryEvent', () => {
     });
     expect(event?.exception?.values?.[0]?.value).toHaveLength(500);
   });
+
+  it('validates every approved tag value before retaining it', () => {
+    const event = sanitizeSentryEvent({
+      type: 'Error?token=secret',
+      exception: { values: [{ type: 'DatabaseError password=private', value: 'safe' }] },
+      tags: {
+        'incident.id': 'incident-123',
+        action: 'render?token=secret',
+        'route.path': '/draft/7?token=secret#fragment',
+        'draft.id': 'draft-7?token=secret',
+        'request.id': 'request-7'.repeat(50),
+        'deployment.id': 'deployment-7?token=secret',
+        'deployment.environment': 'production?token=secret',
+        'user.correlation_id': 'A'.repeat(64),
+      },
+    } as never);
+
+    expect(event).toEqual({
+      type: 'Error',
+      exception: { values: [{ type: 'DatabaseError', value: 'safe' }] },
+      tags: {
+        'incident.id': 'incident-123',
+        'route.path': '/draft/7',
+      },
+    });
+  });
 });

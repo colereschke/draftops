@@ -1,7 +1,14 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { useEffect, useState, useCallback, useRef, useTransition } from 'react';
+import {
+  useEffect,
+  useState,
+  useCallback,
+  useRef,
+  useSyncExternalStore,
+  useTransition,
+} from 'react';
 import { Button } from '@/components/ui/button';
 import MutationStatus from '@/components/MutationStatus';
 
@@ -9,18 +16,34 @@ interface BudgetRefresherProps {
   intervalMs?: number;
 }
 
+function subscribeToVisibility(callback: () => void): () => void {
+  document.addEventListener('visibilitychange', callback);
+  return () => document.removeEventListener('visibilitychange', callback);
+}
+
+function getVisibilitySnapshot(): boolean {
+  return document.visibilityState === 'visible';
+}
+
+function getServerVisibilitySnapshot(): boolean {
+  return true;
+}
+
 export default function BudgetRefresher({ intervalMs = 20000 }: BudgetRefresherProps) {
   const router = useRouter();
   const [elapsed, setElapsed] = useState(0);
   const [mutationStatus, setMutationStatus] = useState('');
   const [isRefreshing, startRefreshTransition] = useTransition();
-  const [isDocumentVisible, setIsDocumentVisible] = useState(
-    () => document.visibilityState === 'visible',
+  const isDocumentVisible = useSyncExternalStore(
+    subscribeToVisibility,
+    getVisibilitySnapshot,
+    getServerVisibilitySnapshot,
   );
   const intervalSecs = intervalMs / 1000;
   const tickRef = useRef(0);
   const routerRef = useRef(router);
   const refreshPendingRef = useRef(false);
+  const wasDocumentVisibleRef = useRef(isDocumentVisible);
   const announceTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
     routerRef.current = router;
@@ -67,15 +90,9 @@ export default function BudgetRefresher({ intervalMs = 20000 }: BudgetRefresherP
   }, [intervalSecs, isDocumentVisible, requestRefresh]);
 
   useEffect(() => {
-    function handleVisibilityChange() {
-      const visible = document.visibilityState === 'visible';
-      setIsDocumentVisible(visible);
-      if (visible) requestRefresh();
-    }
-
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
-  }, [requestRefresh]);
+    if (isDocumentVisible && !wasDocumentVisibleRef.current) requestRefresh();
+    wasDocumentVisibleRef.current = isDocumentVisible;
+  }, [isDocumentVisible, requestRefresh]);
 
   return (
     <div className="flex items-center gap-2">

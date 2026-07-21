@@ -100,6 +100,31 @@ describe('ResolveUnmatchedList', () => {
     expect(screen.queryByTestId('unmatched-result-s3')).not.toBeInTheDocument();
   });
 
+  it('ignores a response after the query becomes too short', async () => {
+    let resolveSearch: (response: Response) => void;
+    global.fetch = jest.fn().mockReturnValue(
+      new Promise<Response>((resolve) => {
+        resolveSearch = resolve;
+      }),
+    );
+    const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
+    render(<ResolveUnmatchedList unmatchedPlayers={UNMATCHED} />);
+
+    await user.type(screen.getByTestId('unmatched-search-1'), 'Josh');
+    await act(async () => jest.advanceTimersByTime(250));
+    await user.clear(screen.getByTestId('unmatched-search-1'));
+    await user.type(screen.getByTestId('unmatched-search-1'), 'J');
+
+    await act(async () => {
+      resolveSearch!({
+        ok: true,
+        json: async () => ({ results: [SLEEPER_OPTIONS[0]] }),
+      } as Response);
+    });
+
+    expect(screen.queryByTestId('unmatched-result-s1')).not.toBeInTheDocument();
+  });
+
   it('matches punctuated Sleeper names against an unpunctuated normalized query', async () => {
     const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
     const unmatchedWideReceiver: UnmatchedRankingPlayer[] = [

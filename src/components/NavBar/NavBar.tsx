@@ -49,7 +49,7 @@ export default function NavBar({ session }: { session: Session | null }) {
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="min-w-36">
               <DropdownMenuItem
-                render={<Link href="/rankings" />}
+                render={<Link href="/rankings" prefetch={false} />}
                 className="font-label text-label-sm w-full font-bold tracking-wide uppercase"
               >
                 Rankings
@@ -79,7 +79,14 @@ export default function NavBar({ session }: { session: Session | null }) {
       <div className="flex items-center md:hidden">
         <DropdownMenu>
           <DropdownMenuTrigger
-            render={<Button variant="ghost" size="icon" aria-label="Open menu" />}
+            render={
+              <Button
+                variant="ghost"
+                size="icon"
+                aria-label="Open menu"
+                data-testid="mobile-nav-menu"
+              />
+            }
           >
             <Menu className="size-5" />
           </DropdownMenuTrigger>
@@ -93,7 +100,9 @@ export default function NavBar({ session }: { session: Session | null }) {
             </DropdownMenuItem>
             {session && (
               <DropdownMenuItem
-                render={<Link href="/rankings" />}
+                render={
+                  <Link href="/rankings" prefetch={false} data-testid="mobile-nav-rankings" />
+                }
                 className="font-label text-label-sm font-bold tracking-wide uppercase"
               >
                 Rankings

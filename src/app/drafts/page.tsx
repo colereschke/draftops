@@ -180,6 +180,8 @@ function DraftRow({ draft, showComplete }: DraftRowProps) {
 
       <Link
         href={`/draft/${draft.id}`}
+        prefetch={false}
+        data-testid={`draft-link-${draft.id}`}
         style={{
           color: 'var(--pos-qb)',
           fontFamily: 'var(--font-barlow)',

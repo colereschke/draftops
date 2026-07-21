@@ -58,7 +58,7 @@ export function useNominationData({
 
   const refresh = useCallback(
     async ({ supersede = false }: RefreshOptions = {}) => {
-      if (document.visibilityState !== 'visible') return;
+      if (!mountedRef.current || document.visibilityState !== 'visible') return;
       if (controllerRef.current) {
         if (!supersede) return;
         controllerRef.current.abort();

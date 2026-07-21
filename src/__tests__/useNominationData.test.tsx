@@ -102,4 +102,16 @@ describe('useNominationData', () => {
     await act(async () => setVisibilityState('hidden'));
     await waitFor(() => expect(result.current.error).toBeNull());
   });
+
+  it('does not start the queued initial request after immediate unmount', () => {
+    global.fetch = jest.fn();
+    const { unmount } = renderHook(() =>
+      useNominationData({ draftId: 1, onUnauthorized: jest.fn() }),
+    );
+
+    unmount();
+    act(() => jest.runAllTicks());
+
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
 });

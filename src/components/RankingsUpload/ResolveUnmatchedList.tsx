@@ -62,12 +62,12 @@ function UnmatchedRow({ player, onResolved }: UnmatchedRowProps) {
   const requestRef = useRef(0);
 
   useEffect(() => {
+    const request = ++requestRef.current;
     const query = normalizeName(search);
     if (query.length < 2 || !['QB', 'RB', 'WR', 'TE'].includes(player.pos)) {
       return;
     }
     const controller = new AbortController();
-    const request = ++requestRef.current;
     const timer = setTimeout(() => {
       void fetch(
         `/api/rankings/sleeper-search?q=${encodeURIComponent(query)}&position=${player.pos}`,

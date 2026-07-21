@@ -8,12 +8,20 @@ const mockTransaction = jest.fn();
 const mockExecuteRaw = jest.fn();
 const mockDraftFindFirst = jest.fn();
 const mockDraftUpdate = jest.fn();
+const mockAuctionResultFindMany = jest.fn();
+const mockSnapshotCreate = jest.fn();
 
 const mockTx = {
   $executeRaw: mockExecuteRaw,
   draft: {
     findFirst: mockDraftFindFirst,
     update: mockDraftUpdate,
+  },
+  auctionResult: {
+    findMany: mockAuctionResultFindMany,
+  },
+  draftCompletionSnapshot: {
+    create: mockSnapshotCreate,
   },
 };
 
@@ -45,6 +53,8 @@ beforeEach(() => {
   mockExecuteRaw.mockResolvedValue(1);
   mockDraftFindFirst.mockResolvedValue(ACTIVE_DRAFT);
   mockDraftUpdate.mockResolvedValue({ ...ACTIVE_DRAFT, status: 'COMPLETE' });
+  mockAuctionResultFindMany.mockResolvedValue([]);
+  mockSnapshotCreate.mockResolvedValue({ id: 1, draftId: 4 });
   mockTransaction.mockImplementation((operation: (tx: typeof mockTx) => Promise<unknown>) =>
     operation(mockTx),
   );
@@ -128,6 +138,56 @@ describe('withActiveOwnedDraftMutation', () => {
 });
 
 describe('completeOwnedDraft', () => {
+  it('captures active bids in a versioned snapshot before completing the draft', async () => {
+    const activeBid = {
+      id: 12,
+      draftId: 4,
+      player: 'Josh Allen',
+      playerId: 10,
+      position: 'QB',
+      nflTeam: 'BUF',
+      price: 120,
+      teamId: 7,
+      createdAt: new Date('2026-07-16T01:00:00.000Z'),
+      updatedAt: new Date('2026-07-16T01:00:00.000Z'),
+      deletedAt: null,
+      supersededAt: null,
+    };
+    mockAuctionResultFindMany.mockResolvedValue([activeBid]);
+
+    await expect(completeOwnedDraft('owner-1', 4)).resolves.toEqual({ ok: true, data: null });
+
+    expect(mockAuctionResultFindMany).toHaveBeenCalledWith({
+      where: { draftId: 4, deletedAt: null },
+      orderBy: { id: 'asc' },
+    });
+    expect(mockSnapshotCreate).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        draftId: 4,
+        schemaVersion: 1,
+        payload: expect.objectContaining({
+          draft: expect.objectContaining({ id: ACTIVE_DRAFT.id, status: 'ACTIVE' }),
+          auctionResults: [
+            expect.objectContaining({
+              id: activeBid.id,
+              createdAt: activeBid.createdAt.toISOString(),
+            }),
+          ],
+        }),
+      }),
+    });
+    expect(mockSnapshotCreate.mock.invocationCallOrder[0]).toBeLessThan(
+      mockDraftUpdate.mock.invocationCallOrder[0],
+    );
+  });
+
+  it('rolls back completion when snapshot creation fails', async () => {
+    mockSnapshotCreate.mockRejectedValue(new Error('snapshot failed'));
+
+    await expect(completeOwnedDraft('owner-1', 4)).rejects.toThrow('snapshot failed');
+    expect(mockDraftUpdate).not.toHaveBeenCalled();
+  });
+
   it('uses the same advisory lock namespace as draft mutations', async () => {
     await expect(completeOwnedDraft('owner-1', 4)).resolves.toEqual({
       ok: true,

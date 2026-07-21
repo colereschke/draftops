@@ -1,5 +1,6 @@
-import { parseCsv } from '@/lib/csv';
+import { CsvParseError, parseCsv } from '@/lib/csv';
 import { scaleRankingValue } from '@/lib/scaleRankingValue';
+import { normalizeName } from '@/lib/sleeperNormalize';
 import type { Position } from '@/types';
 
 export interface ParsedRankingRow {
@@ -18,6 +19,13 @@ export type RankingsParseResult =
   { ok: true; rows: ParsedRankingRow[] } | { ok: false; errors: string[] };
 
 const REQUIRED_HEADERS = ['Player', 'Team', 'Position', 'Age', '2QBAuction'] as const;
+export const RANKINGS_CSV_LIMITS = {
+  maxBytes: 1024 * 1024,
+  maxRows: 2000,
+  maxFieldLength: 10000,
+  maxErrors: 25,
+} as const;
+
 const POSITION_MAP: Record<string, Position> = {
   QB: 'QB',
   RB: 'RB',
@@ -37,7 +45,18 @@ interface KeptRow {
 }
 
 export function parseRankingsCsv(csvText: string): RankingsParseResult {
-  const { headers, rows: rawRows } = parseCsv(csvText);
+  let headers: string[];
+  let rawRows: Record<string, string>[];
+
+  try {
+    ({ headers, rows: rawRows } = parseCsv(csvText, RANKINGS_CSV_LIMITS));
+  } catch (error) {
+    if (error instanceof CsvParseError) {
+      return { ok: false, errors: [error.message] };
+    }
+    throw error;
+  }
+
   const missing = REQUIRED_HEADERS.filter((h) => !headers.includes(h));
   if (missing.length > 0) {
     return { ok: false, errors: [`Missing required column(s): ${missing.join(', ')}`] };
@@ -45,7 +64,17 @@ export function parseRankingsCsv(csvText: string): RankingsParseResult {
   const hasExplicitRank = headers.includes('SF/TE Prem');
 
   const errors: string[] = [];
+  let errorsTruncated = false;
+  const addError = (message: string) => {
+    if (errors.length < RANKINGS_CSV_LIMITS.maxErrors) {
+      errors.push(message);
+    } else {
+      errorsTruncated = true;
+    }
+  };
   const kept: KeptRow[] = [];
+  const playerIdentities = new Set<string>();
+  const explicitRanks = new Set<number>();
 
   rawRows.forEach((row, i) => {
     const rowNum = i + 2;
@@ -54,7 +83,7 @@ export function parseRankingsCsv(csvText: string): RankingsParseResult {
 
     const name = row.Player?.trim();
     if (!name) {
-      errors.push(`Row ${rowNum}: missing Player name`);
+      addError(`Row ${rowNum}: missing Player name`);
       return;
     }
 
@@ -62,8 +91,8 @@ export function parseRankingsCsv(csvText: string): RankingsParseResult {
     if (pos !== 'PICK') {
       const ageRaw = row.Age?.trim();
       const parsedAge = Number(ageRaw);
-      if (!ageRaw || Number.isNaN(parsedAge)) {
-        errors.push(`Row ${rowNum} (${name}): invalid Age "${ageRaw ?? ''}"`);
+      if (!ageRaw || !Number.isFinite(parsedAge) || parsedAge < 0 || parsedAge > 100) {
+        addError(`Row ${rowNum} (${name}): invalid Age "${ageRaw ?? ''}"`);
         return;
       }
       age = parsedAge;
@@ -71,8 +100,14 @@ export function parseRankingsCsv(csvText: string): RankingsParseResult {
 
     const valueRaw = row['2QBAuction']?.trim().replace(/^\$/, '');
     const parsedValue = Number(valueRaw);
-    if (valueRaw === undefined || valueRaw === '' || Number.isNaN(parsedValue) || parsedValue < 0) {
-      errors.push(`Row ${rowNum} (${name}): invalid 2QBAuction value "${row['2QBAuction'] ?? ''}"`);
+    if (
+      valueRaw === undefined ||
+      valueRaw === '' ||
+      !Number.isFinite(parsedValue) ||
+      parsedValue < 0 ||
+      parsedValue > 1000000
+    ) {
+      addError(`Row ${rowNum} (${name}): invalid 2QBAuction value "${row['2QBAuction'] ?? ''}"`);
       return;
     }
 
@@ -80,11 +115,32 @@ export function parseRankingsCsv(csvText: string): RankingsParseResult {
     if (hasExplicitRank) {
       const rankRaw = row['SF/TE Prem']?.trim();
       const parsedRank = Number(rankRaw);
-      if (!rankRaw || Number.isNaN(parsedRank)) {
-        errors.push(`Row ${rowNum} (${name}): invalid SF/TE Prem "${rankRaw ?? ''}"`);
+      if (
+        !rankRaw ||
+        !Number.isFinite(parsedRank) ||
+        !Number.isInteger(parsedRank) ||
+        parsedRank < 1 ||
+        parsedRank > 10000
+      ) {
+        addError(`Row ${rowNum} (${name}): invalid SF/TE Prem "${rankRaw ?? ''}"`);
         return;
       }
       explicitRank = parsedRank;
+    }
+
+    const playerIdentity = `${normalizeName(name)}:${pos}`;
+    if (playerIdentities.has(playerIdentity)) {
+      addError(`Row ${rowNum} (${name}): duplicate player identity`);
+      return;
+    }
+    playerIdentities.add(playerIdentity);
+
+    if (explicitRank !== null) {
+      if (explicitRanks.has(explicitRank)) {
+        addError(`Row ${rowNum} (${name}): duplicate explicit rank ${explicitRank}`);
+        return;
+      }
+      explicitRanks.add(explicitRank);
     }
 
     kept.push({
@@ -99,7 +155,15 @@ export function parseRankingsCsv(csvText: string): RankingsParseResult {
   });
 
   if (errors.length > 0) {
-    return { ok: false, errors };
+    return {
+      ok: false,
+      errors: errorsTruncated
+        ? [
+            ...errors,
+            `Too many validation errors; showing the first ${RANKINGS_CSV_LIMITS.maxErrors}.`,
+          ]
+        : errors,
+    };
   }
 
   const scaled = kept.map((row) => ({ ...row, ...scaleRankingValue(row.pos, row.rawValue) }));

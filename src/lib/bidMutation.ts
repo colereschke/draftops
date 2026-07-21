@@ -5,6 +5,7 @@ import {
   withActiveOwnedDraftMutation,
   type DraftMutationResult,
 } from '@/lib/draftMutation';
+import { createBidAuditEvent, toBidSnapshot, type AuditableBid } from '@/lib/bidAudit';
 import { countsTowardRoster } from '@/lib/rosterPolicy';
 
 interface CreateBidRecordInput {
@@ -24,6 +25,12 @@ interface UpdateBidRecordInput {
 }
 
 interface DeleteBidRecordInput {
+  userId: string;
+  draftId: number;
+  bidId: number;
+}
+
+interface RestoreBidRecordInput {
   userId: string;
   draftId: number;
   bidId: number;
@@ -52,6 +59,7 @@ interface CreateBidInTransactionInput {
   player: BidPlayerMetadata;
   teamId: number;
   price: number;
+  actorId: string;
 }
 
 function hasValidCreateInput(input: CreateBidRecordInput): boolean {
@@ -80,6 +88,11 @@ function isPlayerClaimUniqueConflict(error: unknown): boolean {
   return Array.isArray(target) && target.includes('draftId') && target.includes('playerId');
 }
 
+async function getTransactionTimestamp(tx: Prisma.TransactionClient): Promise<Date> {
+  const clock = await tx.$queryRaw<Array<{ now: Date }>>`SELECT transaction_timestamp() AS now`;
+  return clock[0].now;
+}
+
 export async function assertBidLegalInTransaction(
   tx: Prisma.TransactionClient,
   draft: Draft,
@@ -94,6 +107,7 @@ export async function assertBidLegalInTransaction(
       where: {
         draftId: draft.id,
         teamId: input.teamId,
+        deletedAt: null,
         ...(input.excludeBidId === undefined ? {} : { id: { not: input.excludeBidId } }),
       },
       select: { id: true, price: true, position: true },
@@ -131,7 +145,32 @@ export async function createBidInTransaction(
     price: input.price,
   });
 
-  let bid: { id: number };
+  const deletedClaims = await tx.auctionResult.findMany({
+    where: {
+      playerId: input.player.id,
+      draftId: draft.id,
+      deletedAt: { not: null },
+      supersededAt: null,
+    },
+  });
+  const transactionTimestamp =
+    deletedClaims.length > 0 ? await getTransactionTimestamp(tx) : undefined;
+  for (const deletedClaim of deletedClaims) {
+    const superseded = await tx.auctionResult.update({
+      where: { id: deletedClaim.id },
+      data: { supersededAt: transactionTimestamp, updatedAt: transactionTimestamp },
+    });
+    await createBidAuditEvent(tx, {
+      draftId: draft.id,
+      bidId: superseded.id,
+      actorId: input.actorId,
+      type: 'SUPERSEDE',
+      before: toBidSnapshot(deletedClaim),
+      after: toBidSnapshot(superseded),
+    });
+  }
+
+  let bid: AuditableBid;
   try {
     bid = await tx.auctionResult.create({
       data: {
@@ -152,6 +191,15 @@ export async function createBidInTransaction(
     throw error;
   }
 
+  await createBidAuditEvent(tx, {
+    draftId: draft.id,
+    bidId: bid.id,
+    actorId: input.actorId,
+    type: 'CREATE',
+    before: null,
+    after: toBidSnapshot(bid),
+  });
+
   await tx.nominatedPlayer.deleteMany({
     where: { playerId: input.player.id, draftId: draft.id },
   });
@@ -170,7 +218,7 @@ export async function createBidRecord(
         select: { id: true, name: true, pos: true, nflTeam: true, sfRank: true },
       }),
       tx.auctionResult.findFirst({
-        where: { playerId: input.playerId, draftId: draft.id },
+        where: { playerId: input.playerId, draftId: draft.id, deletedAt: null },
         select: { id: true },
       }),
     ]);
@@ -181,6 +229,7 @@ export async function createBidRecord(
       player,
       teamId: input.teamId,
       price: input.price,
+      actorId: input.userId,
     });
   });
 }
@@ -192,8 +241,7 @@ export async function updateBidRecord(
 
   return withActiveOwnedDraftMutation(input.userId, input.draftId, async (tx, draft) => {
     const existingBid = await tx.auctionResult.findFirst({
-      where: { id: input.bidId, draftId: draft.id },
-      select: { id: true, playerId: true, position: true, price: true, teamId: true },
+      where: { id: input.bidId, draftId: draft.id, deletedAt: null },
     });
     if (!existingBid) throw new DraftMutationFailure('BID_NOT_FOUND');
 
@@ -207,7 +255,14 @@ export async function updateBidRecord(
     const updated = await tx.auctionResult.update({
       where: { id: existingBid.id },
       data: { price: input.price, teamId: input.teamId },
-      select: { id: true },
+    });
+    await createBidAuditEvent(tx, {
+      draftId: draft.id,
+      bidId: updated.id,
+      actorId: input.userId,
+      type: 'UPDATE',
+      before: toBidSnapshot(existingBid),
+      after: toBidSnapshot(updated),
     });
     return { bidId: updated.id };
   });
@@ -221,10 +276,70 @@ export async function deleteBidRecord(
   }
 
   return withActiveOwnedDraftMutation(input.userId, input.draftId, async (tx, draft) => {
-    const deleted = await tx.auctionResult.deleteMany({
+    const existingBid = await tx.auctionResult.findFirst({
+      where: { id: input.bidId, draftId: draft.id, deletedAt: null },
+    });
+    if (!existingBid) throw new DraftMutationFailure('BID_NOT_FOUND');
+
+    const transactionTimestamp = await getTransactionTimestamp(tx);
+    const deleted = await tx.auctionResult.update({
+      where: { id: existingBid.id },
+      data: { deletedAt: transactionTimestamp, updatedAt: transactionTimestamp },
+    });
+    await createBidAuditEvent(tx, {
+      draftId: draft.id,
+      bidId: deleted.id,
+      actorId: input.userId,
+      type: 'DELETE',
+      before: toBidSnapshot(existingBid as AuditableBid),
+      after: toBidSnapshot(deleted),
+    });
+    return null;
+  });
+}
+
+export async function restoreBidRecord(
+  input: RestoreBidRecordInput,
+): Promise<DraftMutationResult<{ bidId: number }>> {
+  if (!isPositiveSafeInteger(input.draftId) || !isPositiveSafeInteger(input.bidId)) {
+    return { ok: false, code: 'INVALID_INPUT' };
+  }
+
+  return withActiveOwnedDraftMutation(input.userId, input.draftId, async (tx, draft) => {
+    const bid = await tx.auctionResult.findFirst({
       where: { id: input.bidId, draftId: draft.id },
     });
-    if (deleted.count === 0) throw new DraftMutationFailure('BID_NOT_FOUND');
-    return null;
+    if (!bid) throw new DraftMutationFailure('BID_NOT_FOUND');
+    if (bid.deletedAt === null) throw new DraftMutationFailure('BID_NOT_DELETED');
+    if (bid.supersededAt !== null) throw new DraftMutationFailure('BID_SUPERSEDED');
+
+    const transactionTimestamp = await getTransactionTimestamp(tx);
+    if (bid.deletedAt.getTime() <= transactionTimestamp.getTime() - 30 * 60 * 1000) {
+      throw new DraftMutationFailure('RESTORE_WINDOW_EXPIRED');
+    }
+    const activeClaim = await tx.auctionResult.findFirst({
+      where: { draftId: draft.id, playerId: bid.playerId, deletedAt: null },
+      select: { id: true },
+    });
+    if (activeClaim) throw new DraftMutationFailure('BID_SUPERSEDED');
+
+    await assertBidLegalInTransaction(tx, draft, {
+      teamId: bid.teamId,
+      position: bid.position,
+      price: bid.price,
+    });
+    const restored = await tx.auctionResult.update({
+      where: { id: bid.id },
+      data: { deletedAt: null },
+    });
+    await createBidAuditEvent(tx, {
+      draftId: draft.id,
+      bidId: restored.id,
+      actorId: input.userId,
+      type: 'RESTORE',
+      before: toBidSnapshot(bid),
+      after: toBidSnapshot(restored),
+    });
+    return { bidId: restored.id };
   });
 }

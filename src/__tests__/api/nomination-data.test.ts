@@ -75,6 +75,10 @@ describe('GET /api/draft/[draftId]/nomination-data', () => {
   it('returns 200 with valid session and draft', async () => {
     const res = await GET(new NextRequest('http://localhost/'), MOCK_PARAMS);
     expect(res.status).toBe(200);
+    expect(mockTeamFindMany).toHaveBeenCalledWith({
+      where: { draftId: 1 },
+      include: { results: { where: { deletedAt: null } } },
+    });
   });
 
   it('includes ownerHandle in the response', async () => {

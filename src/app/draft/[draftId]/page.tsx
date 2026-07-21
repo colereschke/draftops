@@ -1,6 +1,7 @@
 import { notFound } from 'next/navigation';
 import { prisma } from '@/lib/db';
 import AuctionSheet from '@/components/AuctionSheet/AuctionSheet';
+import type { DeletedBid } from '@/components/BidHistory/BidHistoryPanel';
 import type { ClaimedBid, LeagueTeam } from '@/types';
 import { auth } from '@/auth';
 import { getDraft } from '@/lib/draft';
@@ -17,9 +18,9 @@ export default async function DraftHomePage({ params }: { params: Promise<{ draf
   const draft = await getDraft(session.user.id, draftId);
   if (!draft) notFound();
 
-  const [rawBids, teams, nominatedEntries] = await Promise.all([
+  const [rawBids, deletedBidRows, teams, nominatedEntries] = await Promise.all([
     prisma.auctionResult.findMany({
-      where: { draftId },
+      where: { draftId, deletedAt: null },
       select: {
         id: true,
         playerId: true,
@@ -29,6 +30,19 @@ export default async function DraftHomePage({ params }: { params: Promise<{ draf
         teamId: true,
         team: { select: { handle: true } },
       },
+    }),
+    prisma.auctionResult.findMany({
+      where: { draftId, deletedAt: { not: null } },
+      select: {
+        id: true,
+        player: true,
+        position: true,
+        price: true,
+        deletedAt: true,
+        supersededAt: true,
+        team: { select: { handle: true } },
+      },
+      orderBy: { deletedAt: 'desc' },
     }),
     prisma.team.findMany({
       where: { draftId },
@@ -50,6 +64,21 @@ export default async function DraftHomePage({ params }: { params: Promise<{ draf
     teamId: r.teamId,
     teamHandle: r.team.handle,
   }));
+  const deletedBids: DeletedBid[] = deletedBidRows.flatMap((bid) =>
+    bid.deletedAt === null
+      ? []
+      : [
+          {
+            id: bid.id,
+            player: bid.player,
+            position: bid.position,
+            price: bid.price,
+            teamHandle: bid.team.handle,
+            deletedAt: bid.deletedAt.toISOString(),
+            supersededAt: bid.supersededAt?.toISOString() ?? null,
+          },
+        ],
+  );
 
   const startingLineup = toStartingLineup(draft.startingLineup);
 
@@ -88,6 +117,7 @@ export default async function DraftHomePage({ params }: { params: Promise<{ draf
       sleeperSyncConfigured={sleeperSyncConfigured}
       sleeperLeagueId={draft.sleeperLeagueId}
       isReadOnly={draft.status === 'COMPLETE'}
+      deletedBids={deletedBids}
     />
   );
 }

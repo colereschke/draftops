@@ -210,6 +210,7 @@ export default function SleeperRosterSyncDialog({
 
     setView('loading');
     setError('');
+    setSuccessMessage('');
     try {
       const response = await saveSleeperRosterMapping({
         draftId,

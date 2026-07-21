@@ -47,6 +47,8 @@ describe('getDatabasePoolConfiguration', () => {
     [{ DATABASE_URL: RUNTIME_URL, NODE_ENV: 'test' }, 'draftops-test'],
     [{ DATABASE_URL: RUNTIME_URL, VERCEL: '1', VERCEL_ENV: 'production' }, 'draftops-production'],
     [{ DATABASE_URL: RUNTIME_URL, VERCEL: '1', VERCEL_ENV: 'preview' }, 'draftops-preview'],
+    [{ DATABASE_URL: RUNTIME_URL, VERCEL: '1', VERCEL_ENV: 'development' }, 'draftops-development'],
+    [{ DATABASE_URL: RUNTIME_URL, VERCEL: '1' }, 'draftops-development'],
   ] as const)('uses %s for the matching environment', (environment, applicationName) => {
     expect(getDatabasePoolConfiguration(environment).application_name).toBe(applicationName);
   });

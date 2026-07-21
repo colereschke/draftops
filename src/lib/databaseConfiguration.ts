@@ -27,9 +27,8 @@ function getApplicationName(
   environment: DatabaseEnvironment,
 ): DatabasePoolConfiguration['application_name'] {
   if (environment.NODE_ENV === 'test') return 'draftops-test';
-  if (environment.VERCEL === '1') {
-    return environment.VERCEL_ENV === 'production' ? 'draftops-production' : 'draftops-preview';
-  }
+  if (environment.VERCEL_ENV === 'production') return 'draftops-production';
+  if (environment.VERCEL_ENV === 'preview') return 'draftops-preview';
   return 'draftops-development';
 }
 

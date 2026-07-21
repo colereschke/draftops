@@ -1,6 +1,6 @@
 import { notFound } from 'next/navigation';
 import { auth } from '@/auth';
-import { prisma } from '@/lib/db';
+import { getPrisma } from '@/lib/db';
 import { getDraft } from '@/lib/draft';
 import NominationHelper from '@/components/NominationHelper';
 import { DEFAULT_STARTING_LINEUP, type StartingSlot } from '@/types';
@@ -16,7 +16,7 @@ export default async function NominatePage({ params }: { params: Promise<{ draft
   const draft = await getDraft(session.user.id, draftId);
   if (!draft) notFound();
 
-  const rawBids = await prisma.auctionResult.findMany({
+  const rawBids = await getPrisma().auctionResult.findMany({
     where: { draftId, deletedAt: null },
     select: {
       player: true,

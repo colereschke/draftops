@@ -14,13 +14,13 @@ const mockSnapshotFindUnique = jest.fn();
 jest.mock('@/auth', () => ({ auth: () => mockAuth() }));
 jest.mock('@/lib/draft', () => ({ getDraft: (...args: unknown[]) => mockGetDraft(...args) }));
 jest.mock('@/lib/db', () => ({
-  prisma: {
+  getPrisma: () => ({
     auctionResult: { findMany: (...args: unknown[]) => mockAuctionFindMany(...args) },
     bidAuditEvent: { findMany: (...args: unknown[]) => mockAuditFindMany(...args) },
     draftCompletionSnapshot: {
       findUnique: (...args: unknown[]) => mockSnapshotFindUnique(...args),
     },
-  },
+  }),
 }));
 
 const PARAMS = { params: Promise.resolve({ draftId: '4' }) };

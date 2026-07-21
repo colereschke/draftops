@@ -1,26 +1,28 @@
 import type { Metadata } from 'next';
-import { Barlow_Condensed, Inter, JetBrains_Mono } from 'next/font/google';
+import localFont from 'next/font/local';
 import { auth } from '@/auth';
 import NavBar from '@/components/NavBar';
 import NavBarGate from '@/components/NavBar/NavBarGate';
 import SkipLink from '@/components/SkipLink';
 import './globals.css';
 
-const inter = Inter({
-  subsets: ['latin'],
+const inter = localFont({
+  src: './fonts/Inter-Variable.woff2',
   variable: '--font-inter',
   display: 'swap',
 });
 
-const barlowCondensed = Barlow_Condensed({
-  subsets: ['latin'],
-  weight: ['600', '700'],
+const barlowCondensed = localFont({
+  src: [
+    { path: './fonts/BarlowCondensed-SemiBold.woff2', weight: '600', style: 'normal' },
+    { path: './fonts/BarlowCondensed-Bold.woff2', weight: '700', style: 'normal' },
+  ],
   variable: '--font-barlow',
   display: 'swap',
 });
 
-const jetbrainsMono = JetBrains_Mono({
-  subsets: ['latin'],
+const jetbrainsMono = localFont({
+  src: './fonts/JetBrainsMono-Variable.woff2',
   variable: '--font-mono',
   display: 'swap',
 });

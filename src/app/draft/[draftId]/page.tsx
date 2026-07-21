@@ -1,5 +1,5 @@
 import { notFound } from 'next/navigation';
-import { prisma } from '@/lib/db';
+import { getPrisma } from '@/lib/db';
 import AuctionSheet from '@/components/AuctionSheet/AuctionSheet';
 import type { DeletedBid } from '@/components/BidHistory/BidHistoryPanel';
 import type { ClaimedBid, LeagueTeam } from '@/types';
@@ -19,7 +19,7 @@ export default async function DraftHomePage({ params }: { params: Promise<{ draf
   if (!draft) notFound();
 
   const [rawBids, deletedBidRows, teams, nominatedEntries] = await Promise.all([
-    prisma.auctionResult.findMany({
+    getPrisma().auctionResult.findMany({
       where: { draftId, deletedAt: null },
       select: {
         id: true,
@@ -31,7 +31,7 @@ export default async function DraftHomePage({ params }: { params: Promise<{ draf
         team: { select: { handle: true } },
       },
     }),
-    prisma.auctionResult.findMany({
+    getPrisma().auctionResult.findMany({
       where: { draftId, deletedAt: { not: null } },
       select: {
         id: true,
@@ -44,12 +44,12 @@ export default async function DraftHomePage({ params }: { params: Promise<{ draf
       },
       orderBy: { deletedAt: 'desc' },
     }),
-    prisma.team.findMany({
+    getPrisma().team.findMany({
       where: { draftId },
       select: { id: true, handle: true, displayName: true, sleeperRosterId: true },
       orderBy: { handle: 'asc' },
     }),
-    prisma.nominatedPlayer.findMany({
+    getPrisma().nominatedPlayer.findMany({
       where: { draftId },
       select: { playerId: true },
     }),

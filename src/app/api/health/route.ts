@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 
 import { NextResponse } from 'next/server';
 
-import { prisma } from '@/lib/db';
+import { getPrisma } from '@/lib/db';
 import { logServerError } from '@/lib/observability';
 
 export const dynamic = 'force-dynamic';
@@ -12,7 +12,7 @@ const HEALTH_CHECK_TIMEOUT_MS = 2_000;
 
 export async function GET(): Promise<NextResponse> {
   try {
-    await withTimeout(prisma.$queryRaw`SELECT 1`, HEALTH_CHECK_TIMEOUT_MS);
+    await withTimeout(getPrisma().$queryRaw`SELECT 1`, HEALTH_CHECK_TIMEOUT_MS);
     return NextResponse.json({ ok: true });
   } catch (error) {
     logServerError({

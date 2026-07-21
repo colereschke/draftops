@@ -2,14 +2,14 @@ const mockOnboardingFindUnique = jest.fn();
 const mockDraftCount = jest.fn();
 
 jest.mock('@/lib/db', () => ({
-  prisma: {
+  getPrisma: () => ({
     onboardingProgress: {
       findUnique: (...args: unknown[]) => mockOnboardingFindUnique(...args),
     },
     draft: {
       count: (...args: unknown[]) => mockDraftCount(...args),
     },
-  },
+  }),
 }));
 
 import { isFirstDraftOnboardingEligible } from '@/lib/onboarding';

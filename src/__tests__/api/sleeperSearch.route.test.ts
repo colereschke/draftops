@@ -9,7 +9,7 @@ const mockFindMany = jest.fn();
 
 jest.mock('@/auth', () => ({ auth: () => mockAuth() }));
 jest.mock('@/lib/db', () => ({
-  prisma: { sleeperPlayer: { findMany: (...args: unknown[]) => mockFindMany(...args) } },
+  getPrisma: () => ({ sleeperPlayer: { findMany: (...args: unknown[]) => mockFindMany(...args) } }),
 }));
 
 describe('Sleeper search route', () => {

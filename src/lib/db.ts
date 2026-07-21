@@ -1,21 +1,48 @@
-import { Pool } from 'pg';
-import { PrismaClient } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
+import { PrismaClient } from '@prisma/client';
+import { Pool } from 'pg';
 
-const globalForPrisma = globalThis as unknown as {
-  prisma: PrismaClient | undefined;
-};
+import { getDatabasePoolConfiguration } from '@/lib/databaseConfiguration';
 
-function createPrismaClient() {
-  if (!process.env.DATABASE_URL) throw new Error('DATABASE_URL is not set');
-  const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+interface PrismaRuntime {
+  client: PrismaClient;
+}
+
+interface PrismaGlobal {
+  runtime: PrismaRuntime | undefined;
+}
+
+const globalForPrisma = globalThis as unknown as PrismaGlobal;
+
+function createPrismaClient(): PrismaClient {
+  const configuration = getDatabasePoolConfiguration(process.env);
+  const pool = new Pool({
+    application_name: configuration.application_name,
+    connectionString: configuration.connectionString,
+    connectionTimeoutMillis: configuration.connectionTimeoutMillis,
+    idleTimeoutMillis: configuration.idleTimeoutMillis,
+    max: configuration.max,
+  });
   const adapter = new PrismaPg(pool, { disposeExternalPool: true });
+
   return new PrismaClient({
     adapter,
     log: process.env.NODE_ENV === 'development' ? ['query', 'error', 'warn'] : ['error'],
   });
 }
 
-export const prisma = globalForPrisma.prisma ?? createPrismaClient();
+export function getPrisma(): PrismaClient {
+  if (globalForPrisma.runtime) return globalForPrisma.runtime.client;
 
-if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = prisma;
+  const client = createPrismaClient();
+  globalForPrisma.runtime = { client };
+  return client;
+}
+
+export async function disconnectPrisma(): Promise<void> {
+  const runtime = globalForPrisma.runtime;
+  if (!runtime) return;
+
+  globalForPrisma.runtime = undefined;
+  await runtime.client.$disconnect();
+}

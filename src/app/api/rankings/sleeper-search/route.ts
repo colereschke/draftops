@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/auth';
-import { prisma } from '@/lib/db';
+import { getPrisma } from '@/lib/db';
 import { normalizeName } from '@/lib/sleeperNormalize';
 import { isSleeperSearchPosition, type SleeperSearchResponse } from '@/lib/sleeperSearch';
 
@@ -18,7 +18,7 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const results = await prisma.sleeperPlayer.findMany({
+    const results = await getPrisma().sleeperPlayer.findMany({
       where: { normalizedName: { contains: query }, pos: position },
       select: { id: true, name: true, team: true, pos: true },
       orderBy: [{ name: 'asc' }, { id: 'asc' }],

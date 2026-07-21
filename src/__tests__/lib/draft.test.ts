@@ -2,12 +2,12 @@ const mockDraftFindFirst = jest.fn();
 const mockDraftFindMany = jest.fn();
 
 jest.mock('@/lib/db', () => ({
-  prisma: {
+  getPrisma: () => ({
     draft: {
       findFirst: (...args: unknown[]) => mockDraftFindFirst(...args),
       findMany: (...args: unknown[]) => mockDraftFindMany(...args),
     },
-  },
+  }),
 }));
 
 import { getDraft, getActiveDraftsForUser } from '@/lib/draft';

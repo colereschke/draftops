@@ -1,4 +1,4 @@
-import { prisma } from '@/lib/db';
+import { getPrisma } from '@/lib/db';
 import { applyDynamicPickValues } from '@/lib/dynamicPickValues';
 import { filterFuturePickAssetsForMode } from '@/lib/futurePickAssets';
 import { mapPlayersWithDraftValues } from '@/lib/playerValueMapping';
@@ -24,14 +24,14 @@ export async function getActiveDraftPlayers({
   bids,
 }: GetActiveDraftPlayersInput): Promise<Player[]> {
   const [players, draft] = await Promise.all([
-    prisma.player.findMany({ where: { draftId }, orderBy: { sfRank: 'asc' } }),
-    prisma.draft.findUnique({
+    getPrisma().player.findMany({ where: { draftId }, orderBy: { sfRank: 'asc' } }),
+    getPrisma().draft.findUnique({
       where: { id: draftId },
       select: { activeProjectionValueSetId: true },
     }),
   ]);
   const draftValues = draft?.activeProjectionValueSetId
-    ? await prisma.draftPlayerValue.findMany({
+    ? await getPrisma().draftPlayerValue.findMany({
         where: { draftId, valueSetId: draft.activeProjectionValueSetId },
         select: {
           playerId: true,

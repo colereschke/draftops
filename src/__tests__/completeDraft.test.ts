@@ -6,11 +6,11 @@ const mockAuth = jest.fn();
 const mockCompleteOwnedDraft = jest.fn();
 
 jest.mock('@/lib/db', () => ({
-  prisma: {
+  getPrisma: () => ({
     draft: {
       updateMany: (...args: unknown[]) => mockUpdateMany(...args),
     },
-  },
+  }),
 }));
 
 jest.mock('next/cache', () => ({

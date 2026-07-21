@@ -3,20 +3,20 @@
  */
 
 import { GET } from '@/app/api/health/route';
-import { prisma } from '@/lib/db';
+import { getPrisma } from '@/lib/db';
 import { logServerError } from '@/lib/observability';
 
+const mockPrisma = { $queryRaw: jest.fn() };
+
 jest.mock('@/lib/db', () => ({
-  prisma: {
-    $queryRaw: jest.fn(),
-  },
+  getPrisma: () => mockPrisma,
 }));
 
 jest.mock('@/lib/observability', () => ({
   logServerError: jest.fn(),
 }));
 
-const mockQueryRaw = jest.mocked(prisma.$queryRaw);
+const mockQueryRaw = jest.mocked(getPrisma().$queryRaw);
 const mockLogServerError = jest.mocked(logServerError);
 
 describe('GET /api/health', () => {

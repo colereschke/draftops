@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/auth';
-import { prisma } from '@/lib/db';
+import { getPrisma } from '@/lib/db';
 import { getDraft } from '@/lib/draft';
 import { getActiveDraftPlayers } from '@/lib/activeDraftPlayers';
 import { computeDraftTeamStats } from '@/lib/computeDraftTeamStats';
@@ -20,15 +20,15 @@ export async function GET(
   if (!draft) return NextResponse.json({ error: 'No draft found' }, { status: 404 });
 
   const [teams, watchlistEntries, nominatedEntries] = await Promise.all([
-    prisma.team.findMany({
+    getPrisma().team.findMany({
       where: { draftId: draft.id },
       include: { results: { where: { deletedAt: null } } },
     }),
-    prisma.playerWatchlist.findMany({
+    getPrisma().playerWatchlist.findMany({
       where: { draftId: draft.id },
       orderBy: { createdAt: 'asc' },
     }),
-    prisma.nominatedPlayer.findMany({
+    getPrisma().nominatedPlayer.findMany({
       where: { draftId: draft.id },
       orderBy: { createdAt: 'asc' },
     }),

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/auth';
-import { prisma } from '@/lib/db';
+import { getPrisma } from '@/lib/db';
 
 export async function GET(
   _request: NextRequest,
@@ -10,7 +10,7 @@ export async function GET(
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const draftId = parseInt((await params).draftId, 10);
-  const draft = await prisma.draft.findFirst({
+  const draft = await getPrisma().draft.findFirst({
     where: { id: draftId, ownerId: session.user.id },
     select: { id: true, name: true, status: true },
   });

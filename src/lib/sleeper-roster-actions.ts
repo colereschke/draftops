@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { auth } from '@/auth';
-import { prisma } from '@/lib/db';
+import { getPrisma } from '@/lib/db';
 import { getDraft } from '@/lib/draft';
 import {
   fetchSleeperLeague,
@@ -127,15 +127,15 @@ async function getPreview(
   rosters: Awaited<ReturnType<typeof fetchSleeperLeagueRosters>>,
 ) {
   const [teams, players, loggedResults] = await Promise.all([
-    prisma.team.findMany({
+    getPrisma().team.findMany({
       where: { draftId },
       select: { id: true, sleeperRosterId: true, handle: true, displayName: true },
     }),
-    prisma.player.findMany({
+    getPrisma().player.findMany({
       where: { draftId },
       select: { id: true, sleeperId: true, name: true, pos: true, nflTeam: true, budget: true },
     }),
-    prisma.auctionResult.findMany({
+    getPrisma().auctionResult.findMany({
       where: { draftId, deletedAt: null },
       select: { playerId: true },
     }),
@@ -192,7 +192,7 @@ export async function previewSleeperRosterMatch(input: {
     throw error;
   }
 
-  const teams = await prisma.team.findMany({
+  const teams = await getPrisma().team.findMany({
     where: { draftId: draft.id },
     select: { id: true, handle: true, displayName: true, sleeperRosterId: true },
   });

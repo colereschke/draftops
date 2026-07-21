@@ -1,0 +1,11 @@
+# Self-hosted application fonts
+
+The application vendors the following immutable Fontsource 5.3.0 artifacts so the
+production build does not download fonts from Google.
+
+| Package                               | Version | Registry URL                                                                                | Source filename                                         | Destination filename             | SHA-256                                                            | License                       |
+| ------------------------------------- | ------- | ------------------------------------------------------------------------------------------- | ------------------------------------------------------- | -------------------------------- | ------------------------------------------------------------------ | ----------------------------- |
+| `@fontsource-variable/inter`          | 5.3.0   | `https://registry.npmjs.org/@fontsource-variable/inter/-/inter-5.3.0.tgz`                   | `package/files/inter-latin-wght-normal.woff2`           | `Inter-Variable.woff2`           | `3100e775e8616cd2611beecfa23a4263d7037586789b43f035236a2e6fbd4c62` | `LICENSE-Inter.txt`           |
+| `@fontsource-variable/jetbrains-mono` | 5.3.0   | `https://registry.npmjs.org/@fontsource-variable/jetbrains-mono/-/jetbrains-mono-5.3.0.tgz` | `package/files/jetbrains-mono-latin-wght-normal.woff2`  | `JetBrainsMono-Variable.woff2`   | `18be452724bfdc236c074ca94a249a7f41a86752c7d04ab258ce9ed5651f6a7e` | `LICENSE-JetBrainsMono.txt`   |
+| `@fontsource/barlow-condensed`        | 5.3.0   | `https://registry.npmjs.org/@fontsource/barlow-condensed/-/barlow-condensed-5.3.0.tgz`      | `package/files/barlow-condensed-latin-600-normal.woff2` | `BarlowCondensed-SemiBold.woff2` | `215a93c696f442034a46fbb382958f753fda60e30490683aeea6b235fcbb2b66` | `LICENSE-BarlowCondensed.txt` |
+| `@fontsource/barlow-condensed`        | 5.3.0   | `https://registry.npmjs.org/@fontsource/barlow-condensed/-/barlow-condensed-5.3.0.tgz`      | `package/files/barlow-condensed-latin-700-normal.woff2` | `BarlowCondensed-Bold.woff2`     | `3787a5a419171630e6890cfa47c4da067474d005cd0ff8dc11ec090fdc3ee2b8` | `LICENSE-BarlowCondensed.txt` |

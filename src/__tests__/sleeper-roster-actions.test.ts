@@ -42,7 +42,7 @@ jest.mock('@/lib/sleeper', () => ({
   fetchSleeperLeagueRosters: (...args: unknown[]) => mockFetchRosters(...args),
 }));
 jest.mock('@/lib/db', () => ({
-  prisma: {
+  getPrisma: () => ({
     $transaction: (...args: unknown[]) => mockTransaction(...args),
     draft: { update: (...args: unknown[]) => mockDraftUpdate(...args) },
     team: {
@@ -59,7 +59,7 @@ jest.mock('@/lib/db', () => ({
     },
     bidAuditEvent: { create: (...args: unknown[]) => mockBidAuditCreate(...args) },
     nominatedPlayer: { deleteMany: (...args: unknown[]) => mockNominationDeleteMany(...args) },
-  },
+  }),
 }));
 
 const DRAFT = { id: 4, sleeperLeagueId: '12345' };

@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { auth } from '@/auth';
-import { prisma } from '@/lib/db';
+import { getPrisma } from '@/lib/db';
 import {
   excludeStaticFuturePickRows,
   generateFuturePickAssets,
@@ -105,7 +105,7 @@ function toPrismaFuturePickMode(mode: FuturePickAuctionMode): 'PACKAGES' | 'INDI
 }
 
 async function resolveEtrSleeperMatches(): Promise<Map<string, string>> {
-  const sleeperPlayers = await prisma.sleeperPlayer.findMany({
+  const sleeperPlayers = await getPrisma().sleeperPlayer.findMany({
     select: { id: true, name: true, normalizedName: true, team: true, pos: true },
   });
   const index = buildSleeperPlayerIndex(sleeperPlayers);
@@ -164,7 +164,7 @@ export async function createDraft(
 
   const rankingSet =
     input.playerSource === 'custom'
-      ? await prisma.userRankingSet.findUnique({
+      ? await getPrisma().userRankingSet.findUnique({
           where: { userId: session.user.id },
           include: { players: true },
         })
@@ -209,7 +209,7 @@ export async function createDraft(
 
   let draftId: number;
   try {
-    draftId = await prisma.$transaction(
+    draftId = await getPrisma().$transaction(
       async (tx) => {
         let stageMark = performance.now();
         await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${session.user.id}))`;

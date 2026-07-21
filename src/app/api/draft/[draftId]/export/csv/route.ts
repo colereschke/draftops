@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/auth';
-import { prisma } from '@/lib/db';
+import { getPrisma } from '@/lib/db';
 import { getDraft } from '@/lib/draft';
 import { serializeDraftCsv } from '@/lib/draftExport';
 
@@ -27,7 +27,7 @@ export async function GET(
   const draft = await getDraft(session.user.id, draftId);
   if (!draft) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
-  const bids = await prisma.auctionResult.findMany({
+  const bids = await getPrisma().auctionResult.findMany({
     where: { draftId, deletedAt: null },
     include: { team: { select: { id: true, handle: true, displayName: true } } },
     orderBy: { id: 'asc' },

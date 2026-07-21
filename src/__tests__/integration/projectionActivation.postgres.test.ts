@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { Client } from 'pg';
-import { prisma } from '@/lib/db';
+import { disconnectPrisma, getPrisma } from '@/lib/db';
 import { applyProjectionValuesToDraft } from '@/lib/projectionApplication';
 import { activateProjectionValueSet } from '@/lib/projectionValueSet';
 import { DEFAULT_SCORING_SETTINGS, DEFAULT_STARTING_LINEUP, DEFAULT_TARGET_ROSTER } from '@/types';
@@ -134,7 +134,7 @@ const APPLICATION_PREFIX = `hard-006-application-${process.pid}`;
 
 async function createApplicationFixture(playerCount: number): Promise<ApplicationFixture> {
   const fixtureId = crypto.randomUUID();
-  const draft = await prisma.draft.create({
+  const draft = await getPrisma().draft.create({
     data: {
       name: `${APPLICATION_PREFIX}-${fixtureId}`,
       budget: 1000,
@@ -146,10 +146,10 @@ async function createApplicationFixture(playerCount: number): Promise<Applicatio
       targetRoster: DEFAULT_TARGET_ROSTER,
     },
   });
-  const projectionSource = await prisma.projectionSource.create({
+  const projectionSource = await getPrisma().projectionSource.create({
     data: { name: `${APPLICATION_PREFIX}-${fixtureId}`, season: 2026 },
   });
-  await prisma.player.createMany({
+  await getPrisma().player.createMany({
     data: Array.from({ length: playerCount }, (_, index) => ({
       name: `Player ${fixtureId} ${index}`,
       nflTeam: 'BUF',
@@ -166,12 +166,12 @@ async function createApplicationFixture(playerCount: number): Promise<Applicatio
       draftId: draft.id,
     })),
   });
-  const players = await prisma.player.findMany({
+  const players = await getPrisma().player.findMany({
     where: { draftId: draft.id },
     orderBy: { id: 'asc' },
     select: { id: true, sleeperId: true },
   });
-  await prisma.playerProjection.createMany({
+  await getPrisma().playerProjection.createMany({
     data: players.map((player, index) => ({
       sleeperId: player.sleeperId!,
       position: 'QB',
@@ -201,55 +201,55 @@ async function createApplicationFixture(playerCount: number): Promise<Applicatio
 }
 
 async function deleteApplicationFixtures(): Promise<void> {
-  const drafts = await prisma.draft.findMany({
+  const drafts = await getPrisma().draft.findMany({
     where: { name: { startsWith: APPLICATION_PREFIX } },
     select: { id: true },
   });
   const draftIds = drafts.map((draft) => draft.id);
   if (draftIds.length > 0) {
-    await prisma.draft.updateMany({
+    await getPrisma().draft.updateMany({
       where: { id: { in: draftIds } },
       data: { activeProjectionValueSetId: null },
     });
-    await prisma.draftPlayerValue.deleteMany({ where: { draftId: { in: draftIds } } });
-    await prisma.draftProjectionValueSet.deleteMany({ where: { draftId: { in: draftIds } } });
-    await prisma.player.deleteMany({ where: { draftId: { in: draftIds } } });
-    await prisma.draft.deleteMany({ where: { id: { in: draftIds } } });
+    await getPrisma().draftPlayerValue.deleteMany({ where: { draftId: { in: draftIds } } });
+    await getPrisma().draftProjectionValueSet.deleteMany({ where: { draftId: { in: draftIds } } });
+    await getPrisma().player.deleteMany({ where: { draftId: { in: draftIds } } });
+    await getPrisma().draft.deleteMany({ where: { id: { in: draftIds } } });
   }
-  const sources = await prisma.projectionSource.findMany({
+  const sources = await getPrisma().projectionSource.findMany({
     where: { name: { startsWith: APPLICATION_PREFIX } },
     select: { id: true },
   });
   const sourceIds = sources.map((source) => source.id);
   if (sourceIds.length > 0) {
-    await prisma.playerProjection.deleteMany({
+    await getPrisma().playerProjection.deleteMany({
       where: { projectionSourceId: { in: sourceIds } },
     });
-    await prisma.projectionSource.deleteMany({ where: { id: { in: sourceIds } } });
+    await getPrisma().projectionSource.deleteMany({ where: { id: { in: sourceIds } } });
   }
 }
 
 describe('projection value-set application against PostgreSQL', () => {
   afterEach(async () => {
-    await prisma.$executeRawUnsafe(
+    await getPrisma().$executeRawUnsafe(
       'DROP TRIGGER IF EXISTS hard006_fail_second_batch ON "DraftPlayerValue"',
     );
-    await prisma.$executeRawUnsafe('DROP FUNCTION IF EXISTS hard006_fail_second_batch()');
+    await getPrisma().$executeRawUnsafe('DROP FUNCTION IF EXISTS hard006_fail_second_batch()');
     await deleteApplicationFixtures();
   });
 
   afterAll(async () => {
-    await prisma.$disconnect();
+    await disconnectPrisma();
   });
 
   it('keeps the previous same-source set fully active after a later batch fails', async () => {
     const fixture = await createApplicationFixture(51);
-    const first = await applyProjectionValuesToDraft(prisma, {
+    const first = await applyProjectionValuesToDraft(getPrisma(), {
       draftId: fixture.draftId,
       projectionSourceId: fixture.projectionSourceId,
     });
     const failedPlayerId = fixture.playerIds[50];
-    await prisma.$executeRawUnsafe(`
+    await getPrisma().$executeRawUnsafe(`
       CREATE FUNCTION hard006_fail_second_batch() RETURNS trigger AS $$
       BEGIN
         IF NEW."playerId" = ${failedPlayerId} THEN
@@ -264,47 +264,47 @@ describe('projection value-set application against PostgreSQL', () => {
     `);
 
     await expect(
-      applyProjectionValuesToDraft(prisma, {
+      applyProjectionValuesToDraft(getPrisma(), {
         draftId: fixture.draftId,
         projectionSourceId: fixture.projectionSourceId,
       }),
     ).rejects.toMatchObject({ code: 'PERSISTENCE_FAILURE' });
 
     await expect(
-      prisma.draft.findUniqueOrThrow({
+      getPrisma().draft.findUniqueOrThrow({
         where: { id: fixture.draftId },
         select: { activeProjectionValueSetId: true },
       }),
     ).resolves.toEqual({ activeProjectionValueSetId: first.valueSetId });
     await expect(
-      prisma.draftPlayerValue.count({ where: { valueSetId: first.valueSetId } }),
+      getPrisma().draftPlayerValue.count({ where: { valueSetId: first.valueSetId } }),
     ).resolves.toBe(51);
-    const failedSet = await prisma.draftProjectionValueSet.findFirstOrThrow({
+    const failedSet = await getPrisma().draftProjectionValueSet.findFirstOrThrow({
       where: { draftId: fixture.draftId, status: 'FAILED' },
       select: { id: true, failureCode: true },
     });
     expect(failedSet.failureCode).toBe('PERSISTENCE_FAILURE');
     await expect(
-      prisma.draftPlayerValue.count({ where: { valueSetId: failedSet.id } }),
+      getPrisma().draftPlayerValue.count({ where: { valueSetId: failedSet.id } }),
     ).resolves.toBe(0);
   });
 
   it('serializes two valid candidate activations under the shared draft lock', async () => {
     const fixture = await createApplicationFixture(1);
-    const first = await applyProjectionValuesToDraft(prisma, {
+    const first = await applyProjectionValuesToDraft(getPrisma(), {
       draftId: fixture.draftId,
       projectionSourceId: fixture.projectionSourceId,
     });
     const candidates = await Promise.all(
       [0, 1].map(async () => {
-        const set = await prisma.draftProjectionValueSet.create({
+        const set = await getPrisma().draftProjectionValueSet.create({
           data: {
             draftId: fixture.draftId,
             projectionSourceId: fixture.projectionSourceId,
             expectedPlayerCount: 1,
           },
         });
-        await prisma.draftPlayerValue.create({
+        await getPrisma().draftPlayerValue.create({
           data: {
             draftId: fixture.draftId,
             playerId: fixture.playerIds[0],
@@ -320,7 +320,7 @@ describe('projection value-set application against PostgreSQL', () => {
 
     await Promise.all(
       candidates.map((valueSetId) =>
-        prisma.$transaction((tx) =>
+        getPrisma().$transaction((tx) =>
           activateProjectionValueSet(tx as never, {
             draftId: fixture.draftId,
             projectionSourceId: fixture.projectionSourceId,
@@ -330,18 +330,18 @@ describe('projection value-set application against PostgreSQL', () => {
       ),
     );
 
-    const draft = await prisma.draft.findUniqueOrThrow({
+    const draft = await getPrisma().draft.findUniqueOrThrow({
       where: { id: fixture.draftId },
       select: { activeProjectionValueSetId: true },
     });
-    const activeSets = await prisma.draftProjectionValueSet.findMany({
+    const activeSets = await getPrisma().draftProjectionValueSet.findMany({
       where: { draftId: fixture.draftId, status: 'ACTIVE' },
       select: { id: true },
     });
     expect(activeSets).toEqual([{ id: draft.activeProjectionValueSetId }]);
     expect(candidates).toContain(draft.activeProjectionValueSetId);
     await expect(
-      prisma.draftProjectionValueSet.findUniqueOrThrow({
+      getPrisma().draftProjectionValueSet.findUniqueOrThrow({
         where: { id: first.valueSetId },
         select: { status: true },
       }),
@@ -352,20 +352,20 @@ describe('projection value-set application against PostgreSQL', () => {
     const fixture = await createApplicationFixture(1);
 
     for (let run = 0; run < 5; run += 1) {
-      await applyProjectionValuesToDraft(prisma, {
+      await applyProjectionValuesToDraft(getPrisma(), {
         draftId: fixture.draftId,
         projectionSourceId: fixture.projectionSourceId,
       });
     }
 
     await expect(
-      prisma.draftProjectionValueSet.count({ where: { draftId: fixture.draftId } }),
+      getPrisma().draftProjectionValueSet.count({ where: { draftId: fixture.draftId } }),
     ).resolves.toBe(5);
     await expect(
-      prisma.draftPlayerValue.count({ where: { draftId: fixture.draftId } }),
+      getPrisma().draftPlayerValue.count({ where: { draftId: fixture.draftId } }),
     ).resolves.toBe(4);
     await expect(
-      prisma.draftProjectionValueSet.count({
+      getPrisma().draftProjectionValueSet.count({
         where: { draftId: fixture.draftId, status: 'ACTIVE' },
       }),
     ).resolves.toBe(1);

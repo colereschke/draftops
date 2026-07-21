@@ -9,12 +9,12 @@ jest.mock('next/cache', () => ({
   revalidatePath: (...args: unknown[]) => mockRevalidatePath(...args),
 }));
 jest.mock('@/lib/db', () => ({
-  prisma: {
+  getPrisma: () => ({
     onboardingProgress: {
       upsert: (...args: unknown[]) => mockOnboardingUpsert(...args),
       updateMany: (...args: unknown[]) => mockOnboardingUpdateMany(...args),
     },
-  },
+  }),
 }));
 jest.mock('@/lib/draftMutation', () => ({
   ...jest.requireActual('@/lib/draftMutation'),
@@ -37,12 +37,12 @@ beforeEach(() => {
       _userId: string,
       _draftId: number,
       operation: (
-        tx: (typeof import('@/lib/db'))['prisma'],
+        tx: ReturnType<(typeof import('@/lib/db'))['getPrisma']>,
         draft: { id: number },
       ) => Promise<unknown>,
     ) => ({
       ok: true,
-      data: await operation((await import('@/lib/db')).prisma, { id: 5 }),
+      data: await operation((await import('@/lib/db')).getPrisma(), { id: 5 }),
     }),
   );
 });

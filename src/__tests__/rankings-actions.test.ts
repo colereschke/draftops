@@ -19,7 +19,7 @@ jest.mock('next/cache', () => ({
   revalidatePath: (...args: unknown[]) => mockRevalidatePath(...args),
 }));
 jest.mock('@/lib/db', () => ({
-  prisma: {
+  getPrisma: () => ({
     userRankingSet: {
       findUnique: (...args: unknown[]) => mockFindUnique(...args),
     },
@@ -33,7 +33,7 @@ jest.mock('@/lib/db', () => ({
       update: (...args: unknown[]) => mockPlayerUpdate(...args),
     },
     $transaction: (...args: unknown[]) => mockTransaction(...args),
-  },
+  }),
 }));
 
 const MOCK_SESSION = { user: { id: '123456789', name: 'Cole' } };

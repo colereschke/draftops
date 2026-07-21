@@ -28,11 +28,11 @@ jest.mock('@/lib/activeDraftPlayers', () => ({
 }));
 
 jest.mock('@/lib/db', () => ({
-  prisma: {
+  getPrisma: () => ({
     team: { findMany: (...args: unknown[]) => mockTeamFindMany(...args) },
     playerWatchlist: { findMany: (...args: unknown[]) => mockWatchlistFindMany(...args) },
     nominatedPlayer: { findMany: (...args: unknown[]) => mockNominatedFindMany(...args) },
-  },
+  }),
 }));
 
 const MOCK_SESSION = { user: { id: '123456789', name: 'Cole' } };

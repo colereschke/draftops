@@ -8,7 +8,7 @@ const mockDeleteBidRecord = jest.fn();
 const mockRestoreBidRecord = jest.fn();
 
 jest.mock('@/auth', () => ({ auth: () => mockAuth() }));
-jest.mock('@/lib/db', () => ({ prisma: {} }));
+jest.mock('@/lib/db', () => ({ getPrisma: () => ({}) }));
 jest.mock('next/cache', () => ({
   revalidatePath: (...args: unknown[]) => mockRevalidatePath(...args),
 }));

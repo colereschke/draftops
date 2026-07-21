@@ -1,18 +1,47 @@
 'use client';
 
-import { useEffect } from 'react';
-import { reportClientError } from '@/lib/reportClientError';
+import { useEffect, useRef, useState } from 'react';
+import { captureClientError } from '@/lib/clientObservability';
+import { deriveIncidentDetails } from '@/lib/incident';
 
-export default function GlobalError({
-  error,
-  reset,
-}: {
+interface GlobalErrorBoundaryProps {
   error: Error & { digest?: string };
   reset: () => void;
-}) {
+}
+
+interface IncidentState {
+  error: Error;
+  incidentId: string;
+  hasDigest: boolean;
+}
+
+export default function GlobalError({ error, reset }: GlobalErrorBoundaryProps) {
+  const capturedErrorRef = useRef<Error | null>(null);
+  const [storedIncident, setStoredIncident] = useState<IncidentState>(() => ({
+    error,
+    ...deriveIncidentDetails(error),
+  }));
+
+  let incident = storedIncident;
+  if (storedIncident.error !== error) {
+    incident = { error, ...deriveIncidentDetails(error) };
+    setStoredIncident(incident);
+  }
+
+  const { hasDigest, incidentId } = incident;
+
   useEffect(() => {
-    reportClientError(error);
-  }, [error]);
+    if (hasDigest || capturedErrorRef.current === error) {
+      return;
+    }
+
+    capturedErrorRef.current = error;
+    try {
+      captureClientError(error, incidentId);
+    } catch {
+      // Reporting must never prevent the recovery UI from rendering.
+    }
+  }, [error, hasDigest, incidentId]);
 
   return (
     <html lang="en">
@@ -33,7 +62,10 @@ export default function GlobalError({
           Something went wrong
         </div>
         <div style={{ fontSize: 12, color: '#4a5168', maxWidth: 320, textAlign: 'center' }}>
-          {error.message}
+          We logged the problem. Try again, and share the incident ID if it continues.
+        </div>
+        <div data-testid="error-incident-id" style={{ fontSize: 12, color: '#4a5168' }}>
+          Incident ID: {incidentId}
         </div>
         <button
           onClick={reset}

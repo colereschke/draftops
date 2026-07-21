@@ -1,7 +1,8 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { captureClientError, createIncidentId } from '@/lib/clientObservability';
+import { captureClientError } from '@/lib/clientObservability';
+import { deriveIncidentDetails } from '@/lib/incident';
 
 interface ErrorBoundaryProps {
   error: Error & { digest?: string };
@@ -11,25 +12,26 @@ interface ErrorBoundaryProps {
 interface IncidentState {
   error: Error;
   incidentId: string;
+  hasDigest: boolean;
 }
 
 export default function Error({ error, reset }: ErrorBoundaryProps) {
   const capturedErrorRef = useRef<Error | null>(null);
   const [storedIncident, setStoredIncident] = useState<IncidentState>(() => ({
     error,
-    incidentId: error.digest || createIncidentId(),
+    ...deriveIncidentDetails(error),
   }));
 
   let incident = storedIncident;
   if (storedIncident.error !== error) {
-    incident = { error, incidentId: error.digest || createIncidentId() };
+    incident = { error, ...deriveIncidentDetails(error) };
     setStoredIncident(incident);
   }
 
-  const incidentId = incident.incidentId;
+  const { hasDigest, incidentId } = incident;
 
   useEffect(() => {
-    if (error.digest || capturedErrorRef.current === error) {
+    if (hasDigest || capturedErrorRef.current === error) {
       return;
     }
 
@@ -39,7 +41,7 @@ export default function Error({ error, reset }: ErrorBoundaryProps) {
     } catch {
       // Reporting must never prevent the recovery UI from rendering.
     }
-  }, [error, incidentId]);
+  }, [error, hasDigest, incidentId]);
 
   return (
     <div

@@ -583,6 +583,24 @@ describe('NewDraftPage — createDraft result handling', () => {
     expect(mockPush).not.toHaveBeenCalled();
   });
 
+  it('shows the inline fallback when client error capture fails', async () => {
+    const error = new Error('database unavailable');
+    (createDraft as jest.Mock).mockRejectedValue(error);
+    mockCaptureClientError.mockImplementation(() => {
+      throw new Error('Sentry unavailable');
+    });
+    render(<NewDraftPage />);
+    fireEvent.change(screen.getByTestId('draft-name-input'), { target: { value: 'Test Draft' } });
+    fireEvent.submit(screen.getByTestId('new-draft-form'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('draft-form-error')).toHaveTextContent(
+        'Draft creation failed. Please try again.',
+      );
+    });
+    expect(mockPush).not.toHaveBeenCalled();
+  });
+
   it('blocks submit client-side when team handles collide case-insensitively', () => {
     render(<NewDraftPage />);
     fireEvent.change(screen.getByTestId('draft-name-input'), { target: { value: 'Test Draft' } });

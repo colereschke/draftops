@@ -1,11 +1,8 @@
 import * as Sentry from '@sentry/nextjs';
 import type { Instrumentation } from 'next';
 
+import { deriveIncidentDetails } from '@/lib/incident';
 import { logServerError } from '@/lib/observability';
-
-interface ErrorWithDigest extends Error {
-  digest?: string;
-}
 
 export async function register(): Promise<void> {
   if (process.env.NEXT_RUNTIME === 'edge') {
@@ -17,7 +14,7 @@ export async function register(): Promise<void> {
 }
 
 export const onRequestError: Instrumentation.onRequestError = (error, request, errorContext) => {
-  const incidentId = getIncidentId(error);
+  const { incidentId } = deriveIncidentDetails(error);
   const draftId = getDraftId(request.path);
   const requestId = getHeader(request.headers, 'x-vercel-id');
 
@@ -43,17 +40,6 @@ export const onRequestError: Instrumentation.onRequestError = (error, request, e
     ...(requestId ? { requestId } : {}),
   });
 };
-
-function getIncidentId(error: unknown): string {
-  if (error instanceof Error && typeof (error as ErrorWithDigest).digest === 'string') {
-    const digest = (error as ErrorWithDigest).digest;
-    if (digest) {
-      return digest;
-    }
-  }
-
-  return globalThis.crypto.randomUUID();
-}
 
 function getDraftId(path: string): string | undefined {
   try {

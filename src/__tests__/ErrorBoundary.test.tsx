@@ -43,4 +43,19 @@ describe('error boundaries', () => {
     expect(screen.queryByText(/password|secret/i)).not.toBeInTheDocument();
     await waitFor(() => expect(Sentry.captureException).not.toHaveBeenCalled());
   });
+
+  it('hides an unsafe server digest while preserving server-error capture suppression', async () => {
+    render(
+      <GlobalErrorBoundary
+        error={Object.assign(new Error('password=secret'), { digest: 'password=secret' })}
+        reset={jest.fn()}
+      />,
+    );
+
+    expect(screen.getByTestId('error-incident-id')).toHaveTextContent(
+      /^Incident ID: [a-f0-9-]{36}$/i,
+    );
+    expect(screen.queryByText(/password|secret/i)).not.toBeInTheDocument();
+    await waitFor(() => expect(Sentry.captureException).not.toHaveBeenCalled());
+  });
 });

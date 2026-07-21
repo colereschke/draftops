@@ -52,4 +52,21 @@ describe('onRequestError', () => {
       }),
     );
   });
+
+  it('replaces an unsafe digest with an opaque incident ID before tagging or logging', async () => {
+    await onRequestError(
+      Object.assign(new Error('database unavailable'), { digest: 'password=secret' }),
+      {
+        path: '/draft/42',
+        method: 'GET',
+        headers: {},
+      },
+      { routePath: '/draft/[draftId]', routeType: 'render' } as never,
+    );
+
+    const incidentId = mockSetTag.mock.calls.find(([key]) => key === 'incident.id')?.[1];
+    expect(incidentId).toMatch(/^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$/i);
+    expect(incidentId).not.toContain('password');
+    expect(logServerError).toHaveBeenCalledWith(expect.objectContaining({ incidentId }));
+  });
 });

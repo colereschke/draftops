@@ -284,8 +284,12 @@ export default function NewDraftPage() {
       } catch (error) {
         const reportedError =
           error instanceof Error ? error : new Error('Unknown draft creation error');
-        captureClientError(reportedError, createIncidentId());
         setError('Draft creation failed. Please try again.');
+        try {
+          captureClientError(reportedError, createIncidentId());
+        } catch {
+          // Reporting must never prevent the inline recovery UI from rendering.
+        }
       }
     });
   }

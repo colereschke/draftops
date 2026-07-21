@@ -1,3 +1,4 @@
+import 'jest-axe/extend-expect';
 import '@testing-library/jest-dom';
 
 // Some test files run under the Node test environment (API routes, server actions),

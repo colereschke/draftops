@@ -353,3 +353,21 @@ Source: ETR dynasty rankings CSV (~267 players), normalized ×5 to a $1,000 sour
 **Don't be a sycophant!** The last thing I want in development is a yes man. If you agree with me on something that's fine, but please please think critically about my choices in development and if you have questions or concerns bring them up and challenge me if need be.
 
 **Always pull main before branching or creating a worktree.** Before creating any new branch or worktree, run `git pull origin main` (or `git fetch && git merge origin/main`) in the main repo first. A branch created from a stale main silently excludes in-flight work and forces the implementer to either duplicate it or rebase later. One pull prevents both.
+
+## Implementation Continuity
+
+Once a design/spec is approved and implementation begins:
+
+- Create or maintain a persistent goal for completing the entire approved plan.
+- Execute all plan tasks continuously, including tests, task reviews, fixes,
+  final review, and verification.
+- Progress/status messages are informational commentary only. Immediately
+  continue working after sending them.
+- Never end the root-agent turn while implementation tasks or review loops
+  remain.
+- When using subagents, wait for their results and continue orchestration. Do
+  not return a final response merely because one subagent or plan task finished.
+- For inline execution, continue directly to the next task without asking
+  permission.
+- Stop only when the full plan is complete or when a genuine blocker requires
+  a material user decision.

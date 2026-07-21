@@ -2,7 +2,7 @@
 
 Audit date: 2026-07-16
 
-Status reconciliation: 2026-07-19, through merged PR #72.
+Status reconciliation: 2026-07-21, through merged PR #79.
 
 This is the authoritative engineering-hardening backlog for DraftOps. It replaces the
 2026-07-14 Workstreams A-H audit while preserving a mapping to that work and recording the
@@ -472,7 +472,7 @@ projection work inside one long interactive transaction, which is risky under Ne
 
 ### HARD-008 - Harden rankings ingestion and manual matching
 
-- **Status:** READY
+- **Status:** COMPLETE - merged in PR #74 (`d9f26a4`)
 - **Effort:** Medium
 
 #### Problem
@@ -506,7 +506,7 @@ within the ranking set.
 
 ### HARD-009 - Harden Sleeper imports and settings translation
 
-- **Status:** READY
+- **Status:** COMPLETE - merged in PR #73 (`cea8f17`)
 - **Effort:** Medium
 
 #### Problem
@@ -587,7 +587,7 @@ is immediate, and the modal is not a semantic form.
 
 ### HARD-011 - Add bid history, export, and recovery controls
 
-- **Status:** READY
+- **Status:** COMPLETE - merged in PR #75 (`d921d56`)
 - **Effort:** Medium to large
 
 #### Problem
@@ -634,8 +634,8 @@ backstop tracked by HARD-013.
 
 Verification included clean-database migration/seed checks, the real-PostgreSQL integration suite,
 production build, 49 projection-tooling tests plus Ruff/mypy, and four Chromium smoke specs.
-Accessibility-specific regression coverage remains owned by HARD-015 rather than keeping this CI
-and production-smoke ticket open.
+Accessibility-specific regression coverage remains owned by HARD-015, which is now complete,
+rather than keeping this CI and production-smoke ticket open.
 
 #### Problem
 
@@ -713,7 +713,7 @@ dependency despite being development tooling.
 
 ### HARD-014 - Replace raw error leakage with structured observability
 
-- **Status:** READY
+- **Status:** COMPLETE - merged in PR #78 (`e4c9c04`)
 - **Effort:** Medium
 
 #### Problem
@@ -747,7 +747,7 @@ Logging lacks consistent request, deployment, user, and draft correlation.
 
 ### HARD-015 - Address accessibility and contrast defects
 
-- **Status:** READY
+- **Status:** COMPLETE - merged in PR #77 (`360d3cf`)
 - **Effort:** Medium to large
 
 #### Problem
@@ -786,7 +786,7 @@ reduced-motion coverage. Muted/error color tokens include normal-text combinatio
 
 ### HARD-016 - Make configuration labels truthful
 
-- **Status:** READY
+- **Status:** COMPLETE - merged in PR #76 (`95c04c1`)
 - **Effort:** Small to medium
 - **Sequence:** After HARD-003/HARD-004
 
@@ -821,7 +821,7 @@ Superflex tool.
 
 ### HARD-017 - Reduce large client payloads and background work
 
-- **Status:** READY
+- **Status:** COMPLETE - merged in PR #79 (`96bd16c`)
 - **Effort:** Medium
 
 #### Problem
@@ -853,6 +853,12 @@ perform repeated linear scans.
 - Sleeper search sends a bounded result set.
 - Polls neither overlap nor run continuously in hidden tabs.
 - Value-sheet interactions remain responsive on representative mobile hardware.
+
+#### Residual follow-up
+
+The only remaining work is to create an uptime monitor for
+`https://<your-production-domain>/api/health` and alert whenever it returns anything other than
+HTTP 200, once production traffic is flowing through the app.
 
 ### HARD-018 - Preserve working context in URLs and add route loading states
 
@@ -1024,14 +1030,15 @@ behavior is still moving would increase conflict and regression risk.
 
 Do not assign overlapping items to concurrent sessions without explicit coordination.
 
-Completed on `main`: HARD-001 through HARD-006, HARD-010, HARD-012, and HARD-013.
+Completed on `main`: HARD-001 through HARD-006, HARD-008, HARD-009, HARD-010, HARD-011,
+HARD-012, HARD-013, HARD-014, HARD-015, HARD-016, and HARD-017.
 
-1. **Integrate current draft/input work:** HARD-007
-2. **Input/service boundaries:** HARD-008 and HARD-009 may then run independently
-3. **Mutation recovery:** HARD-011
-4. **Settings truthfulness:** HARD-016
-5. **Production operations:** HARD-014, HARD-019, HARD-020
-6. **UX/performance:** HARD-015, HARD-017, HARD-018
+1. **Integrate current draft/input work:** ~~HARD-007~~
+2. **Input/service boundaries:** ~~HARD-008~~ and ~~HARD-009~~ may then run independently
+3. **Mutation recovery:** ~~HARD-011~~
+4. **Settings truthfulness:** ~~HARD-016~~
+5. **Production operations:** ~~HARD-014~~, HARD-019, HARD-020
+6. **UX/performance:** ~~HARD-015~~, ~~HARD-017~~, HARD-018
 7. **Cleanup:** HARD-021 -> HARD-022
 
 The original P0 gate, HARD-001 through HARD-004, is complete on `main`. The next integration target
@@ -1050,9 +1057,8 @@ subtly wrong across concurrency, migrations, or valuation semantics:
 
 The original strongest-model items (HARD-001, HARD-002, HARD-003, HARD-005, and HARD-006) are
 complete and are no longer assignments. Use the strongest model as primary for remaining work only
-when HARD-011 introduces recovery schema/restore semantics, when HARD-007's deferred optimization
-changes projection transaction boundaries, or when a new production migration/concurrency design
-is added to an existing ticket.
+when HARD-007's deferred optimization changes projection transaction boundaries, or when a new
+production migration/concurrency design is added to an existing ticket.
 
 ### Default model as implementer, strongest-model review required
 
@@ -1060,11 +1066,11 @@ The following items are reasonable default-model assignments when scoped to one 
 their required tests, but their architecture or final diff should be reviewed by the strongest
 available model before merge:
 
-- HARD-007 - draft validation and transaction shortening
-- HARD-009 - Sleeper service and settings hardening
-- HARD-011 - bid audit, export, and recovery design
-- HARD-014 - error ingestion and observability
-- HARD-017 - performance changes after measurement
+- ~~HARD-007~~ - draft validation and transaction shortening
+- ~~HARD-009~~ - Sleeper service and settings hardening
+- ~~HARD-011~~ - bid audit, export, and recovery design
+- ~~HARD-014~~ - error ingestion and observability
+- ~~HARD-017~~ - performance changes after measurement
 - HARD-019 - CSP, security headers, and proxy migration
 - HARD-020 - Prisma initialization and serverless pooling
 - HARD-022 - behavior-preserving component decomposition
@@ -1074,9 +1080,10 @@ available model before merge:
 These are sufficiently bounded for a capable default-model session to implement and verify without
 a mandatory strongest-model review beyond the repository's normal PR process:
 
-- HARD-008 - rankings and CSV validation
-- HARD-015 - accessibility and contrast
-- HARD-016 - truthful settings labels
+- ~~HARD-008~~ - rankings and CSV validation
+- ~~HARD-015~~ - accessibility and contrast
+- ~~HARD-016~~ - truthful settings labels
+- ~~HARD-017~~ - performance changes after measurement
 - HARD-018 - URL state and route loading states
 - HARD-021 - setup and documentation repair
 
@@ -1176,16 +1183,16 @@ the remaining browser smoke coverage. No Workstream C follow-up remains.
 
 ## Legacy A-H mapping
 
-| Prior workstream                             | Current disposition                                          | Replacement items                      |
-| -------------------------------------------- | ------------------------------------------------------------ | -------------------------------------- |
-| A - Auction Data Integrity                   | Superseded; replacement work complete on `main`              | HARD-002, HARD-005                     |
-| B - Draft Lifecycle Enforcement              | Superseded; replacement work complete on `main`              | HARD-001                               |
-| C - Trustworthy Quality Gate                 | Complete, including broader CI and browser coverage          | HARD-012                               |
-| D - Mutation Failure & Concurrency UX        | Mutation UX complete; bid recovery remains                   | HARD-010, HARD-011                     |
-| E - Settings Truthfulness & Navigation State | Valuation complete; settings/navigation work remains         | HARD-003, HARD-016, HARD-018           |
-| F - Accessibility & Responsive Performance   | Not implemented; expanded                                    | HARD-015, HARD-017                     |
-| G - Error, API & External-Service Hardening  | Not implemented; expanded                                    | HARD-009, HARD-014, HARD-019           |
-| H - Codebase Simplification                  | Canonical stats complete; HARD-007 ready; other work remains | HARD-004, HARD-007, HARD-020, HARD-022 |
+| Prior workstream                             | Current disposition                                                   | Replacement items                      |
+| -------------------------------------------- | --------------------------------------------------------------------- | -------------------------------------- |
+| A - Auction Data Integrity                   | Superseded; replacement work complete on `main`                       | HARD-002, HARD-005                     |
+| B - Draft Lifecycle Enforcement              | Superseded; replacement work complete on `main`                       | HARD-001                               |
+| C - Trustworthy Quality Gate                 | Complete, including broader CI and browser coverage                   | HARD-012                               |
+| D - Mutation Failure & Concurrency UX        | Mutation UX and bid recovery complete                                 | HARD-010, ~~HARD-011~~                 |
+| E - Settings Truthfulness & Navigation State | Valuation and settings truthfulness complete; navigation work remains | HARD-003, ~~HARD-016~~, HARD-018       |
+| F - Accessibility & Responsive Performance   | Accessibility complete; responsive performance remains                | ~~HARD-015~~, ~~HARD-017~~             |
+| G - Error, API & External-Service Hardening  | Service hardening partly complete; security headers remain            | ~~HARD-009~~, ~~HARD-014~~, HARD-019   |
+| H - Codebase Simplification                  | Canonical stats complete; HARD-007 ready; other work remains          | HARD-004, HARD-007, HARD-020, HARD-022 |
 
-New findings without a direct prior-workstream equivalent are HARD-006 (complete), HARD-008
-(ready), HARD-013 (complete), and HARD-021 (ready).
+New findings without a direct prior-workstream equivalent are HARD-006 (complete), HARD-013
+(complete), and HARD-021 (ready).

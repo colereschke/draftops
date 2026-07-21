@@ -98,6 +98,8 @@ async function deleteFixture(fixture: RelationshipFixture): Promise<void> {
   const teamIds = [fixture.first.teamId, fixture.second.teamId];
   const playerIds = [fixture.first.playerId, fixture.second.playerId];
 
+  await prisma.bidAuditEvent.deleteMany({ where: { draftId: { in: draftIds } } });
+  await prisma.draftCompletionSnapshot.deleteMany({ where: { draftId: { in: draftIds } } });
   await prisma.auctionResult.deleteMany({
     where: {
       OR: [
@@ -304,6 +306,7 @@ describe('same-draft relationships against PostgreSQL', () => {
         AND indexname = ANY(ARRAY[
           'Team_draftId_sleeperRosterId_key',
           'AuctionResult_draftId_playerId_key',
+          'AuctionResult_active_draft_player_key',
           'Player_draftId_futurePickOriginHandle_idx',
           'PlayerWatchlist_draftId_idx',
           'NominatedPlayer_draftId_idx',
@@ -314,13 +317,23 @@ describe('same-draft relationships against PostgreSQL', () => {
     expect(new Set(indexes.map((index) => index.indexname))).toEqual(
       new Set([
         'Team_draftId_sleeperRosterId_key',
-        'AuctionResult_draftId_playerId_key',
+        'AuctionResult_active_draft_player_key',
         'Player_draftId_futurePickOriginHandle_idx',
         'PlayerWatchlist_draftId_idx',
         'NominatedPlayer_draftId_idx',
         'DraftPlayerValue_draftId_idx',
       ]),
     );
+
+    const activeBidIndex = await prisma.$queryRaw<Array<{ indexdef: string }>>`
+      SELECT indexdef
+      FROM pg_indexes
+      WHERE schemaname = current_schema()
+        AND indexname = 'AuctionResult_active_draft_player_key'
+    `;
+
+    expect(activeBidIndex).toHaveLength(1);
+    expect(activeBidIndex[0].indexdef).toContain('WHERE ("deletedAt" IS NULL)');
   });
 
   it.each([

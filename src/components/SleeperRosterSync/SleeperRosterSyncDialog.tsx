@@ -17,6 +17,7 @@ import type {
 } from '@/lib/sleeper-roster-actions';
 import type { SleeperRosterPreview } from '@/lib/sleeperRosterSync';
 import { POS_COLORS } from '@/lib/posColors';
+import MutationStatus from '@/components/MutationStatus';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
@@ -75,6 +76,7 @@ export default function SleeperRosterSyncDialog({
   const [view, setView] = useState<SyncView>(initiallyConfigured ? 'loading' : 'configuration');
   const [preview, setPreview] = useState<SleeperRosterPreview | null>(null);
   const [error, setError] = useState<string>('');
+  const [successMessage, setSuccessMessage] = useState('');
   const [leagueId, setLeagueId] = useState<string>(sleeperLeagueId ?? '');
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
   const [matchCandidates, setMatchCandidates] = useState<SleeperRosterCandidate[] | null>(null);
@@ -221,6 +223,7 @@ export default function SleeperRosterSyncDialog({
       }
       setPreview(response.preview);
       setView('preview');
+      setSuccessMessage('Sleeper roster mapping saved.');
     } catch {
       setError('Unable to save the Sleeper roster mapping. Please try again.');
       setView('configuration');
@@ -251,6 +254,7 @@ export default function SleeperRosterSyncDialog({
     }
 
     setError('');
+    setSuccessMessage('');
     setConflicts(new Map());
     try {
       const response = await logSleeperRosterCatchUp({ draftId, entries });
@@ -261,6 +265,7 @@ export default function SleeperRosterSyncDialog({
       setConflicts(
         new Map(response.conflicts.map((conflict) => [conflict.playerId, conflict.reason])),
       );
+      setSuccessMessage(`Imported ${entries.length} price${entries.length === 1 ? '' : 's'}.`);
       router.refresh();
     } catch {
       setError('Unable to save the catch-up results. Please try again.');
@@ -271,6 +276,7 @@ export default function SleeperRosterSyncDialog({
     <Dialog open onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-2xl">
         <DialogTitle>Sleeper roster catch-up</DialogTitle>
+        <MutationStatus message={error || successMessage} />
         {view === 'loading' && <p data-testid="sleeper-sync-loading">Loading Sleeper roster…</p>}
 
         {view === 'configuration' && (

@@ -320,4 +320,41 @@ describe('SleeperRosterSyncDialog', () => {
       }),
     );
   });
+
+  it('announces a failure through the shared live region', async () => {
+    mockPreview.mockResolvedValueOnce({ ok: false, code: 'sleeper_error' });
+    render(
+      <SleeperRosterSyncDialog
+        draftId={4}
+        teams={TEAMS}
+        initiallyConfigured={true}
+        sleeperLeagueId="league-1"
+        onClose={jest.fn()}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('mutation-status')).toHaveTextContent(/sleeper/i);
+    });
+  });
+
+  it('announces a successful catch-up import through the shared live region', async () => {
+    const user = userEvent.setup();
+    render(
+      <SleeperRosterSyncDialog
+        draftId={4}
+        teams={TEAMS}
+        initiallyConfigured={true}
+        onClose={jest.fn()}
+      />,
+    );
+    await screen.findByTestId('sleeper-sync-price-3');
+
+    await user.type(screen.getByTestId('sleeper-sync-price-3'), '42');
+    await user.click(screen.getByTestId('sleeper-sync-submit'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('mutation-status')).toHaveTextContent(/imported 1 price/i);
+    });
+  });
 });

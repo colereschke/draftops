@@ -1,4 +1,4 @@
-import { prisma } from '@/lib/db';
+import { disconnectPrisma, getPrisma } from '@/lib/db';
 
 interface DraftFixture {
   draftId: number;
@@ -29,14 +29,14 @@ function usesIndex(plan: QueryPlanNode, indexName: string): boolean {
 }
 
 async function createDraftFixture(label: string): Promise<DraftFixture> {
-  const draft = await prisma.draft.create({
+  const draft = await getPrisma().draft.create({
     data: { name: `${label} ${crypto.randomUUID()}`, budget: 1000, rosterSize: 30 },
   });
-  const team = await prisma.team.create({
+  const team = await getPrisma().team.create({
     data: { handle: `${label}-${draft.id}`, budget: 1000, draftId: draft.id },
   });
   const playerName = `${label} Player ${draft.id}`;
-  const player = await prisma.player.create({
+  const player = await getPrisma().player.create({
     data: {
       name: playerName,
       nflTeam: 'BUF',
@@ -61,11 +61,11 @@ async function createFixture(): Promise<RelationshipFixture> {
   const [first, second, projectionSource] = await Promise.all([
     createDraftFixture('first'),
     createDraftFixture('second'),
-    prisma.projectionSource.create({
+    getPrisma().projectionSource.create({
       data: { name: `hard-005-${crypto.randomUUID()}`, season: 2026 },
     }),
   ]);
-  const valueSet = await prisma.draftProjectionValueSet.create({
+  const valueSet = await getPrisma().draftProjectionValueSet.create({
     data: {
       draftId: first.draftId,
       projectionSourceId: projectionSource.id,
@@ -98,9 +98,9 @@ async function deleteFixture(fixture: RelationshipFixture): Promise<void> {
   const teamIds = [fixture.first.teamId, fixture.second.teamId];
   const playerIds = [fixture.first.playerId, fixture.second.playerId];
 
-  await prisma.bidAuditEvent.deleteMany({ where: { draftId: { in: draftIds } } });
-  await prisma.draftCompletionSnapshot.deleteMany({ where: { draftId: { in: draftIds } } });
-  await prisma.auctionResult.deleteMany({
+  await getPrisma().bidAuditEvent.deleteMany({ where: { draftId: { in: draftIds } } });
+  await getPrisma().draftCompletionSnapshot.deleteMany({ where: { draftId: { in: draftIds } } });
+  await getPrisma().auctionResult.deleteMany({
     where: {
       OR: [
         { draftId: { in: draftIds } },
@@ -109,24 +109,24 @@ async function deleteFixture(fixture: RelationshipFixture): Promise<void> {
       ],
     },
   });
-  await prisma.playerWatchlist.deleteMany({
+  await getPrisma().playerWatchlist.deleteMany({
     where: { OR: [{ draftId: { in: draftIds } }, { playerId: { in: playerIds } }] },
   });
-  await prisma.nominatedPlayer.deleteMany({
+  await getPrisma().nominatedPlayer.deleteMany({
     where: { OR: [{ draftId: { in: draftIds } }, { playerId: { in: playerIds } }] },
   });
-  await prisma.draftPlayerValue.deleteMany({
+  await getPrisma().draftPlayerValue.deleteMany({
     where: { OR: [{ draftId: { in: draftIds } }, { playerId: { in: playerIds } }] },
   });
-  await prisma.draftProjectionValueSet.deleteMany({ where: { id: fixture.valueSetId } });
-  await prisma.draft.updateMany({
+  await getPrisma().draftProjectionValueSet.deleteMany({ where: { id: fixture.valueSetId } });
+  await getPrisma().draft.updateMany({
     where: { id: { in: draftIds } },
     data: { ownerTeamId: null },
   });
-  await prisma.player.deleteMany({ where: { id: { in: playerIds } } });
-  await prisma.team.deleteMany({ where: { id: { in: teamIds } } });
-  await prisma.draft.deleteMany({ where: { id: { in: draftIds } } });
-  await prisma.projectionSource.deleteMany({ where: { id: fixture.projectionSourceId } });
+  await getPrisma().player.deleteMany({ where: { id: { in: playerIds } } });
+  await getPrisma().team.deleteMany({ where: { id: { in: teamIds } } });
+  await getPrisma().draft.deleteMany({ where: { id: { in: draftIds } } });
+  await getPrisma().projectionSource.deleteMany({ where: { id: fixture.projectionSourceId } });
 }
 
 describe('same-draft relationships against PostgreSQL', () => {
@@ -141,12 +141,12 @@ describe('same-draft relationships against PostgreSQL', () => {
   });
 
   afterAll(async () => {
-    await prisma.$disconnect();
+    await disconnectPrisma();
   });
 
   it('rejects an owner team from another draft', async () => {
     await expect(
-      prisma.draft.update({
+      getPrisma().draft.update({
         where: { id: fixture.first.draftId },
         data: { ownerTeamId: fixture.second.teamId },
       }),
@@ -155,7 +155,7 @@ describe('same-draft relationships against PostgreSQL', () => {
 
   it('rejects a bid team from another draft', async () => {
     await expect(
-      prisma.auctionResult.create({
+      getPrisma().auctionResult.create({
         data: bidData({
           draftId: fixture.first.draftId,
           teamId: fixture.second.teamId,
@@ -168,7 +168,7 @@ describe('same-draft relationships against PostgreSQL', () => {
 
   it('rejects a bid player from another draft', async () => {
     await expect(
-      prisma.auctionResult.create({
+      getPrisma().auctionResult.create({
         data: bidData({
           draftId: fixture.first.draftId,
           teamId: fixture.first.teamId,
@@ -181,7 +181,7 @@ describe('same-draft relationships against PostgreSQL', () => {
 
   it('rejects a watchlist player from another draft', async () => {
     await expect(
-      prisma.playerWatchlist.create({
+      getPrisma().playerWatchlist.create({
         data: {
           draftId: fixture.first.draftId,
           playerId: fixture.second.playerId,
@@ -193,7 +193,7 @@ describe('same-draft relationships against PostgreSQL', () => {
 
   it('rejects a nominated player from another draft', async () => {
     await expect(
-      prisma.nominatedPlayer.create({
+      getPrisma().nominatedPlayer.create({
         data: {
           draftId: fixture.first.draftId,
           playerId: fixture.second.playerId,
@@ -205,7 +205,7 @@ describe('same-draft relationships against PostgreSQL', () => {
 
   it('rejects a draft player value for a player from another draft', async () => {
     await expect(
-      prisma.draftPlayerValue.create({
+      getPrisma().draftPlayerValue.create({
         data: {
           draftId: fixture.first.draftId,
           playerId: fixture.second.playerId,
@@ -220,13 +220,13 @@ describe('same-draft relationships against PostgreSQL', () => {
 
   it('allows matching same-draft relationships', async () => {
     await expect(
-      prisma.draft.update({
+      getPrisma().draft.update({
         where: { id: fixture.first.draftId },
         data: { ownerTeamId: fixture.first.teamId },
       }),
     ).resolves.toMatchObject({ ownerTeamId: fixture.first.teamId });
     await expect(
-      prisma.auctionResult.create({
+      getPrisma().auctionResult.create({
         data: bidData({
           draftId: fixture.first.draftId,
           teamId: fixture.first.teamId,
@@ -236,7 +236,7 @@ describe('same-draft relationships against PostgreSQL', () => {
       }),
     ).resolves.toMatchObject({ draftId: fixture.first.draftId });
     await expect(
-      prisma.playerWatchlist.create({
+      getPrisma().playerWatchlist.create({
         data: {
           draftId: fixture.first.draftId,
           playerId: fixture.first.playerId,
@@ -245,7 +245,7 @@ describe('same-draft relationships against PostgreSQL', () => {
       }),
     ).resolves.toMatchObject({ draftId: fixture.first.draftId });
     await expect(
-      prisma.nominatedPlayer.create({
+      getPrisma().nominatedPlayer.create({
         data: {
           draftId: fixture.first.draftId,
           playerId: fixture.first.playerId,
@@ -254,7 +254,7 @@ describe('same-draft relationships against PostgreSQL', () => {
       }),
     ).resolves.toMatchObject({ draftId: fixture.first.draftId });
     await expect(
-      prisma.draftPlayerValue.create({
+      getPrisma().draftPlayerValue.create({
         data: {
           draftId: fixture.first.draftId,
           playerId: fixture.first.playerId,
@@ -268,7 +268,7 @@ describe('same-draft relationships against PostgreSQL', () => {
   });
 
   it('restricts deleting a referenced player', async () => {
-    await prisma.playerWatchlist.create({
+    await getPrisma().playerWatchlist.create({
       data: {
         draftId: fixture.first.draftId,
         playerId: fixture.first.playerId,
@@ -277,12 +277,12 @@ describe('same-draft relationships against PostgreSQL', () => {
     });
 
     await expect(
-      prisma.player.delete({ where: { id: fixture.first.playerId } }),
+      getPrisma().player.delete({ where: { id: fixture.first.playerId } }),
     ).rejects.toMatchObject({ code: 'P2003' });
   });
 
   it('restricts changing a referenced player draft', async () => {
-    await prisma.playerWatchlist.create({
+    await getPrisma().playerWatchlist.create({
       data: {
         draftId: fixture.first.draftId,
         playerId: fixture.first.playerId,
@@ -291,7 +291,7 @@ describe('same-draft relationships against PostgreSQL', () => {
     });
 
     await expect(
-      prisma.player.update({
+      getPrisma().player.update({
         where: { id: fixture.first.playerId },
         data: { draftId: fixture.second.draftId },
       }),
@@ -299,7 +299,7 @@ describe('same-draft relationships against PostgreSQL', () => {
   });
 
   it('provides a draft-leading index for every common child query', async () => {
-    const indexes = await prisma.$queryRaw<Array<{ indexname: string; tablename: string }>>`
+    const indexes = await getPrisma().$queryRaw<Array<{ indexname: string; tablename: string }>>`
       SELECT indexname, tablename
       FROM pg_indexes
       WHERE schemaname = current_schema()
@@ -325,7 +325,7 @@ describe('same-draft relationships against PostgreSQL', () => {
       ]),
     );
 
-    const activeBidIndex = await prisma.$queryRaw<Array<{ indexdef: string }>>`
+    const activeBidIndex = await getPrisma().$queryRaw<Array<{ indexdef: string }>>`
       SELECT indexdef
       FROM pg_indexes
       WHERE schemaname = current_schema()
@@ -340,7 +340,7 @@ describe('same-draft relationships against PostgreSQL', () => {
     ['PlayerWatchlist', 'PlayerWatchlist_draftId_idx'],
     ['NominatedPlayer', 'NominatedPlayer_draftId_idx'],
   ])('offers an index plan for %s draft lookups', async (tableName, indexName) => {
-    const rows = await prisma.$transaction(async (tx) => {
+    const rows = await getPrisma().$transaction(async (tx) => {
       await tx.$executeRawUnsafe('SET LOCAL enable_seqscan = off');
       return tx.$queryRawUnsafe<QueryPlanRow[]>(
         `EXPLAIN (FORMAT JSON) SELECT id FROM "${tableName}" WHERE "draftId" = $1`,

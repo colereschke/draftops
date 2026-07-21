@@ -9,9 +9,9 @@ const mockFindFirst = jest.fn();
 
 jest.mock('@/auth', () => ({ auth: () => mockAuth() }));
 jest.mock('@/lib/db', () => ({
-  prisma: {
+  getPrisma: () => ({
     draft: { findFirst: (...args: unknown[]) => mockFindFirst(...args) },
-  },
+  }),
 }));
 
 const MOCK_SESSION = { user: { id: '123456789', name: 'Cole' } };

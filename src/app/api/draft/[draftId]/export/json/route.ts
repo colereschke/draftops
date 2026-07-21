@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/auth';
-import { prisma } from '@/lib/db';
+import { getPrisma } from '@/lib/db';
 import { getDraft } from '@/lib/draft';
 import { serializeDraftExport } from '@/lib/draftExport';
 
@@ -27,16 +27,16 @@ export async function GET(
   if (!draft) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
   const [bids, auditEvents, completionSnapshot] = await Promise.all([
-    prisma.auctionResult.findMany({
+    getPrisma().auctionResult.findMany({
       where: { draftId, deletedAt: null },
       include: { team: { select: { id: true, handle: true, displayName: true } } },
       orderBy: { id: 'asc' },
     }),
-    prisma.bidAuditEvent.findMany({
+    getPrisma().bidAuditEvent.findMany({
       where: { draftId },
       orderBy: [{ occurredAt: 'asc' }, { id: 'asc' }],
     }),
-    prisma.draftCompletionSnapshot.findUnique({ where: { draftId } }),
+    getPrisma().draftCompletionSnapshot.findUnique({ where: { draftId } }),
   ]);
 
   const body = JSON.stringify(

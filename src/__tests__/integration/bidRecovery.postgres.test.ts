@@ -1,5 +1,5 @@
 import { Client } from 'pg';
-import { prisma } from '@/lib/db';
+import { disconnectPrisma, getPrisma } from '@/lib/db';
 import { createBidRecord, deleteBidRecord, restoreBidRecord } from '@/lib/bidMutation';
 import { completeOwnedDraft } from '@/lib/draftMutation';
 
@@ -14,7 +14,7 @@ interface Fixture {
 }
 
 async function createFixture(): Promise<Fixture> {
-  const draft = await prisma.draft.create({
+  const draft = await getPrisma().draft.create({
     data: {
       name: `Bid recovery ${crypto.randomUUID()}`,
       ownerId,
@@ -24,10 +24,14 @@ async function createFixture(): Promise<Fixture> {
     },
   });
   const [firstTeam, secondTeam] = await Promise.all([
-    prisma.team.create({ data: { handle: `first-${draft.id}`, budget: 1000, draftId: draft.id } }),
-    prisma.team.create({ data: { handle: `second-${draft.id}`, budget: 1000, draftId: draft.id } }),
+    getPrisma().team.create({
+      data: { handle: `first-${draft.id}`, budget: 1000, draftId: draft.id },
+    }),
+    getPrisma().team.create({
+      data: { handle: `second-${draft.id}`, budget: 1000, draftId: draft.id },
+    }),
   ]);
-  const player = await prisma.player.create({
+  const player = await getPrisma().player.create({
     data: {
       name: `Recovery player ${draft.id}`,
       nflTeam: 'BUF',
@@ -52,14 +56,14 @@ async function createFixture(): Promise<Fixture> {
 }
 
 async function deleteFixture(draftId: number): Promise<void> {
-  await prisma.$transaction([
-    prisma.bidAuditEvent.deleteMany({ where: { draftId } }),
-    prisma.draftCompletionSnapshot.deleteMany({ where: { draftId } }),
-    prisma.auctionResult.deleteMany({ where: { draftId } }),
-    prisma.player.deleteMany({ where: { draftId } }),
-    prisma.draft.update({ where: { id: draftId }, data: { ownerTeamId: null } }),
-    prisma.team.deleteMany({ where: { draftId } }),
-    prisma.draft.delete({ where: { id: draftId } }),
+  await getPrisma().$transaction([
+    getPrisma().bidAuditEvent.deleteMany({ where: { draftId } }),
+    getPrisma().draftCompletionSnapshot.deleteMany({ where: { draftId } }),
+    getPrisma().auctionResult.deleteMany({ where: { draftId } }),
+    getPrisma().player.deleteMany({ where: { draftId } }),
+    getPrisma().draft.update({ where: { id: draftId }, data: { ownerTeamId: null } }),
+    getPrisma().team.deleteMany({ where: { draftId } }),
+    getPrisma().draft.delete({ where: { id: draftId } }),
   ]);
 }
 
@@ -83,7 +87,7 @@ describe('bid recovery against PostgreSQL', () => {
   });
 
   afterAll(async () => {
-    await prisma.$disconnect();
+    await disconnectPrisma();
   });
 
   it('supersedes a deleted bid when a replacement claims its player and rejects restoration', async () => {
@@ -115,13 +119,13 @@ describe('bid recovery against PostgreSQL', () => {
     ).resolves.toEqual({ ok: false, code: 'BID_SUPERSEDED' });
 
     await expect(
-      prisma.auctionResult.findUnique({
+      getPrisma().auctionResult.findUnique({
         where: { id: firstBid.data.bidId },
         select: { deletedAt: true, supersededAt: true },
       }),
     ).resolves.toEqual({ deletedAt: expect.any(Date), supersededAt: expect.any(Date) });
     await expect(
-      prisma.bidAuditEvent.findMany({
+      getPrisma().bidAuditEvent.findMany({
         where: { draftId: fixture.draftId, bidId: firstBid.data.bidId },
         select: { type: true },
         orderBy: { id: 'asc' },
@@ -157,7 +161,7 @@ describe('bid recovery against PostgreSQL', () => {
     await expect(completion).resolves.toEqual({ ok: true, data: null });
     await expect(restore).resolves.toEqual({ ok: false, code: 'DRAFT_COMPLETE' });
     await expect(
-      prisma.draftCompletionSnapshot.count({ where: { draftId: fixture.draftId } }),
+      getPrisma().draftCompletionSnapshot.count({ where: { draftId: fixture.draftId } }),
     ).resolves.toBe(1);
   });
 
@@ -173,7 +177,7 @@ describe('bid recovery against PostgreSQL', () => {
     });
     if (!bid.ok) throw new Error(`Could not create fixture bid: ${bid.code}`);
 
-    await prisma.$executeRawUnsafe(`
+    await getPrisma().$executeRawUnsafe(`
       CREATE FUNCTION fail_bid_recovery_audit_insert() RETURNS trigger AS $$
       BEGIN
         RAISE EXCEPTION 'forced audit insert failure';
@@ -188,13 +192,13 @@ describe('bid recovery against PostgreSQL', () => {
         deleteBidRecord({ userId: ownerId, draftId: fixture.draftId, bidId: bid.data.bidId }),
       ).rejects.toThrow('forced audit insert failure');
       await expect(
-        prisma.auctionResult.findUnique({
+        getPrisma().auctionResult.findUnique({
           where: { id: bid.data.bidId },
           select: { deletedAt: true },
         }),
       ).resolves.toEqual({ deletedAt: null });
     } finally {
-      await prisma.$executeRawUnsafe(`
+      await getPrisma().$executeRawUnsafe(`
         DROP TRIGGER IF EXISTS fail_bid_recovery_audit_insert ON "BidAuditEvent";
         DROP FUNCTION IF EXISTS fail_bid_recovery_audit_insert();
       `);
@@ -204,7 +208,7 @@ describe('bid recovery against PostgreSQL', () => {
   it('rolls back completion when its snapshot write fails', async () => {
     const fixture = await createFixture();
     fixtureIds.push(fixture.draftId);
-    await prisma.$executeRawUnsafe(`
+    await getPrisma().$executeRawUnsafe(`
       CREATE FUNCTION fail_bid_recovery_snapshot_insert() RETURNS trigger AS $$
       BEGIN
         RAISE EXCEPTION 'forced snapshot insert failure';
@@ -219,13 +223,13 @@ describe('bid recovery against PostgreSQL', () => {
         'forced snapshot insert failure',
       );
       await expect(
-        prisma.draft.findUnique({
+        getPrisma().draft.findUnique({
           where: { id: fixture.draftId },
           select: { status: true },
         }),
       ).resolves.toEqual({ status: 'ACTIVE' });
     } finally {
-      await prisma.$executeRawUnsafe(`
+      await getPrisma().$executeRawUnsafe(`
         DROP TRIGGER IF EXISTS fail_bid_recovery_snapshot_insert ON "DraftCompletionSnapshot";
         DROP FUNCTION IF EXISTS fail_bid_recovery_snapshot_insert();
       `);

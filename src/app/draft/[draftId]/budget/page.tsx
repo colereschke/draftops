@@ -1,6 +1,6 @@
 import { notFound } from 'next/navigation';
 import { auth } from '@/auth';
-import { prisma } from '@/lib/db';
+import { getPrisma } from '@/lib/db';
 import { getDraft } from '@/lib/draft';
 import { getActiveDraftPlayers } from '@/lib/activeDraftPlayers';
 import { computeDraftTeamStats } from '@/lib/computeDraftTeamStats';
@@ -20,11 +20,11 @@ export default async function BudgetPage({ params }: { params: Promise<{ draftId
   if (!draft) notFound();
 
   const [teams, nominated] = await Promise.all([
-    prisma.team.findMany({
+    getPrisma().team.findMany({
       where: { draftId },
       include: { results: { where: { deletedAt: null } } },
     }),
-    prisma.nominatedPlayer.findMany({ where: { draftId }, orderBy: { createdAt: 'desc' } }),
+    getPrisma().nominatedPlayer.findMany({ where: { draftId }, orderBy: { createdAt: 'desc' } }),
   ]);
 
   const bids = teams.flatMap((team) =>

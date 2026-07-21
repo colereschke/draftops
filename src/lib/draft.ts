@@ -1,5 +1,5 @@
 import { cache } from 'react';
-import { prisma } from '@/lib/db';
+import { getPrisma } from '@/lib/db';
 import type { Prisma } from '@prisma/client';
 
 export type DraftWithOwnerTeam = Prisma.DraftGetPayload<{ include: { ownerTeam: true } }>;
@@ -7,7 +7,7 @@ export type DraftWithOwnerTeam = Prisma.DraftGetPayload<{ include: { ownerTeam: 
 // Wrapped in React.cache so the layout and child page share the same DB result per request.
 export const getDraft = cache(
   async (userId: string, draftId: number): Promise<DraftWithOwnerTeam | null> => {
-    return prisma.draft.findFirst({
+    return getPrisma().draft.findFirst({
       where: { id: draftId, ownerId: userId },
       include: { ownerTeam: true },
     });
@@ -18,7 +18,7 @@ export const getDraft = cache(
 export async function getActiveDraftsForUser(
   userId: string,
 ): Promise<{ id: number; name: string }[]> {
-  return prisma.draft.findMany({
+  return getPrisma().draft.findMany({
     where: { ownerId: userId, status: 'ACTIVE' },
     select: { id: true, name: true },
     orderBy: { createdAt: 'asc' },

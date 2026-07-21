@@ -4,7 +4,9 @@ const mockFindUnique = jest.fn();
 
 jest.mock('@/auth', () => ({ auth: jest.fn().mockResolvedValue({ user: { id: 'owner' } }) }));
 jest.mock('@/lib/db', () => ({
-  prisma: { userRankingSet: { findUnique: (...args: unknown[]) => mockFindUnique(...args) } },
+  getPrisma: () => ({
+    userRankingSet: { findUnique: (...args: unknown[]) => mockFindUnique(...args) },
+  }),
 }));
 jest.mock('@/components/RankingsUpload/RankingsUploadForm', () => () => null);
 jest.mock('@/components/RankingsUpload/ResolveUnmatchedList', () => () => null);

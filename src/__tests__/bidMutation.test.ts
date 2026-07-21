@@ -37,9 +37,9 @@ const mockTx = {
 };
 
 jest.mock('@/lib/db', () => ({
-  prisma: {
+  getPrisma: () => ({
     $transaction: (...args: unknown[]) => mockTransaction(...args),
-  },
+  }),
 }));
 
 const ACTIVE_DRAFT = {

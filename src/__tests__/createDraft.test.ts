@@ -34,11 +34,11 @@ jest.mock('next/cache', () => ({
   revalidatePath: (...args: unknown[]) => mockRevalidatePath(...args),
 }));
 jest.mock('@/lib/db', () => ({
-  prisma: {
+  getPrisma: () => ({
     $transaction: (...args: unknown[]) => mockTransaction(...args),
     sleeperPlayer: { findMany: (...args: unknown[]) => mockSleeperPlayerFindMany(...args) },
     userRankingSet: { findUnique: (...args: unknown[]) => mockRankingSetFindUnique(...args) },
-  },
+  }),
 }));
 jest.mock('@/lib/projectionApplication', () => ({
   applyProjectionValuesToDraft: (...args: unknown[]) => mockApplyProjectionValuesToDraft(...args),

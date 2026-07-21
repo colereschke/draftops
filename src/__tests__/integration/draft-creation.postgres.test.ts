@@ -1,4 +1,4 @@
-import { prisma } from '@/lib/db';
+import { disconnectPrisma, getPrisma } from '@/lib/db';
 import { createDraft } from '@/lib/actions';
 import { players as BASE_PLAYERS } from '@/data/players';
 import { normalizeName } from '@/lib/sleeperNormalize';
@@ -17,7 +17,7 @@ interface ProjectionFixture {
 
 async function seedProjectionFixture(): Promise<ProjectionFixture> {
   const anchorPlayer = BASE_PLAYERS[0]; // Drake Maye / NE / QB
-  const sleeperPlayer = await prisma.sleeperPlayer.create({
+  const sleeperPlayer = await getPrisma().sleeperPlayer.create({
     data: {
       id: `${FIXTURE_PREFIX}-sleeper`,
       name: anchorPlayer.player,
@@ -26,14 +26,14 @@ async function seedProjectionFixture(): Promise<ProjectionFixture> {
       pos: anchorPlayer.pos,
     },
   });
-  const projectionSource = await prisma.projectionSource.create({
+  const projectionSource = await getPrisma().projectionSource.create({
     data: {
       name: FIXTURE_PREFIX,
       season: 2026,
       projectionDate: new Date('2026-07-01T00:00:00.000Z'),
     },
   });
-  await prisma.playerProjection.create({
+  await getPrisma().playerProjection.create({
     data: {
       sleeperId: sleeperPlayer.id,
       position: 'QB',
@@ -59,9 +59,9 @@ async function seedProjectionFixture(): Promise<ProjectionFixture> {
 }
 
 async function deleteProjectionFixture(fixture: ProjectionFixture): Promise<void> {
-  await prisma.playerProjection.deleteMany({ where: { sleeperId: fixture.sleeperPlayerId } });
-  await prisma.projectionSource.delete({ where: { id: fixture.projectionSourceId } });
-  await prisma.sleeperPlayer.delete({ where: { id: fixture.sleeperPlayerId } });
+  await getPrisma().playerProjection.deleteMany({ where: { sleeperId: fixture.sleeperPlayerId } });
+  await getPrisma().projectionSource.delete({ where: { id: fixture.projectionSourceId } });
+  await getPrisma().sleeperPlayer.delete({ where: { id: fixture.sleeperPlayerId } });
 }
 
 const VALID_INPUT = {
@@ -103,15 +103,18 @@ const VALID_INPUT = {
 };
 
 async function deleteDraftFixture(draftId: number): Promise<void> {
-  await prisma.$transaction([
-    prisma.draft.update({ where: { id: draftId }, data: { activeProjectionValueSetId: null } }),
-    prisma.draftPlayerValue.deleteMany({ where: { draftId } }),
-    prisma.draftProjectionValueSet.deleteMany({ where: { draftId } }),
-    prisma.player.deleteMany({ where: { draftId } }),
-    prisma.onboardingProgress.deleteMany({ where: { draftId } }),
-    prisma.draft.update({ where: { id: draftId }, data: { ownerTeamId: null } }),
-    prisma.team.deleteMany({ where: { draftId } }),
-    prisma.draft.delete({ where: { id: draftId } }),
+  await getPrisma().$transaction([
+    getPrisma().draft.update({
+      where: { id: draftId },
+      data: { activeProjectionValueSetId: null },
+    }),
+    getPrisma().draftPlayerValue.deleteMany({ where: { draftId } }),
+    getPrisma().draftProjectionValueSet.deleteMany({ where: { draftId } }),
+    getPrisma().player.deleteMany({ where: { draftId } }),
+    getPrisma().onboardingProgress.deleteMany({ where: { draftId } }),
+    getPrisma().draft.update({ where: { id: draftId }, data: { ownerTeamId: null } }),
+    getPrisma().team.deleteMany({ where: { draftId } }),
+    getPrisma().draft.delete({ where: { id: draftId } }),
   ]);
 }
 
@@ -132,11 +135,11 @@ describe('draft creation against PostgreSQL', () => {
 
   afterAll(async () => {
     await deleteProjectionFixture(projectionFixture);
-    await prisma.$disconnect();
+    await disconnectPrisma();
   });
 
   it('completes within the transaction timeout under injected write-path latency', async () => {
-    await prisma.$executeRawUnsafe(`
+    await getPrisma().$executeRawUnsafe(`
       CREATE FUNCTION integration_slow_player_insert() RETURNS trigger AS $$
       BEGIN
         PERFORM pg_sleep(2);
@@ -162,9 +165,9 @@ describe('draft creation against PostgreSQL', () => {
         expect(elapsedMs).toBeLessThan(15_000);
 
         const [draft, teams, playerCount] = await Promise.all([
-          prisma.draft.findUnique({ where: { id: result.data.draftId } }),
-          prisma.team.findMany({ where: { draftId: result.data.draftId } }),
-          prisma.player.count({ where: { draftId: result.data.draftId } }),
+          getPrisma().draft.findUnique({ where: { id: result.data.draftId } }),
+          getPrisma().team.findMany({ where: { draftId: result.data.draftId } }),
+          getPrisma().player.count({ where: { draftId: result.data.draftId } }),
         ]);
         expect(draft).not.toBeNull();
         expect(teams).toHaveLength(2);
@@ -173,14 +176,14 @@ describe('draft creation against PostgreSQL', () => {
           throw new Error('Draft creation did not activate its projection value set');
         }
         await expect(
-          prisma.draftProjectionValueSet.findUnique({
+          getPrisma().draftProjectionValueSet.findUnique({
             where: { id: draft.activeProjectionValueSetId },
             select: { status: true, expectedPlayerCount: true },
           }),
         ).resolves.toEqual({ status: 'ACTIVE', expectedPlayerCount: 1 });
       }
     } finally {
-      await prisma.$executeRawUnsafe(`
+      await getPrisma().$executeRawUnsafe(`
         DROP TRIGGER IF EXISTS integration_slow_player_insert ON "Player";
         DROP FUNCTION IF EXISTS integration_slow_player_insert();
       `);
@@ -192,7 +195,7 @@ describe('draft creation against PostgreSQL', () => {
   // transition logic in actions.ts. If a later write stage is ever added after that insert,
   // this trigger point would need to move with it.
   it('leaves no partial draft when the last write stage fails', async () => {
-    await prisma.$executeRawUnsafe(`
+    await getPrisma().$executeRawUnsafe(`
       CREATE FUNCTION integration_fail_onboarding_insert() RETURNS trigger AS $$
       BEGIN
         RAISE EXCEPTION 'forced onboarding failure';
@@ -209,10 +212,10 @@ describe('draft creation against PostgreSQL', () => {
         'forced onboarding failure',
       );
 
-      const orphanedDraft = await prisma.draft.findFirst({ where: { name: draftName } });
+      const orphanedDraft = await getPrisma().draft.findFirst({ where: { name: draftName } });
       expect(orphanedDraft).toBeNull();
     } finally {
-      await prisma.$executeRawUnsafe(`
+      await getPrisma().$executeRawUnsafe(`
         DROP TRIGGER IF EXISTS integration_fail_onboarding_insert ON "OnboardingProgress";
         DROP FUNCTION IF EXISTS integration_fail_onboarding_insert();
       `);

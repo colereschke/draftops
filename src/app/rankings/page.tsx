@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { auth } from '@/auth';
-import { prisma } from '@/lib/db';
+import { getPrisma } from '@/lib/db';
 import RankingsUploadForm from '@/components/RankingsUpload/RankingsUploadForm';
 import ResolveUnmatchedList from '@/components/RankingsUpload/ResolveUnmatchedList';
 import MissingFromEtrList from '@/components/RankingsUpload/MissingFromEtrList';
@@ -11,7 +11,7 @@ export default async function RankingsPage() {
   const session = await auth();
   if (!session) redirect('/sign-in');
 
-  const rankingSet = await prisma.userRankingSet.findUnique({
+  const rankingSet = await getPrisma().userRankingSet.findUnique({
     where: { userId: session.user.id },
     select: {
       fileName: true,

@@ -3,7 +3,7 @@
 import type { OnboardingStep } from '@prisma/client';
 import { revalidatePath } from 'next/cache';
 import { auth } from '@/auth';
-import { prisma } from '@/lib/db';
+import { getPrisma } from '@/lib/db';
 import { DraftMutationFailure, withActiveOwnedDraftMutation } from '@/lib/draftMutation';
 
 export interface AdvanceOnboardingInput {
@@ -16,7 +16,7 @@ export async function beginOnboarding(): Promise<void> {
   const session = await auth();
   if (!session) throw new Error('Unauthorized');
 
-  await prisma.onboardingProgress.upsert({
+  await getPrisma().onboardingProgress.upsert({
     where: { userId: session.user.id },
     create: { userId: session.user.id, phase: 'DRAFT_SETUP' },
     update: {},
@@ -56,7 +56,7 @@ export async function completeOnboarding(): Promise<void> {
   const session = await auth();
   if (!session) throw new Error('Unauthorized');
 
-  await prisma.onboardingProgress.upsert({
+  await getPrisma().onboardingProgress.upsert({
     where: { userId: session.user.id },
     create: { userId: session.user.id, phase: 'COMPLETED', completedAt: new Date() },
     update: {

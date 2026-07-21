@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { auth } from '@/auth';
-import { prisma } from '@/lib/db';
+import { getPrisma } from '@/lib/db';
 import { parseRankingsCsv } from '@/lib/rankingsImport';
 import { buildSleeperPlayerIndex, matchToSleeperIndexed } from '@/lib/sleeperMatch';
 import { DEFAULT_RANKING_SOURCE_BUDGET } from '@/lib/valuationBudget';
@@ -19,7 +19,7 @@ export async function getRankingSummary(): Promise<RankingSummary | null> {
   const session = await auth();
   if (!session) return null;
 
-  const set = await prisma.userRankingSet.findUnique({
+  const set = await getPrisma().userRankingSet.findUnique({
     where: { userId: session.user.id },
     select: { fileName: true, uploadedAt: true, players: { select: { matchStatus: true } } },
   });
@@ -45,7 +45,7 @@ export async function uploadRankingsCsv(fileName: string, csvText: string): Prom
   const parsed = parseRankingsCsv(csvText);
   if (!parsed.ok) return { ok: false, errors: parsed.errors };
 
-  const sleeperPlayers = await prisma.sleeperPlayer.findMany({
+  const sleeperPlayers = await getPrisma().sleeperPlayer.findMany({
     select: { id: true, name: true, normalizedName: true, team: true, pos: true },
   });
   const sleeperIndex = buildSleeperPlayerIndex(sleeperPlayers);
@@ -72,7 +72,7 @@ export async function uploadRankingsCsv(fileName: string, csvText: string): Prom
     return row;
   });
 
-  await prisma.$transaction(async (tx) => {
+  await getPrisma().$transaction(async (tx) => {
     const set = await tx.userRankingSet.upsert({
       where: { userId: session.user.id },
       create: {
@@ -118,7 +118,7 @@ export async function resolveRankingMatch(
   const session = await auth();
   if (!session) throw new Error('Unauthorized');
 
-  const player = await prisma.userRankingPlayer.findUnique({
+  const player = await getPrisma().userRankingPlayer.findUnique({
     where: { id: rankingPlayerId },
     select: {
       id: true,
@@ -129,14 +129,14 @@ export async function resolveRankingMatch(
   });
   if (!player || player.rankingSet.userId !== session.user.id) throw new Error('Not found');
 
-  const sleeperPlayer = await prisma.sleeperPlayer.findUnique({
+  const sleeperPlayer = await getPrisma().sleeperPlayer.findUnique({
     where: { id: sleeperId },
     select: { id: true, pos: true },
   });
   if (!sleeperPlayer) throw new Error('Sleeper player not found');
   if (sleeperPlayer.pos !== player.pos) throw new Error('Position mismatch');
 
-  const assignedPlayer = await prisma.userRankingPlayer.findFirst({
+  const assignedPlayer = await getPrisma().userRankingPlayer.findFirst({
     where: {
       rankingSetId: player.rankingSetId,
       sleeperId,
@@ -147,7 +147,7 @@ export async function resolveRankingMatch(
   if (assignedPlayer) throw new Error('Sleeper player is already assigned in this ranking set');
 
   try {
-    await prisma.userRankingPlayer.update({
+    await getPrisma().userRankingPlayer.update({
       where: { id: rankingPlayerId },
       data: { sleeperId, matchStatus: 'manual' },
     });

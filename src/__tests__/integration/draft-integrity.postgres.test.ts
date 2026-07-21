@@ -1,5 +1,5 @@
 import { Client } from 'pg';
-import { prisma } from '@/lib/db';
+import { disconnectPrisma, getPrisma } from '@/lib/db';
 import { createBidRecord } from '@/lib/bidMutation';
 import { completeOwnedDraft, withActiveOwnedDraftMutation } from '@/lib/draftMutation';
 
@@ -17,7 +17,7 @@ interface Fixture {
 async function createFixture(options?: { budget?: number; rosterSize?: number }): Promise<Fixture> {
   const budget = options?.budget ?? 1000;
   const rosterSize = options?.rosterSize ?? 2;
-  const draft = await prisma.draft.create({
+  const draft = await getPrisma().draft.create({
     data: {
       name: `Integration ${crypto.randomUUID()}`,
       ownerId,
@@ -27,10 +27,10 @@ async function createFixture(options?: { budget?: number; rosterSize?: number })
     },
   });
   const [firstTeam, secondTeam] = await Promise.all([
-    prisma.team.create({
+    getPrisma().team.create({
       data: { handle: `first-${draft.id}`, budget, draftId: draft.id },
     }),
-    prisma.team.create({
+    getPrisma().team.create({
       data: { handle: `second-${draft.id}`, budget, draftId: draft.id },
     }),
   ]);
@@ -48,10 +48,10 @@ async function createFixture(options?: { budget?: number; rosterSize?: number })
     draftId: draft.id,
   };
   const [firstPlayer, secondPlayer] = await Promise.all([
-    prisma.player.create({
+    getPrisma().player.create({
       data: { ...basePlayer, name: `Player A ${draft.id}`, sfRank: 1 },
     }),
-    prisma.player.create({
+    getPrisma().player.create({
       data: { ...basePlayer, name: `Player B ${draft.id}`, sfRank: 2 },
     }),
   ]);
@@ -65,17 +65,17 @@ async function createFixture(options?: { budget?: number; rosterSize?: number })
 }
 
 async function deleteFixture(draftId: number): Promise<void> {
-  await prisma.$transaction([
-    prisma.bidAuditEvent.deleteMany({ where: { draftId } }),
-    prisma.draftCompletionSnapshot.deleteMany({ where: { draftId } }),
-    prisma.auctionResult.deleteMany({ where: { draftId } }),
-    prisma.nominatedPlayer.deleteMany({ where: { draftId } }),
-    prisma.playerWatchlist.deleteMany({ where: { draftId } }),
-    prisma.draftPlayerValue.deleteMany({ where: { draftId } }),
-    prisma.player.deleteMany({ where: { draftId } }),
-    prisma.draft.update({ where: { id: draftId }, data: { ownerTeamId: null } }),
-    prisma.team.deleteMany({ where: { draftId } }),
-    prisma.draft.delete({ where: { id: draftId } }),
+  await getPrisma().$transaction([
+    getPrisma().bidAuditEvent.deleteMany({ where: { draftId } }),
+    getPrisma().draftCompletionSnapshot.deleteMany({ where: { draftId } }),
+    getPrisma().auctionResult.deleteMany({ where: { draftId } }),
+    getPrisma().nominatedPlayer.deleteMany({ where: { draftId } }),
+    getPrisma().playerWatchlist.deleteMany({ where: { draftId } }),
+    getPrisma().draftPlayerValue.deleteMany({ where: { draftId } }),
+    getPrisma().player.deleteMany({ where: { draftId } }),
+    getPrisma().draft.update({ where: { id: draftId }, data: { ownerTeamId: null } }),
+    getPrisma().team.deleteMany({ where: { draftId } }),
+    getPrisma().draft.delete({ where: { id: draftId } }),
   ]);
 }
 
@@ -99,7 +99,7 @@ describe('draft integrity against PostgreSQL', () => {
   });
 
   afterAll(async () => {
-    await prisma.$disconnect();
+    await disconnectPrisma();
   });
 
   it('rejects a bid queued after completion acquires the draft lock', async () => {
@@ -121,9 +121,9 @@ describe('draft integrity against PostgreSQL', () => {
 
     await expect(completion).resolves.toMatchObject({ ok: true });
     await expect(bid).resolves.toEqual({ ok: false, code: 'DRAFT_COMPLETE' });
-    await expect(prisma.auctionResult.count({ where: { draftId: fixture.draftId } })).resolves.toBe(
-      0,
-    );
+    await expect(
+      getPrisma().auctionResult.count({ where: { draftId: fixture.draftId } }),
+    ).resolves.toBe(0);
   });
 
   it('commits a bid queued before completion and then closes the draft', async () => {
@@ -146,7 +146,7 @@ describe('draft integrity against PostgreSQL', () => {
     await expect(bid).resolves.toMatchObject({ ok: true });
     await expect(completion).resolves.toMatchObject({ ok: true });
     await expect(
-      prisma.draft.findUnique({ where: { id: fixture.draftId }, select: { status: true } }),
+      getPrisma().draft.findUnique({ where: { id: fixture.draftId }, select: { status: true } }),
     ).resolves.toEqual({ status: 'COMPLETE' });
   });
 
@@ -170,7 +170,7 @@ describe('draft integrity against PostgreSQL', () => {
     await expect(completion).resolves.toMatchObject({ ok: true });
     await expect(sleeperWrite).resolves.toEqual({ ok: false, code: 'DRAFT_COMPLETE' });
     await expect(
-      prisma.team.findUnique({
+      getPrisma().team.findUnique({
         where: { id: fixture.firstTeamId },
         select: { sleeperRosterId: true },
       }),
@@ -201,9 +201,9 @@ describe('draft integrity against PostgreSQL', () => {
     expect(results.filter((result) => !result.ok)).toEqual([
       { ok: false, code: 'PLAYER_ALREADY_CLAIMED' },
     ]);
-    await expect(prisma.auctionResult.count({ where: { draftId: fixture.draftId } })).resolves.toBe(
-      1,
-    );
+    await expect(
+      getPrisma().auctionResult.count({ where: { draftId: fixture.draftId } }),
+    ).resolves.toBe(1);
   });
 
   it('serializes concurrent team spending so only one bid can consume the maximum', async () => {
@@ -235,14 +235,14 @@ describe('draft integrity against PostgreSQL', () => {
   it('rolls back bid creation when nomination cleanup fails', async () => {
     const fixture = await createFixture();
     fixtureIds.push(fixture.draftId);
-    await prisma.nominatedPlayer.create({
+    await getPrisma().nominatedPlayer.create({
       data: {
         playerId: fixture.firstPlayerId,
         playerName: `Player A ${fixture.draftId}`,
         draftId: fixture.draftId,
       },
     });
-    await prisma.$executeRawUnsafe(`
+    await getPrisma().$executeRawUnsafe(`
       CREATE FUNCTION fail_integrity_nomination_delete() RETURNS trigger AS $$
       BEGIN
         RAISE EXCEPTION 'forced nomination cleanup failure';
@@ -264,13 +264,13 @@ describe('draft integrity against PostgreSQL', () => {
         }),
       ).rejects.toThrow('forced nomination cleanup failure');
       await expect(
-        prisma.auctionResult.count({ where: { draftId: fixture.draftId } }),
+        getPrisma().auctionResult.count({ where: { draftId: fixture.draftId } }),
       ).resolves.toBe(0);
       await expect(
-        prisma.nominatedPlayer.count({ where: { draftId: fixture.draftId } }),
+        getPrisma().nominatedPlayer.count({ where: { draftId: fixture.draftId } }),
       ).resolves.toBe(1);
     } finally {
-      await prisma.$executeRawUnsafe(`
+      await getPrisma().$executeRawUnsafe(`
         DROP TRIGGER IF EXISTS fail_integrity_nomination_delete ON "NominatedPlayer";
         DROP FUNCTION IF EXISTS fail_integrity_nomination_delete();
       `);

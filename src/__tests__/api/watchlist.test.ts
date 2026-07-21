@@ -23,7 +23,7 @@ jest.mock('@/lib/draftMutation', () => ({
   withActiveOwnedDraftMutation: (...args: unknown[]) => mockWithActiveOwnedDraftMutation(...args),
 }));
 jest.mock('@/lib/db', () => ({
-  prisma: {
+  getPrisma: () => ({
     playerWatchlist: {
       upsert: (...args: unknown[]) => mockUpsert(...args),
       delete: (...args: unknown[]) => mockDelete(...args),
@@ -36,7 +36,7 @@ jest.mock('@/lib/db', () => ({
     auctionResult: {
       findFirst: (...args: unknown[]) => mockAuctionResultFindFirst(...args),
     },
-  },
+  }),
 }));
 
 const MOCK_SESSION = { user: { id: '123456789', name: 'Cole' } };
@@ -78,14 +78,14 @@ beforeEach(() => {
       _userId: string,
       _draftId: number,
       operation: (
-        tx: (typeof import('@/lib/db'))['prisma'],
+        tx: ReturnType<(typeof import('@/lib/db'))['getPrisma']>,
         draft: typeof MOCK_DRAFT,
       ) => Promise<unknown>,
     ) => {
       try {
         return {
           ok: true,
-          data: await operation((await import('@/lib/db')).prisma, MOCK_DRAFT),
+          data: await operation((await import('@/lib/db')).getPrisma(), MOCK_DRAFT),
         };
       } catch (error) {
         if (error instanceof (await import('@/lib/draftMutation')).DraftMutationFailure) {

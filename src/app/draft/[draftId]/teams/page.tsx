@@ -1,6 +1,6 @@
 import { notFound } from 'next/navigation';
 import { auth } from '@/auth';
-import { prisma } from '@/lib/db';
+import { getPrisma } from '@/lib/db';
 import { getDraft } from '@/lib/draft';
 import { getActiveDraftPlayers } from '@/lib/activeDraftPlayers';
 import { computeDraftTeamStats } from '@/lib/computeDraftTeamStats';
@@ -18,7 +18,7 @@ export default async function TeamsPage({ params }: { params: Promise<{ draftId:
   const draft = await getDraft(session.user.id, draftId);
   if (!draft) notFound();
 
-  const rawTeams = await prisma.team.findMany({
+  const rawTeams = await getPrisma().team.findMany({
     where: { draftId },
     include: { results: { where: { deletedAt: null } } },
     orderBy: { handle: 'asc' },

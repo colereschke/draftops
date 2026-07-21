@@ -1,5 +1,5 @@
 import type { Draft, Prisma } from '@prisma/client';
-import { prisma } from '@/lib/db';
+import { getPrisma } from '@/lib/db';
 import { lockDraftForMutation } from '@/lib/draftLock';
 
 export type DraftMutationCode =
@@ -43,7 +43,7 @@ export async function withActiveOwnedDraftMutation<T>(
   if (!isPositiveSafeInteger(draftId)) return { ok: false, code: 'INVALID_INPUT' };
 
   try {
-    return await prisma.$transaction(async (tx) => {
+    return await getPrisma().$transaction(async (tx) => {
       await lockDraftForMutation(tx, draftId);
       const draft = await tx.draft.findFirst({ where: { id: draftId, ownerId: userId } });
       if (!draft) throw new DraftMutationFailure('NOT_FOUND');
@@ -64,7 +64,7 @@ export async function completeOwnedDraft(
   if (!isPositiveSafeInteger(draftId)) return { ok: false, code: 'INVALID_INPUT' };
 
   try {
-    return await prisma.$transaction(async (tx) => {
+    return await getPrisma().$transaction(async (tx) => {
       await lockDraftForMutation(tx, draftId);
       const draft = await tx.draft.findFirst({ where: { id: draftId, ownerId: userId } });
       if (!draft) throw new DraftMutationFailure('NOT_FOUND');

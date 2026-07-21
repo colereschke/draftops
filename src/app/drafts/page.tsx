@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { auth } from '@/auth';
 import { redirect } from 'next/navigation';
-import { prisma } from '@/lib/db';
+import { getPrisma } from '@/lib/db';
 import { completeDraft } from '@/lib/actions';
 import FirstRunWelcome from '@/components/Onboarding/FirstRunWelcome';
 import { isFirstDraftOnboardingEligible } from '@/lib/onboarding';
@@ -11,7 +11,7 @@ export default async function DraftsPage() {
   if (!session) redirect('/sign-in');
 
   const [drafts, onboardingEligible] = await Promise.all([
-    prisma.draft.findMany({
+    getPrisma().draft.findMany({
       where: { ownerId: session.user.id },
       select: {
         id: true,

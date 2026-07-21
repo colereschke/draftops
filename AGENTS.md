@@ -283,7 +283,7 @@ Required in `.env.local` (never commit):
 
 ```
 DATABASE_URL=          # Pooled runtime Postgres connection string (Neon or local)
-DIRECT_URL=            # Direct migration Postgres connection string; required for Vercel builds
+DIRECT_URL=            # Direct migration Postgres connection string; required for Vercel migration builds
 DATABASE_POOL_MAX=     # Optional per-instance max, default 3; whole-number range 1-10
 AUTH_SECRET=           # Auth.js secret (generate with: openssl rand -base64 32)
 AUTH_DISCORD_ID=       # Discord OAuth app client ID

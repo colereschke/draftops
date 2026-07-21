@@ -255,7 +255,8 @@ export default function NominationHelper({
   );
 
   return (
-    <div
+    <main
+      id="main-content"
       data-testid="nomination-helper-layout"
       data-onboarding-nomination-state="ready"
       className="flex min-h-screen flex-col bg-background text-foreground md:flex-row"
@@ -330,7 +331,7 @@ export default function NominationHelper({
           isReadOnly={isReadOnly}
         />
       </div>
-    </div>
+    </main>
   );
 }
 

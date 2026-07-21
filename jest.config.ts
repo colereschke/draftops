@@ -18,6 +18,7 @@ const config: Config = {
     '<rootDir>/.worktrees/',
     '<rootDir>/e2e/',
     '<rootDir>/src/__tests__/fixtures/',
+    '<rootDir>/src/__tests__/helpers/',
     '<rootDir>/src/__tests__/integration/',
   ],
   collectCoverageFrom: ['src/**/*.{ts,tsx}', '!src/**/*.d.ts', '!src/app/layout.tsx'],

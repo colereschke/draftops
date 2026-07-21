@@ -22,7 +22,7 @@ export default function BudgetPressureView({
   const lowPowerCount = teams.filter((team) => team.buyingPower < 50).length;
 
   return (
-    <div className="min-h-screen bg-background text-foreground">
+    <main id="main-content" className="min-h-screen bg-background text-foreground">
       <div
         data-onboarding-target="budget-pressure"
         className="border-b border-border bg-background px-5 py-4"
@@ -59,7 +59,7 @@ export default function BudgetPressureView({
         liveName={liveName}
         ownerHandle={ownerHandle}
       />
-    </div>
+    </main>
   );
 }
 

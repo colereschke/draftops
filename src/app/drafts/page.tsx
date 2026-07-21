@@ -29,7 +29,7 @@ export default async function DraftsPage() {
   const completeDrafts = drafts.filter((d) => d.status === 'COMPLETE');
 
   return (
-    <main style={{ padding: '2rem', maxWidth: '720px', margin: '0 auto' }}>
+    <main id="main-content" style={{ padding: '2rem', maxWidth: '720px', margin: '0 auto' }}>
       <div
         style={{
           display: 'flex',

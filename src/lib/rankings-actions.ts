@@ -62,6 +62,15 @@ export async function uploadRankingsCsv(fileName: string, csvText: string): Prom
       ? { ...row, sleeperId: outcome.sleeperId as string | null, matchStatus: 'matched' }
       : { ...row, sleeperId: null as string | null, matchStatus: 'unmatched' };
   });
+  const usedSleeperIds = new Set<string>();
+  const rowsWithUniqueSleeperMatches = matchedRows.map((row) => {
+    if (!row.sleeperId || row.matchStatus !== 'matched') return row;
+    if (usedSleeperIds.has(row.sleeperId)) {
+      return { ...row, sleeperId: null as string | null, matchStatus: 'unmatched' };
+    }
+    usedSleeperIds.add(row.sleeperId);
+    return row;
+  });
 
   await prisma.$transaction(async (tx) => {
     const set = await tx.userRankingSet.upsert({
@@ -80,7 +89,7 @@ export async function uploadRankingsCsv(fileName: string, csvText: string): Prom
     });
     await tx.userRankingPlayer.deleteMany({ where: { rankingSetId: set.id } });
     await tx.userRankingPlayer.createMany({
-      data: matchedRows.map((row) => ({
+      data: rowsWithUniqueSleeperMatches.map((row) => ({
         rankingSetId: set.id,
         name: row.name,
         team: row.team,

@@ -134,6 +134,39 @@ describe('uploadRankingsCsv', () => {
       data: [expect.objectContaining({ pos: 'PICK', sleeperId: null, matchStatus: 'n_a' })],
     });
   });
+
+  it('leaves later rows unmatched when aliases resolve to an already matched Sleeper player', async () => {
+    mockSleeperFindMany.mockResolvedValue([
+      {
+        id: 'palmer-1',
+        name: 'Joshua Palmer',
+        normalizedName: 'joshua palmer',
+        team: 'LAC',
+        pos: 'WR',
+      },
+    ]);
+    const csv = [
+      'Player,Team,Position,Age,2QBAuction',
+      'Joshua Palmer,LAC,WR,25,$10',
+      'Josh Palmer,LAC,WR,25,$9',
+    ].join('\n');
+
+    await expect(uploadRankingsCsv('rankings.csv', csv)).resolves.toEqual({ ok: true });
+    expect(mockTxCreateMany).toHaveBeenCalledWith({
+      data: [
+        expect.objectContaining({
+          name: 'Joshua Palmer',
+          sleeperId: 'palmer-1',
+          matchStatus: 'matched',
+        }),
+        expect.objectContaining({
+          name: 'Josh Palmer',
+          sleeperId: null,
+          matchStatus: 'unmatched',
+        }),
+      ],
+    });
+  });
 });
 
 describe('resolveRankingMatch', () => {

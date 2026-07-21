@@ -29,7 +29,9 @@ export default function GlobalError({
           fontFamily: '"Inter", "Helvetica Neue", sans-serif',
         }}
       >
-        <div style={{ fontSize: 14, color: '#e05050', fontWeight: 600 }}>Something went wrong</div>
+        <div style={{ fontSize: 14, color: 'var(--destructive)', fontWeight: 600 }}>
+          Something went wrong
+        </div>
         <div style={{ fontSize: 12, color: '#4a5168', maxWidth: 320, textAlign: 'center' }}>
           {error.message}
         </div>

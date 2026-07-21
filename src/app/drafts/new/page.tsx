@@ -379,7 +379,7 @@ export default function NewDraftPage() {
           <p
             data-testid="sleeper-import-error"
             style={{
-              color: '#e05050',
+              color: 'var(--destructive)',
               fontFamily: 'var(--font-barlow)',
               fontSize: '0.8rem',
               marginTop: '0.5rem',
@@ -899,7 +899,7 @@ export default function NewDraftPage() {
           <p
             data-testid="draft-form-error"
             style={{
-              color: '#e05050',
+              color: 'var(--destructive)',
               fontFamily: 'var(--font-barlow)',
               fontSize: '0.875rem',
               marginBottom: '0.75rem',

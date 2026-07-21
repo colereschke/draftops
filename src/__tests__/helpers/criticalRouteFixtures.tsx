@@ -1,5 +1,11 @@
 import type { Player, ClaimedBid, LeagueTeam, TeamStats, TeamWithRoster } from '@/types';
-import { DEFAULT_SCORING_SETTINGS } from '@/types';
+import {
+  DEFAULT_SCORING_SETTINGS,
+  DEFAULT_TEAM_COUNT,
+  DEFAULT_BUDGET,
+  DEFAULT_ROSTER_SIZE,
+  DEFAULT_STARTING_LINEUP,
+} from '@/types';
 import type { ManagerTendency, Appetite, AppetitePos } from '@/lib/tendencies';
 
 export const FIXTURE_PLAYERS: Player[] = [
@@ -64,6 +70,10 @@ export function auctionSheetProps() {
     ownerHandle: 'coreschke',
     ownerBudget: 1000,
     scoringSettings: { ...DEFAULT_SCORING_SETTINGS },
+    teamCount: DEFAULT_TEAM_COUNT,
+    budget: DEFAULT_BUDGET,
+    rosterSize: DEFAULT_ROSTER_SIZE,
+    startingLineup: [...DEFAULT_STARTING_LINEUP],
   };
 }
 

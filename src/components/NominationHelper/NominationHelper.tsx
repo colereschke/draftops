@@ -257,6 +257,7 @@ export default function NominationHelper({
   return (
     <main
       id="main-content"
+      tabIndex={-1}
       data-testid="nomination-helper-layout"
       data-onboarding-nomination-state="ready"
       className="flex min-h-screen flex-col bg-background text-foreground md:flex-row"

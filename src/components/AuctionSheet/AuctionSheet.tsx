@@ -347,7 +347,7 @@ export default function AuctionSheet({
   ).length;
 
   return (
-    <main id="main-content" className="min-h-screen bg-background text-foreground">
+    <main id="main-content" tabIndex={-1} className="min-h-screen bg-background text-foreground">
       <MutationStatus message={mutationStatus} />
       {isReadOnly ? <DraftReadOnlyBanner /> : null}
       <div data-onboarding-target="value-sheet">

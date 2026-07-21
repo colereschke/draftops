@@ -14,5 +14,7 @@ describe('motion-sensitive transitions', () => {
     expect(css).toMatch(/@media \(prefers-reduced-motion: reduce\) \{/);
     expect(css).toMatch(/transition-duration: 0\.01ms !important/);
     expect(css).toMatch(/animation-duration: 0\.01ms !important/);
+    expect(css).toMatch(/animation-iteration-count: 1 !important/);
+    expect(css).toMatch(/scroll-behavior: auto !important/);
   });
 });

@@ -155,6 +155,7 @@ export default function RosterTracker({ teams, tendencies, ownerHandle }: Roster
   return (
     <main
       id="main-content"
+      tabIndex={-1}
       className={
         isDesktop
           ? 'flex h-[calc(100vh-3.5rem)] flex-col bg-background text-foreground'

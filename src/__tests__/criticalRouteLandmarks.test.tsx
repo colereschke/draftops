@@ -61,6 +61,7 @@ describe('critical route landmarks', () => {
     const mains = screen.getAllByRole('main');
     expect(mains).toHaveLength(1);
     expect(mains[0]).toHaveAttribute('id', 'main-content');
+    expect(mains[0]).toHaveAttribute('tabindex', '-1');
   });
 
   it('BudgetPressureView renders exactly one main landmark with id="main-content"', () => {
@@ -68,6 +69,7 @@ describe('critical route landmarks', () => {
     const mains = screen.getAllByRole('main');
     expect(mains).toHaveLength(1);
     expect(mains[0]).toHaveAttribute('id', 'main-content');
+    expect(mains[0]).toHaveAttribute('tabindex', '-1');
   });
 
   it('RosterTracker renders exactly one main landmark with id="main-content"', () => {
@@ -75,6 +77,7 @@ describe('critical route landmarks', () => {
     const mains = screen.getAllByRole('main');
     expect(mains).toHaveLength(1);
     expect(mains[0]).toHaveAttribute('id', 'main-content');
+    expect(mains[0]).toHaveAttribute('tabindex', '-1');
   });
 
   it('NominationHelper renders exactly one main landmark with id="main-content"', async () => {
@@ -83,5 +86,6 @@ describe('critical route landmarks', () => {
     const mains = screen.getAllByRole('main');
     expect(mains).toHaveLength(1);
     expect(mains[0]).toHaveAttribute('id', 'main-content');
+    expect(mains[0]).toHaveAttribute('tabindex', '-1');
   });
 });

@@ -10,6 +10,7 @@ export default function SignInScreen({ callbackUrl }: SignInScreenProps) {
   return (
     <main
       id="main-content"
+      tabIndex={-1}
       className="bg-background flex h-screen flex-col overflow-y-auto md:flex-row md:overflow-hidden"
     >
       <div className="bg-card border-border flex flex-col items-center justify-center gap-6 border-b px-8 py-16 text-center md:w-[40%] md:items-start md:border-r md:border-b-0 md:px-14 md:py-0 md:text-left">

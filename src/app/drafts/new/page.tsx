@@ -291,7 +291,11 @@ export default function NewDraftPage() {
   }
 
   return (
-    <main id="main-content" style={{ padding: '2rem', maxWidth: '680px', margin: '0 auto' }}>
+    <main
+      id="main-content"
+      tabIndex={-1}
+      style={{ padding: '2rem', maxWidth: '680px', margin: '0 auto' }}
+    >
       <div
         style={{
           display: 'flex',

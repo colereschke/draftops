@@ -16,6 +16,7 @@
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
     "test:e2e": "playwright test",
+    "performance:hard-017": "playwright test --project=performance",
     "prepare": "husky",
     "postinstall": "prisma generate",
     "db:seed": "tsx prisma/seed.ts",

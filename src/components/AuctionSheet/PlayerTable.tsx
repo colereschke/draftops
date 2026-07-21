@@ -88,6 +88,7 @@ export default function PlayerTable({
                 <button
                   type="button"
                   onClick={() => onSort(col.key)}
+                  data-testid={`sort-${col.key}`}
                   aria-label={`Sort by ${col.label}`}
                   className="font-label cursor-pointer border-0 bg-transparent p-0 text-[10px] font-semibold tracking-wide whitespace-nowrap uppercase select-none text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
                   style={{
@@ -150,7 +151,7 @@ export default function PlayerTable({
             };
             return (
               <TableRow
-                key={p.player + i}
+                key={p.id ?? p.player}
                 data-testid={
                   isOnboardingUndoTarget
                     ? `onboarding-bid-undo-${p.player}`

@@ -73,6 +73,7 @@ export default function FilterControls({
               <ToggleGroupItem
                 key={pos}
                 value={pos}
+                data-testid={`position-filter-${pos}`}
                 className="font-label h-8 rounded-md border border-border bg-background px-2.5 text-[11px] font-semibold tracking-wide text-muted-foreground hover:bg-accent hover:text-foreground"
                 style={
                   active

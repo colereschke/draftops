@@ -30,5 +30,10 @@ export default defineConfig({
       testMatch: /(bid|nominate|rosters)\.spec\.ts/,
       use: { ...devices['Desktop Chrome'], storageState: './e2e/.auth/user.json' },
     },
+    {
+      name: 'performance',
+      testMatch: /performance\.spec\.ts/,
+      use: { ...devices['Desktop Chrome'], storageState: './e2e/.auth/user.json' },
+    },
   ],
 });

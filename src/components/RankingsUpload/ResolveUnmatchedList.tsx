@@ -1,9 +1,10 @@
 'use client';
 
-import { useMemo, useState, useTransition } from 'react';
+import { useEffect, useRef, useState, useTransition } from 'react';
 import { Command, CommandInput, CommandList, CommandItem } from '@/components/ui/command';
 import { resolveRankingMatch } from '@/lib/rankings-actions';
 import { normalizeName } from '@/lib/sleeperNormalize';
+import type { SleeperSearchResponse, SleeperSearchResult } from '@/lib/sleeperSearch';
 import ErrorText from './ErrorText';
 
 export interface UnmatchedRankingPlayer {
@@ -13,23 +14,18 @@ export interface UnmatchedRankingPlayer {
   pos: string;
 }
 
-export interface SleeperPlayerOption {
-  id: string;
-  name: string;
-  normalizedName: string;
-  team: string;
-  pos: string;
-}
+export type SleeperPlayerOption = SleeperSearchResult;
 
 interface ResolveUnmatchedListProps {
   unmatchedPlayers: UnmatchedRankingPlayer[];
-  sleeperPlayers: SleeperPlayerOption[];
 }
 
-export default function ResolveUnmatchedList({
-  unmatchedPlayers,
-  sleeperPlayers,
-}: ResolveUnmatchedListProps) {
+interface UnmatchedRowProps {
+  player: UnmatchedRankingPlayer;
+  onResolved: () => void;
+}
+
+export default function ResolveUnmatchedList({ unmatchedPlayers }: ResolveUnmatchedListProps) {
   const [resolvedIds, setResolvedIds] = useState<Set<number>>(new Set());
   const remaining = unmatchedPlayers.filter((p) => !resolvedIds.has(p.id));
 
@@ -51,7 +47,6 @@ export default function ResolveUnmatchedList({
         <UnmatchedRow
           key={player.id}
           player={player}
-          sleeperPlayers={sleeperPlayers}
           onResolved={() => setResolvedIds((prev) => new Set(prev).add(player.id))}
         />
       ))}
@@ -59,27 +54,54 @@ export default function ResolveUnmatchedList({
   );
 }
 
-function UnmatchedRow({
-  player,
-  sleeperPlayers,
-  onResolved,
-}: {
-  player: UnmatchedRankingPlayer;
-  sleeperPlayers: SleeperPlayerOption[];
-  onResolved: () => void;
-}) {
+function UnmatchedRow({ player, onResolved }: UnmatchedRowProps) {
   const [search, setSearch] = useState('');
+  const [results, setResults] = useState<SleeperPlayerOption[]>([]);
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const requestRef = useRef(0);
 
-  const results = useMemo(() => {
-    if (!search.trim()) return [];
-    const q = normalizeName(search);
-    if (!q) return [];
-    return sleeperPlayers
-      .filter((candidate) => candidate.pos === player.pos && candidate.normalizedName.includes(q))
-      .slice(0, 8);
-  }, [player.pos, search, sleeperPlayers]);
+  useEffect(() => {
+    const query = normalizeName(search);
+    if (query.length < 2 || !['QB', 'RB', 'WR', 'TE'].includes(player.pos)) {
+      return;
+    }
+    const controller = new AbortController();
+    const request = ++requestRef.current;
+    const timer = setTimeout(() => {
+      void fetch(
+        `/api/rankings/sleeper-search?q=${encodeURIComponent(query)}&position=${player.pos}`,
+        {
+          signal: controller.signal,
+        },
+      )
+        .then(async (response) => {
+          if (!response.ok) throw new Error('Search failed');
+          return response.json() as Promise<SleeperSearchResponse>;
+        })
+        .then((data) => {
+          if (request === requestRef.current) setResults(data.results);
+        })
+        .catch((fetchError: unknown) => {
+          if (
+            typeof fetchError === 'object' &&
+            fetchError !== null &&
+            'name' in fetchError &&
+            fetchError.name === 'AbortError'
+          ) {
+            return;
+          }
+          if (request === requestRef.current) {
+            setResults([]);
+            setError('Unable to search Sleeper players. Try again.');
+          }
+        });
+    }, 250);
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
+  }, [player.pos, search]);
 
   function pick(sleeperId: string) {
     setError(null);
@@ -91,6 +113,12 @@ function UnmatchedRow({
         setError('Failed to resolve — try again.');
       }
     });
+  }
+
+  function updateSearch(value: string) {
+    setSearch(value);
+    setError(null);
+    if (normalizeName(value).length < 2) setResults([]);
   }
 
   return (
@@ -121,7 +149,7 @@ function UnmatchedRow({
           aria-label={`Search Sleeper players to match ${player.name}`}
           autoComplete="off"
           value={search}
-          onValueChange={setSearch}
+          onValueChange={updateSearch}
         />
         <CommandList>
           {results.map((r) => (

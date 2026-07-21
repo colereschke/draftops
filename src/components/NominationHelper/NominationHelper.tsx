@@ -1,23 +1,15 @@
 'use client';
 
-import { useState, useMemo, useEffect, useCallback } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import type { Player, Position, TeamStats, AuctionResultEntry } from '@/types';
+import type { Player, Position } from '@/types';
 import { computeNominationScores, type ScoredPlayer } from '@/lib/nominationScoring';
 import { useOnboarding } from '@/components/Onboarding/OnboardingContext';
 import MutationStatus from '@/components/MutationStatus';
 import WatchlistSidebar from './WatchlistSidebar';
 import NominationTable from './NominationTable';
 import DraftReadOnlyBanner from '@/components/DraftReadOnlyBanner';
-
-interface NomData {
-  teamStats: TeamStats[];
-  auctionResults: AuctionResultEntry[];
-  watchlist: number[];
-  nominated: number[];
-  ownerHandle: string | null;
-  targetRoster: Partial<Record<Position, number>>;
-}
+import { useNominationData, type NominationData } from './useNominationData';
 
 interface NominationHelperProps {
   draftId: number;
@@ -30,8 +22,8 @@ interface PlayerMutationConfig {
   pendingLabel: string;
   successLabel: string;
   failureLabel: string;
-  applyOptimistic: (prev: NomData) => NomData;
-  revertOptimistic: (prev: NomData) => NomData;
+  applyOptimistic: (prev: NominationData) => NominationData;
+  revertOptimistic: (prev: NominationData) => NominationData;
   request: () => Promise<Response>;
 }
 
@@ -42,41 +34,19 @@ export default function NominationHelper({
 }: NominationHelperProps) {
   const router = useRouter();
   const { progress, recordPlayerNominated } = useOnboarding();
-  const [data, setData] = useState<NomData | null>(null);
-  const [draftError, setDraftError] = useState<string | null>(null);
+  const handleUnauthorized = useCallback(() => router.replace('/sign-in'), [router]);
+  const {
+    data,
+    error: draftError,
+    refresh: fetchData,
+    setData,
+  } = useNominationData({
+    draftId,
+    onUnauthorized: handleUnauthorized,
+  });
   const [posFilter, setPosFilter] = useState<'ALL' | Position>('ALL');
   const [pendingIds, setPendingIds] = useState<Set<number>>(new Set());
   const [mutationStatus, setMutationStatus] = useState<string>('');
-
-  const fetchData = useCallback(async () => {
-    try {
-      const res = await fetch(`/api/draft/${draftId}/nomination-data`);
-      if (res.status === 401) {
-        router.replace('/sign-in');
-        return;
-      }
-      if (res.status === 404) {
-        setDraftError('No draft configured');
-        return;
-      }
-      if (!res.ok) {
-        setDraftError('Unable to load nomination data');
-        return;
-      }
-      setData(await res.json());
-      setDraftError(null);
-    } catch {
-      setDraftError('Unable to load nomination data');
-    }
-  }, [draftId, router]);
-
-  useEffect(() => {
-    // queueMicrotask: fetchData sets state before its first await; calling it directly
-    // here trips react-hooks/set-state-in-effect.
-    queueMicrotask(() => void fetchData());
-    const interval = setInterval(() => void fetchData(), 30_000);
-    return () => clearInterval(interval);
-  }, [fetchData]);
 
   const wonIds = useMemo(
     () =>
@@ -129,7 +99,7 @@ export default function NominationHelper({
           // applied concurrently in the meantime.
           setData((prev) => (prev ? revertOptimistic(prev) : prev));
           setMutationStatus(failureLabel);
-          void fetchData();
+          void fetchData({ supersede: true });
           return false;
         }
         setMutationStatus(successLabel);
@@ -137,7 +107,7 @@ export default function NominationHelper({
       } catch {
         setData((prev) => (prev ? revertOptimistic(prev) : prev));
         setMutationStatus(failureLabel);
-        void fetchData();
+        void fetchData({ supersede: true });
         return false;
       } finally {
         setPendingIds((prev) => {
@@ -147,7 +117,7 @@ export default function NominationHelper({
         });
       }
     },
-    [pendingIds, fetchData, router],
+    [pendingIds, fetchData, router, setData],
   );
 
   const addToWatchlist = (player: Player) => {

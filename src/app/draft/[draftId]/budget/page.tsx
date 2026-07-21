@@ -7,8 +7,8 @@ import { computeDraftTeamStats } from '@/lib/computeDraftTeamStats';
 import { computeTendencies } from '@/lib/tendencies';
 import { resolveLiveNomination } from '@/lib/liveNomination';
 import BudgetPressureView from '@/components/BudgetPressure';
-import { DEFAULT_STARTING_LINEUP, type StartingSlot } from '@/types';
 import { fromPrismaFuturePickMode } from '@/lib/futurePickAssets';
+import { toStartingLineup } from '@/lib/startingLineup';
 
 export const dynamic = 'force-dynamic';
 
@@ -34,10 +34,12 @@ export default async function BudgetPage({ params }: { params: Promise<{ draftId
       teamHandle: team.handle,
     })),
   );
+  const startingLineup = toStartingLineup(draft.startingLineup);
+
   const players = await getActiveDraftPlayers({
     draftId,
     bids,
-    startingLineup: (draft.startingLineup ?? DEFAULT_STARTING_LINEUP) as StartingSlot[],
+    startingLineup,
     futurePickAuctionMode: fromPrismaFuturePickMode(draft.futurePickAuctionMode),
   });
   const posByPlayerId = new Map(
@@ -63,6 +65,8 @@ export default async function BudgetPage({ params }: { params: Promise<{ draftId
       livePosition={live?.position ?? null}
       liveName={live?.name ?? null}
       ownerHandle={draft.ownerTeam?.handle ?? null}
+      budget={draft.budget}
+      startingLineup={startingLineup}
     />
   );
 }

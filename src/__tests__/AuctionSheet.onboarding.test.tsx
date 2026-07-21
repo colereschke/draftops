@@ -6,7 +6,13 @@ import PlayerTable from '@/components/AuctionSheet/PlayerTable';
 import { logBid } from '@/lib/actions';
 import { useOnboarding } from '@/components/Onboarding/OnboardingContext';
 import type { ClaimedBid, LeagueTeam, Player } from '@/types';
-import { DEFAULT_SCORING_SETTINGS } from '@/types';
+import {
+  DEFAULT_BUDGET,
+  DEFAULT_ROSTER_SIZE,
+  DEFAULT_SCORING_SETTINGS,
+  DEFAULT_STARTING_LINEUP,
+  DEFAULT_TEAM_COUNT,
+} from '@/types';
 
 const mockRecordBidLogged = jest.fn<Promise<void>, [string]>().mockResolvedValue();
 
@@ -55,6 +61,10 @@ function renderSheet() {
       ownerHandle="coreschke"
       ownerBudget={1000}
       scoringSettings={{ ...DEFAULT_SCORING_SETTINGS }}
+      teamCount={DEFAULT_TEAM_COUNT}
+      budget={DEFAULT_BUDGET}
+      rosterSize={DEFAULT_ROSTER_SIZE}
+      startingLineup={DEFAULT_STARTING_LINEUP}
     />,
   );
 }

@@ -8,12 +8,8 @@ import { getDraft } from '@/lib/draft';
 import { getActiveDraftPlayers } from '@/lib/activeDraftPlayers';
 import { fromPrismaFuturePickMode } from '@/lib/futurePickAssets';
 import { computeSpreads } from '@/lib/valueSpread';
-import {
-  DEFAULT_STARTING_LINEUP,
-  DEFAULT_SCORING_SETTINGS,
-  type StartingSlot,
-  type ScoringSettings,
-} from '@/types';
+import { toStartingLineup } from '@/lib/startingLineup';
+import { DEFAULT_SCORING_SETTINGS, type ScoringSettings } from '@/types';
 
 export default async function DraftHomePage({ params }: { params: Promise<{ draftId: string }> }) {
   const draftId = parseInt((await params).draftId, 10);
@@ -84,6 +80,8 @@ export default async function DraftHomePage({ params }: { params: Promise<{ draf
         ],
   );
 
+  const startingLineup = toStartingLineup(draft.startingLineup);
+
   const activePlayers = await getActiveDraftPlayers({
     draftId,
     bids: rawBids.map((bid) => ({
@@ -91,7 +89,7 @@ export default async function DraftHomePage({ params }: { params: Promise<{ draf
       price: bid.price,
       teamHandle: bid.team.handle,
     })),
-    startingLineup: (draft.startingLineup ?? DEFAULT_STARTING_LINEUP) as StartingSlot[],
+    startingLineup,
     futurePickAuctionMode: fromPrismaFuturePickMode(draft.futurePickAuctionMode),
   });
 
@@ -112,6 +110,10 @@ export default async function DraftHomePage({ params }: { params: Promise<{ draf
       ownerHandle={draft.ownerTeam?.handle ?? null}
       ownerBudget={draft.ownerTeam?.budget ?? 1000}
       scoringSettings={(draft.scoringSettings ?? DEFAULT_SCORING_SETTINGS) as ScoringSettings}
+      teamCount={draft.teamCount}
+      budget={draft.budget}
+      rosterSize={draft.rosterSize}
+      startingLineup={startingLineup}
       sleeperSyncConfigured={sleeperSyncConfigured}
       sleeperLeagueId={draft.sleeperLeagueId}
       isReadOnly={draft.status === 'COMPLETE'}

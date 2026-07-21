@@ -262,6 +262,10 @@ describe('Sleeper roster actions', () => {
         diagnostics: expect.objectContaining({ alreadyLoggedCount: 1 }),
       }),
     });
+    expect(mockAuctionFindMany).toHaveBeenCalledWith({
+      where: { draftId: 4, deletedAt: null },
+      select: { playerId: true },
+    });
   });
 
   it('rethrows an unexpected preview failure instead of masking it as a Sleeper error', async () => {

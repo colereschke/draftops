@@ -20,7 +20,10 @@ export default async function BudgetPage({ params }: { params: Promise<{ draftId
   if (!draft) notFound();
 
   const [teams, nominated] = await Promise.all([
-    prisma.team.findMany({ where: { draftId }, include: { results: true } }),
+    prisma.team.findMany({
+      where: { draftId },
+      include: { results: { where: { deletedAt: null } } },
+    }),
     prisma.nominatedPlayer.findMany({ where: { draftId }, orderBy: { createdAt: 'desc' } }),
   ]);
 

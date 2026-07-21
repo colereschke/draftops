@@ -135,7 +135,10 @@ async function getPreview(
       where: { draftId },
       select: { id: true, sleeperId: true, name: true, pos: true, nflTeam: true, budget: true },
     }),
-    prisma.auctionResult.findMany({ where: { draftId }, select: { playerId: true } }),
+    prisma.auctionResult.findMany({
+      where: { draftId, deletedAt: null },
+      select: { playerId: true },
+    }),
   ]);
   return reconcileSleeperRosters({
     rosters,
@@ -267,7 +270,7 @@ export async function saveSleeperRosterMapping(input: {
           select: { id: true, sleeperId: true, name: true, pos: true, nflTeam: true, budget: true },
         }),
         tx.auctionResult.findMany({
-          where: { draftId: lockedDraft.id },
+          where: { draftId: lockedDraft.id, deletedAt: null },
           select: { playerId: true },
         }),
       ]);
@@ -371,7 +374,7 @@ export async function logSleeperRosterCatchUp(input: {
           select: { id: true, sleeperId: true, name: true, pos: true, nflTeam: true, sfRank: true },
         }),
         tx.auctionResult.findMany({
-          where: { draftId: lockedDraft.id, playerId: { in: playerIds } },
+          where: { draftId: lockedDraft.id, playerId: { in: playerIds }, deletedAt: null },
           select: { playerId: true },
         }),
       ]);

@@ -23,7 +23,7 @@ export default async function DraftHomePage({ params }: { params: Promise<{ draf
 
   const [rawBids, teams, nominatedEntries] = await Promise.all([
     prisma.auctionResult.findMany({
-      where: { draftId },
+      where: { draftId, deletedAt: null },
       select: {
         id: true,
         playerId: true,

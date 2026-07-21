@@ -20,7 +20,7 @@ export default async function TeamsPage({ params }: { params: Promise<{ draftId:
 
   const rawTeams = await prisma.team.findMany({
     where: { draftId },
-    include: { results: true },
+    include: { results: { where: { deletedAt: null } } },
     orderBy: { handle: 'asc' },
   });
 

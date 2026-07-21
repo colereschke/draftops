@@ -3,6 +3,7 @@
 import { useRouter } from 'next/navigation';
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { Button } from '@/components/ui/button';
+import MutationStatus from '@/components/MutationStatus';
 
 interface BudgetRefresherProps {
   intervalMs?: number;
@@ -11,6 +12,7 @@ interface BudgetRefresherProps {
 export default function BudgetRefresher({ intervalMs = 20000 }: BudgetRefresherProps) {
   const router = useRouter();
   const [elapsed, setElapsed] = useState(0);
+  const [mutationStatus, setMutationStatus] = useState('');
   const intervalSecs = intervalMs / 1000;
   const tickRef = useRef(0);
   const routerRef = useRef(router);
@@ -22,6 +24,7 @@ export default function BudgetRefresher({ intervalMs = 20000 }: BudgetRefresherP
     routerRef.current.refresh();
     tickRef.current = 0;
     setElapsed(0);
+    setMutationStatus('Threat board refreshed.');
   }, []);
 
   useEffect(() => {
@@ -32,6 +35,7 @@ export default function BudgetRefresher({ intervalMs = 20000 }: BudgetRefresherP
         routerRef.current.refresh();
         tickRef.current = 0;
         setElapsed(0);
+        setMutationStatus('Threat board refreshed.');
       } else {
         setElapsed(tickRef.current);
       }
@@ -41,6 +45,7 @@ export default function BudgetRefresher({ intervalMs = 20000 }: BudgetRefresherP
 
   return (
     <div className="flex items-center gap-2">
+      <MutationStatus message={mutationStatus} />
       <span className="font-mono text-[10px] text-muted-foreground">Updated {elapsed}s ago</span>
       <Button variant="outline" size="sm" onClick={doRefresh}>
         Refresh

@@ -32,8 +32,11 @@ describe('Prisma runtime', () => {
   });
 
   afterAll(() => {
-    process.env.DATABASE_URL = originalDatabaseUrl;
-    process.env.DATABASE_POOL_MAX = originalDatabasePoolMaximum;
+    if (originalDatabaseUrl === undefined) delete process.env.DATABASE_URL;
+    else process.env.DATABASE_URL = originalDatabaseUrl;
+
+    if (originalDatabasePoolMaximum === undefined) delete process.env.DATABASE_POOL_MAX;
+    else process.env.DATABASE_POOL_MAX = originalDatabasePoolMaximum;
   });
 
   it('defers construction until database access is requested when no URL is configured', async () => {

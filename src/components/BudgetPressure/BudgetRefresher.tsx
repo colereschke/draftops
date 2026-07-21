@@ -16,16 +16,25 @@ export default function BudgetRefresher({ intervalMs = 20000 }: BudgetRefresherP
   const intervalSecs = intervalMs / 1000;
   const tickRef = useRef(0);
   const routerRef = useRef(router);
+  const announceTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
     routerRef.current = router;
   }, [router]);
+
+  const announceRefresh = useCallback(() => {
+    if (announceTimeoutRef.current) clearTimeout(announceTimeoutRef.current);
+    setMutationStatus('');
+    announceTimeoutRef.current = setTimeout(() => {
+      setMutationStatus('Threat board refreshed.');
+    }, 50);
+  }, []);
 
   const doRefresh = useCallback(() => {
     routerRef.current.refresh();
     tickRef.current = 0;
     setElapsed(0);
-    setMutationStatus('Threat board refreshed.');
-  }, []);
+    announceRefresh();
+  }, [announceRefresh]);
 
   useEffect(() => {
     tickRef.current = 0;
@@ -35,13 +44,16 @@ export default function BudgetRefresher({ intervalMs = 20000 }: BudgetRefresherP
         routerRef.current.refresh();
         tickRef.current = 0;
         setElapsed(0);
-        setMutationStatus('Threat board refreshed.');
+        announceRefresh();
       } else {
         setElapsed(tickRef.current);
       }
     }, 1000);
-    return () => clearInterval(timer);
-  }, [intervalSecs]);
+    return () => {
+      clearInterval(timer);
+      if (announceTimeoutRef.current) clearTimeout(announceTimeoutRef.current);
+    };
+  }, [intervalSecs, announceRefresh]);
 
   return (
     <div className="flex items-center gap-2">

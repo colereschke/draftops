@@ -21,7 +21,7 @@ describe('BudgetRefresher', () => {
     render(<BudgetRefresher intervalMs={20000} />);
 
     act(() => {
-      jest.advanceTimersByTime(20000);
+      jest.advanceTimersByTime(20050);
     });
 
     expect(mockRefresh).toHaveBeenCalledTimes(1);
@@ -32,8 +32,33 @@ describe('BudgetRefresher', () => {
     render(<BudgetRefresher intervalMs={20000} />);
 
     fireEvent.click(screen.getByRole('button', { name: /refresh/i }));
+    act(() => {
+      jest.advanceTimersByTime(50);
+    });
 
     expect(mockRefresh).toHaveBeenCalledTimes(1);
+    expect(screen.getByTestId('mutation-status')).toHaveTextContent(/threat board refreshed/i);
+  });
+
+  it('re-announces identical repeated refreshes by clearing the message before re-setting it', () => {
+    render(<BudgetRefresher intervalMs={20000} />);
+
+    fireEvent.click(screen.getByRole('button', { name: /refresh/i }));
+    act(() => {
+      jest.advanceTimersByTime(50);
+    });
+    expect(screen.getByTestId('mutation-status')).toHaveTextContent(/threat board refreshed/i);
+
+    fireEvent.click(screen.getByRole('button', { name: /refresh/i }));
+    // Immediately after the second trigger, before the delayed re-set fires, the message
+    // must have been cleared — this is the real DOM mutation that lets aria-live re-announce
+    // identical text. If this assertion fails, the fix regressed to setting the same string
+    // twice with no intermediate change.
+    expect(screen.getByTestId('mutation-status')).toHaveTextContent('');
+
+    act(() => {
+      jest.advanceTimersByTime(50);
+    });
     expect(screen.getByTestId('mutation-status')).toHaveTextContent(/threat board refreshed/i);
   });
 });

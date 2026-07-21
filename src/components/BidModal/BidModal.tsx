@@ -245,7 +245,7 @@ export default function BidModal({
               {isEdit && onDelete && !deleteArmed && (
                 <Button
                   variant="destructive"
-                  size="sm"
+                  size="touch"
                   type="button"
                   disabled={isSubmitting}
                   onClick={() => setDeleteArmed(true)}
@@ -257,7 +257,7 @@ export default function BidModal({
                 <>
                   <Button
                     variant="ghost"
-                    size="sm"
+                    size="touch"
                     type="button"
                     disabled={isSubmitting}
                     onClick={() => setDeleteArmed(false)}
@@ -266,7 +266,7 @@ export default function BidModal({
                   </Button>
                   <Button
                     variant="destructive"
-                    size="sm"
+                    size="touch"
                     type="button"
                     disabled={isSubmitting}
                     onClick={onDelete}
@@ -278,7 +278,7 @@ export default function BidModal({
               {onNominate && !isNominated && (
                 <Button
                   variant="outline"
-                  size="sm"
+                  size="touch"
                   type="button"
                   onClick={() => {
                     onNominate();
@@ -296,10 +296,10 @@ export default function BidModal({
               )}
             </div>
 
-            <Button variant="outline" size="sm" type="button" onClick={onClose}>
+            <Button variant="outline" size="touch" type="button" onClick={onClose}>
               Cancel
             </Button>
-            <Button data-testid="bid-submit" size="sm" type="submit" disabled={isSubmitting}>
+            <Button data-testid="bid-submit" size="touch" type="submit" disabled={isSubmitting}>
               {isSubmitting ? 'Saving…' : isEdit ? 'Update Bid' : 'Log Bid'}
             </Button>
           </div>

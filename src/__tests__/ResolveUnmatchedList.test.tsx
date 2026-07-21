@@ -1,14 +1,17 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import ResolveUnmatchedList from '@/components/RankingsUpload/ResolveUnmatchedList';
+import ResolveUnmatchedList, {
+  type SleeperPlayerOption,
+  type UnmatchedRankingPlayer,
+} from '@/components/RankingsUpload/ResolveUnmatchedList';
 
 const mockResolve = jest.fn();
 jest.mock('@/lib/rankings-actions', () => ({
   resolveRankingMatch: (...args: unknown[]) => mockResolve(...args),
 }));
 
-const UNMATCHED = [{ id: 1, name: 'J. Allen', team: 'BUF', pos: 'QB' }];
-const SLEEPER_OPTIONS = [
+const UNMATCHED: UnmatchedRankingPlayer[] = [{ id: 1, name: 'J. Allen', team: 'BUF', pos: 'QB' }];
+const SLEEPER_OPTIONS: SleeperPlayerOption[] = [
   { id: 's1', name: 'Josh Allen', normalizedName: 'josh allen', team: 'BUF', pos: 'QB' },
   { id: 's2', name: 'Josh Jacobs', normalizedName: 'josh jacobs', team: 'GB', pos: 'RB' },
   { id: 's3', name: "Ja'Marr Chase", normalizedName: 'jamarr chase', team: 'CIN', pos: 'WR' },
@@ -38,9 +41,32 @@ describe('ResolveUnmatchedList', () => {
     });
   });
 
+  it('shows only candidates at the unmatched player position', async () => {
+    const user = userEvent.setup();
+    const sleeperPlayers: SleeperPlayerOption[] = [
+      { id: 'qb-1', name: 'Josh Allen', normalizedName: 'josh allen', team: 'BUF', pos: 'QB' },
+      { id: 'wr-1', name: 'Josh Allen', normalizedName: 'josh allen', team: 'FA', pos: 'WR' },
+    ];
+
+    render(<ResolveUnmatchedList unmatchedPlayers={UNMATCHED} sleeperPlayers={sleeperPlayers} />);
+
+    await user.type(screen.getByTestId('unmatched-search-1'), 'Josh Allen');
+
+    expect(await screen.findByTestId('unmatched-result-qb-1')).toBeInTheDocument();
+    expect(screen.queryByTestId('unmatched-result-wr-1')).not.toBeInTheDocument();
+  });
+
   it('matches punctuated Sleeper names against an unpunctuated normalized query', async () => {
     const user = userEvent.setup();
-    render(<ResolveUnmatchedList unmatchedPlayers={UNMATCHED} sleeperPlayers={SLEEPER_OPTIONS} />);
+    const unmatchedWideReceiver: UnmatchedRankingPlayer[] = [
+      { id: 1, name: "Ja'Marr Chase", team: 'CIN', pos: 'WR' },
+    ];
+    render(
+      <ResolveUnmatchedList
+        unmatchedPlayers={unmatchedWideReceiver}
+        sleeperPlayers={SLEEPER_OPTIONS}
+      />,
+    );
 
     await user.type(screen.getByTestId('unmatched-search-1'), 'jamarr');
     const match = await screen.findByTestId('unmatched-result-s3');

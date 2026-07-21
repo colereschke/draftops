@@ -96,4 +96,113 @@ describe('parseRankingsCsv', () => {
     if (!result.ok) return;
     expect(result.rows[0].notes).toBe('');
   });
+
+  it.each([
+    ['Infinite age', 'Josh Allen,BUF,QB,Infinity,$51', /invalid Age/i],
+    ['out-of-range age', 'Josh Allen,BUF,QB,101,$51', /invalid Age/i],
+    ['Infinite value', 'Josh Allen,BUF,QB,30,Infinity', /invalid 2QBAuction/i],
+    ['out-of-range value', 'Josh Allen,BUF,QB,30,1000001', /invalid 2QBAuction/i],
+  ])('rejects %s', (_description, row, expectedError) => {
+    const result = parseRankingsCsv([HEADER, row].join('\n'));
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.errors).toEqual(expect.arrayContaining([expect.stringMatching(expectedError)]));
+    }
+  });
+
+  it.each(['1.5', 'Infinity', '0', '10001'])('rejects invalid explicit rank %s', (rank) => {
+    const result = parseRankingsCsv(
+      [HEADER_WITH_RANK, `Josh Allen,BUF,QB,30,${rank},$51`].join('\n'),
+    );
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.errors).toEqual(
+        expect.arrayContaining([expect.stringMatching(/invalid SF\/TE Prem/i)]),
+      );
+    }
+  });
+
+  it('rejects duplicate normalized player identities', () => {
+    const result = parseRankingsCsv(
+      [HEADER, 'Josh Allen,BUF,QB,30,$51', '  josh allen  ,BUF,QB,30,$50'].join('\n'),
+    );
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.errors).toEqual(
+        expect.arrayContaining([expect.stringMatching(/duplicate player/i)]),
+      );
+    }
+  });
+
+  it('rejects duplicate explicit ranks', () => {
+    const result = parseRankingsCsv(
+      [HEADER_WITH_RANK, 'Josh Allen,BUF,QB,30,1,$51', 'Lamar Jackson,BAL,QB,28,1,$50'].join('\n'),
+    );
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.errors).toEqual(
+        expect.arrayContaining([expect.stringMatching(/duplicate.*rank/i)]),
+      );
+    }
+  });
+
+  it('rejects an upload containing a field longer than 10,000 characters', () => {
+    const result = parseRankingsCsv(
+      [`${HEADER},Notes`, `Josh Allen,BUF,QB,30,$51,${'x'.repeat(10001)}`].join('\n'),
+    );
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.errors).toEqual(expect.arrayContaining([expect.stringMatching(/field/i)]));
+    }
+  });
+
+  it('rejects a UTF-8 upload larger than 1 MiB', () => {
+    const result = parseRankingsCsv(`${HEADER}\nJosh Allen,BUF,QB,30,$51\n${'é'.repeat(524288)}`);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.errors).toEqual(expect.arrayContaining([expect.stringMatching(/size/i)]));
+    }
+  });
+
+  it('rejects an upload with more than 2,000 data rows', () => {
+    const result = parseRankingsCsv(
+      [HEADER, ...Array.from({ length: 2001 }, () => 'Josh Allen,BUF,QB,30,$51')].join('\n'),
+    );
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.errors).toEqual(expect.arrayContaining([expect.stringMatching(/row count/i)]));
+    }
+  });
+
+  it('accepts an upload with exactly 2,000 data rows', () => {
+    const result = parseRankingsCsv(
+      [HEADER, ...Array.from({ length: 2000 }, (_, index) => `Player ${index},BUF,QB,30,$51`)].join(
+        '\n',
+      ),
+    );
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.rows).toHaveLength(2000);
+    }
+  });
+
+  it('caps row validation errors at 25 and appends a truncation message', () => {
+    const result = parseRankingsCsv(
+      [HEADER, ...Array.from({ length: 30 }, () => ',BUF,QB,30,$51')].join('\n'),
+    );
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.errors).toHaveLength(26);
+      expect(result.errors.at(-1)).toBe('Too many validation errors; showing the first 25.');
+    }
+  });
 });

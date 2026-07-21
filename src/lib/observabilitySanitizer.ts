@@ -133,11 +133,12 @@ function sanitizeSummary(value: unknown): string | undefined {
   return value
     .replace(/\b[a-z][a-z0-9+.-]*:\/\/[^\s@/]+@[^\s]+/gi, '[redacted-credential-url]')
     .replace(/\bauthorization\s*[=:]\s*bearer\s+[^\s,;]+/gi, 'authorization=[redacted]')
+    .replace(/\bbearer\s+[^\s,;]+/gi, 'bearer [redacted]')
     .replace(/(password|token|secret|authorization|cookie)\s*[=:]\s*[^\s,;]+/gi, '$1=[redacted]')
     .replace(/\b[\w.+-]+@[\w-]+(?:\.[\w-]+)+\b/g, '[redacted-email]')
     .replace(/\bdiscord(?:[_\s-]?id)?\s*[=:]\s*[^\s,;]+/gi, 'discord=[redacted]')
     .replace(/\b\d{17,20}\b/g, '[redacted-user-id]')
-    .replace(/(https?:\/\/[^\s?#]+)\?[^\s]*/gi, '$1')
+    .replace(/(https?:\/\/[^\s?#]+)(?:\?[^\s#]*)?(?:#[^\s]*)?/gi, '$1')
     .slice(0, MAX_ERROR_SUMMARY_LENGTH);
 }
 

@@ -167,4 +167,24 @@ describe('server observability', () => {
       /ckv2x4n9j|secret-token|very-secret-token|db-password|db\.example/i,
     );
   });
+
+  it('redacts standalone bearer tokens and URL fragments from server logs', () => {
+    const error = jest.spyOn(console, 'error').mockImplementation();
+
+    logServerError({
+      incidentId: 'incident-123',
+      action: 'render',
+      routePath: '/draft/7',
+      error: new Error(
+        'Bearer standalone-secret failed at https://draftops.app/draft/7#private-fragment',
+      ),
+    });
+
+    expect(JSON.parse(error.mock.calls[0]?.[0] as string)).toEqual(
+      expect.objectContaining({
+        errorSummary: 'bearer [redacted] failed at https://draftops.app/draft/7',
+      }),
+    );
+    expect(error.mock.calls[0]?.[0]).not.toMatch(/standalone-secret|private-fragment/i);
+  });
 });

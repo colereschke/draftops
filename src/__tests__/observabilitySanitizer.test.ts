@@ -154,4 +154,23 @@ describe('sanitizeSentryEvent', () => {
     );
     expect(JSON.stringify(event)).not.toMatch(/very-secret-token|db-password|db\.example/i);
   });
+
+  it('redacts standalone bearer tokens and URL fragments from Sentry summaries', () => {
+    const event = sanitizeSentryEvent({
+      exception: {
+        values: [
+          {
+            type: 'RequestError',
+            value:
+              'Bearer standalone-secret failed at https://draftops.app/draft/7#private-fragment',
+          },
+        ],
+      },
+    });
+
+    expect(event?.exception?.values?.[0]?.value).toBe(
+      'bearer [redacted] failed at https://draftops.app/draft/7',
+    );
+    expect(JSON.stringify(event)).not.toMatch(/standalone-secret|private-fragment/i);
+  });
 });

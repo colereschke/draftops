@@ -17,7 +17,7 @@ export default async function NominatePage({ params }: { params: Promise<{ draft
   if (!draft) notFound();
 
   const rawBids = await prisma.auctionResult.findMany({
-    where: { draftId },
+    where: { draftId, deletedAt: null },
     select: {
       player: true,
       price: true,

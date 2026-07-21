@@ -4,7 +4,14 @@
 import { useState, useMemo, useOptimistic, useTransition } from 'react';
 import dynamic from 'next/dynamic';
 import { useRouter } from 'next/navigation';
-import type { Player, Position, ClaimedBid, LeagueTeam, ScoringSettings } from '@/types';
+import type {
+  Player,
+  Position,
+  ClaimedBid,
+  LeagueTeam,
+  ScoringSettings,
+  StartingSlot,
+} from '@/types';
 import { logBid, updateBid, deleteBid } from '@/lib/actions';
 import BidModal from '@/components/BidModal';
 import { useOnboarding } from '@/components/Onboarding/OnboardingContext';
@@ -13,6 +20,7 @@ import FilterControls, { type PositionFilter, type StrategyFilter } from './Filt
 import PlayerTable, { type SortKey } from './PlayerTable';
 import DraftReadOnlyBanner from '@/components/DraftReadOnlyBanner';
 import MutationStatus from '@/components/MutationStatus';
+import BidHistoryPanel, { type DeletedBid } from '@/components/BidHistory/BidHistoryPanel';
 import type { DraftMutationCode } from '@/lib/draftMutation';
 
 const SleeperRosterSyncDialog = dynamic(
@@ -34,9 +42,14 @@ interface AuctionSheetProps {
   ownerHandle: string | null;
   ownerBudget: number;
   scoringSettings: ScoringSettings;
+  teamCount: number;
+  budget: number;
+  rosterSize: number;
+  startingLineup: StartingSlot[];
   sleeperSyncConfigured?: boolean;
   sleeperLeagueId?: string | null;
   isReadOnly?: boolean;
+  deletedBids?: DeletedBid[];
 }
 
 export default function AuctionSheet({
@@ -48,9 +61,14 @@ export default function AuctionSheet({
   ownerHandle,
   ownerBudget,
   scoringSettings,
+  teamCount,
+  budget,
+  rosterSize,
+  startingLineup,
   sleeperSyncConfigured = false,
   sleeperLeagueId = null,
   isReadOnly = false,
+  deletedBids = [],
 }: AuctionSheetProps) {
   const router = useRouter();
   const { progress, recordBidLogged } = useOnboarding();
@@ -359,6 +377,10 @@ export default function AuctionSheet({
           grandTotal={grandTotal}
           totalPlayerCount={totalPlayerCount}
           scoringSettings={scoringSettings}
+          teamCount={teamCount}
+          budget={budget}
+          rosterSize={rosterSize}
+          startingLineup={startingLineup}
         />
         <FilterControls
           posFilter={posFilter}
@@ -401,6 +423,7 @@ export default function AuctionSheet({
           PKG target = {futurePickYear ?? 'future'} 1st+2nd+3rd package
         </span>
       </div>
+      <BidHistoryPanel draftId={draftId} deletedBids={deletedBids} isReadOnly={isReadOnly} />
       {!isReadOnly && modalPlayer ? (
         <BidModal
           player={modalPlayer}

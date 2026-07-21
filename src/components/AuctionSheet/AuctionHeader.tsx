@@ -1,5 +1,12 @@
-import type { ScoringSettings } from '@/types';
+import type { ScoringSettings, StartingSlot } from '@/types';
+import {
+  DEFAULT_BUDGET,
+  DEFAULT_ROSTER_SIZE,
+  DEFAULT_STARTING_LINEUP,
+  DEFAULT_TEAM_COUNT,
+} from '@/types';
 import { POS_COLORS } from '@/lib/posColors';
+import { formatLineupFormat, hasTePremium } from '@/lib/describeDraftSettings';
 
 function teCaptionClause(scoringSettings: ScoringSettings): string {
   const pprDelta = scoringSettings.pprTE - scoringSettings.pprWR;
@@ -18,6 +25,10 @@ interface AuctionHeaderProps {
   grandTotal: number;
   totalPlayerCount: number;
   scoringSettings: ScoringSettings;
+  teamCount?: number;
+  budget?: number;
+  rosterSize?: number;
+  startingLineup?: StartingSlot[];
 }
 
 const MARKET_POSITIONS = ['QB', 'RB', 'WR', 'TE'] as const;
@@ -30,15 +41,26 @@ export default function AuctionHeader({
   grandTotal,
   totalPlayerCount,
   scoringSettings,
+  teamCount = DEFAULT_TEAM_COUNT,
+  budget = DEFAULT_BUDGET,
+  rosterSize = DEFAULT_ROSTER_SIZE,
+  startingLineup = DEFAULT_STARTING_LINEUP,
 }: AuctionHeaderProps) {
   const safeGrandTotal = grandTotal || 1;
+  const settingsCaption = [
+    `${teamCount}-Team`,
+    formatLineupFormat(startingLineup),
+    ...(hasTePremium(scoringSettings) ? ['TE Premium'] : []),
+    `$${budget.toLocaleString()} Budget`,
+    `${rosterSize}-Man Rosters`,
+  ].join(' · ');
 
   return (
     <div className="border-b border-border bg-background px-5 py-4">
       <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-stretch">
         <section className="rounded-lg border border-border-subtle bg-card px-4 py-3">
           <div className="font-label mb-1 text-[10px] tracking-[2.5px] text-muted-foreground uppercase">
-            12-Team · Superflex · TE Premium · $1,000 Budget · 30-Man Rosters
+            {settingsCaption}
           </div>
           <h1 className="font-label m-0 text-2xl leading-none font-bold tracking-tight text-foreground">
             Startup Auction Value Sheet

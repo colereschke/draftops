@@ -2,11 +2,13 @@
 
 import { useState, useMemo, useCallback } from 'react';
 import { ArrowUp, ArrowDown, ArrowUpDown } from 'lucide-react';
-import type { TeamWithRoster } from '@/types';
+import type { TeamWithRoster, StartingSlot } from '@/types';
+import { DEFAULT_STARTING_LINEUP } from '@/types';
 import type { AppetitePos, ManagerTendency } from '@/lib/tendencies';
 import { APPETITE_POSITIONS } from '@/lib/tendencies.constants';
 import { POS_COLORS } from '@/lib/posColors';
 import { useMediaQuery } from '@/lib/useMediaQuery';
+import { formatLineupFormat } from '@/lib/describeDraftSettings';
 import DossierCard from './DossierCard';
 import TeamDetailPane from './TeamDetailPane';
 
@@ -14,6 +16,7 @@ interface RosterTrackerProps {
   teams: TeamWithRoster[];
   tendencies: ManagerTendency[];
   ownerHandle: string | null;
+  startingLineup?: StartingSlot[];
 }
 
 type SortKey = 'spend' | 'aggression' | 'buys' | 'age' | AppetitePos;
@@ -102,7 +105,12 @@ function SortChip({
   );
 }
 
-export default function RosterTracker({ teams, tendencies, ownerHandle }: RosterTrackerProps) {
+export default function RosterTracker({
+  teams,
+  tendencies,
+  ownerHandle,
+  startingLineup = DEFAULT_STARTING_LINEUP,
+}: RosterTrackerProps) {
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
   const [sortBy, setSortBy] = useState<SortKey>('spend');
   const [sortDir, setSortDir] = useState<SortDir>('desc');
@@ -168,7 +176,7 @@ export default function RosterTracker({ teams, tendencies, ownerHandle }: Roster
       >
         <section className="rounded-lg border border-border-subtle bg-card px-4 py-3">
           <div className="font-label mb-1 text-[10px] tracking-[2.5px] text-muted-foreground uppercase">
-            {totalTeams}-Team · Superflex · Manager Scouting
+            {totalTeams}-Team · {formatLineupFormat(startingLineup)} · Manager Scouting
           </div>
           <div className="flex flex-wrap items-end justify-between gap-3">
             <div>

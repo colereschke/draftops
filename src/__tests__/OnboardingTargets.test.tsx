@@ -8,7 +8,13 @@ import RosterTracker from '@/components/RosterTracker/RosterTracker';
 import type { ManagerTendency } from '@/lib/tendencies';
 import { getOnboardingProgress } from '@/lib/onboarding';
 import type { ClaimedBid, LeagueTeam, Player, TeamStats, TeamWithRoster } from '@/types';
-import { DEFAULT_SCORING_SETTINGS } from '@/types';
+import {
+  DEFAULT_BUDGET,
+  DEFAULT_ROSTER_SIZE,
+  DEFAULT_SCORING_SETTINGS,
+  DEFAULT_STARTING_LINEUP,
+  DEFAULT_TEAM_COUNT,
+} from '@/types';
 
 jest.mock('@/auth', () => ({
   auth: jest.fn(),
@@ -214,6 +220,10 @@ describe('onboarding targets', () => {
         ownerHandle={TEAM.handle}
         ownerBudget={1000}
         scoringSettings={DEFAULT_SCORING_SETTINGS}
+        teamCount={DEFAULT_TEAM_COUNT}
+        budget={DEFAULT_BUDGET}
+        rosterSize={DEFAULT_ROSTER_SIZE}
+        startingLineup={DEFAULT_STARTING_LINEUP}
       />,
     );
     expect(document.querySelector('[data-onboarding-target="value-sheet"]')).toBeInTheDocument();

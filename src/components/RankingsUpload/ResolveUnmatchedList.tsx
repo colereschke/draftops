@@ -76,8 +76,10 @@ function UnmatchedRow({
     if (!search.trim()) return [];
     const q = normalizeName(search);
     if (!q) return [];
-    return sleeperPlayers.filter((p) => p.normalizedName.includes(q)).slice(0, 8);
-  }, [search, sleeperPlayers]);
+    return sleeperPlayers
+      .filter((candidate) => candidate.pos === player.pos && candidate.normalizedName.includes(q))
+      .slice(0, 8);
+  }, [player.pos, search, sleeperPlayers]);
 
   function pick(sleeperId: string) {
     setError(null);

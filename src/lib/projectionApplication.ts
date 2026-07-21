@@ -1,10 +1,8 @@
 import {
   DEFAULT_SCORING_SETTINGS,
-  DEFAULT_STARTING_LINEUP,
   DEFAULT_TARGET_ROSTER,
   type Position,
   type ScoringSettings,
-  type StartingSlot,
 } from '@/types';
 import {
   calculateProjectionMarketValues,
@@ -18,6 +16,7 @@ import {
   ProjectionApplicationFailure,
   pruneProjectionValueSetRows,
 } from '@/lib/projectionValueSet';
+import { toStartingLineup } from '@/lib/startingLineup';
 
 export type VorPosition = 'QB' | 'RB' | 'WR' | 'TE';
 
@@ -536,23 +535,6 @@ function toVorPosition(position: string): VorPosition | null {
     return position;
   }
   return null;
-}
-
-function toStartingLineup(value: unknown): StartingSlot[] {
-  if (!Array.isArray(value)) return [...DEFAULT_STARTING_LINEUP];
-  const slots = value.filter(isStartingSlot);
-  return slots.length > 0 ? slots : [...DEFAULT_STARTING_LINEUP];
-}
-
-function isStartingSlot(value: unknown): value is StartingSlot {
-  return (
-    value === 'QB' ||
-    value === 'RB' ||
-    value === 'WR' ||
-    value === 'TE' ||
-    value === 'FLEX' ||
-    value === 'SUPER_FLEX'
-  );
 }
 
 function toScoringSettings(value: unknown): ScoringSettings {

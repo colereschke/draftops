@@ -41,6 +41,14 @@ enum DraftProjectionValueSetStatus {
   FAILED
 }
 
+enum BidAuditEventType {
+  CREATE
+  UPDATE
+  DELETE
+  RESTORE
+  SUPERSEDE
+}
+
 // A draft is the top-level container for a single auction. One owner, all data scoped here.
 model Draft {
   id          Int         @id @default(autoincrement())
@@ -69,6 +77,8 @@ model Draft {
   teams            Team[]            @relation("DraftTeams")
   ownerTeam        Team?             @relation("DraftOwnerTeam", fields: [ownerTeamId, id], references: [id, draftId], onDelete: Restrict, onUpdate: Restrict)
   auctionResults   AuctionResult[]
+  bidAuditEvents   BidAuditEvent[]
+  completionSnapshot DraftCompletionSnapshot?
   watchlistEntries PlayerWatchlist[]
   nominatedPlayers NominatedPlayer[]
 
@@ -122,9 +132,39 @@ model AuctionResult {
   draftId   Int
   draft     Draft    @relation(fields: [draftId], references: [id])
   createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  deletedAt DateTime?
+  supersededAt DateTime?
+  auditEvents BidAuditEvent[]
 
-  @@unique([draftId, playerId])
+  @@unique([id, draftId])
   @@index([playerId])
+  @@index([draftId, deletedAt])
+}
+
+model BidAuditEvent {
+  id         Int               @id @default(autoincrement())
+  draftId    Int
+  bidId      Int
+  actorId    String
+  type       BidAuditEventType
+  before     Json?
+  after      Json?
+  occurredAt DateTime          @default(now())
+  draft      Draft             @relation(fields: [draftId], references: [id], onDelete: Restrict)
+  bid        AuctionResult     @relation(fields: [bidId, draftId], references: [id, draftId], onDelete: Restrict)
+
+  @@index([draftId, occurredAt, id])
+  @@index([bidId])
+}
+
+model DraftCompletionSnapshot {
+  id            Int      @id @default(autoincrement())
+  draftId       Int      @unique
+  capturedAt    DateTime @default(now())
+  schemaVersion Int
+  payload       Json
+  draft         Draft    @relation(fields: [draftId], references: [id], onDelete: Restrict)
 }
 
 model PlayerWatchlist {
@@ -326,4 +366,5 @@ model UserRankingPlayer {
   matchStatus  String         @default("unmatched")
 
   @@index([rankingSetId])
+  @@unique([rankingSetId, sleeperId])
 }

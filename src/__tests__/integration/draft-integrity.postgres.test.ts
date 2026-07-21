@@ -66,6 +66,8 @@ async function createFixture(options?: { budget?: number; rosterSize?: number })
 
 async function deleteFixture(draftId: number): Promise<void> {
   await prisma.$transaction([
+    prisma.bidAuditEvent.deleteMany({ where: { draftId } }),
+    prisma.draftCompletionSnapshot.deleteMany({ where: { draftId } }),
     prisma.auctionResult.deleteMany({ where: { draftId } }),
     prisma.nominatedPlayer.deleteMany({ where: { draftId } }),
     prisma.playerWatchlist.deleteMany({ where: { draftId } }),

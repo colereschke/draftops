@@ -123,6 +123,25 @@ describe('RosterTracker', () => {
     expect(screen.getByTestId('roster-group-QB')).toBeInTheDocument();
   });
 
+  it('reflects the lineup format truthfully instead of a hardcoded Superflex label', () => {
+    render(
+      <RosterTracker
+        teams={[makeTeam()]}
+        tendencies={[makeTendency()]}
+        ownerHandle="coreschke"
+        startingLineup={['QB', 'RB', 'RB', 'WR', 'WR', 'TE', 'FLEX']}
+      />,
+    );
+    expect(screen.getByText('1-Team · 1QB · Manager Scouting')).toBeInTheDocument();
+  });
+
+  it('defaults to Superflex when no starting lineup is provided', () => {
+    render(
+      <RosterTracker teams={[makeTeam()]} tendencies={[makeTendency()]} ownerHandle="coreschke" />,
+    );
+    expect(screen.getByText('1-Team · Superflex · Manager Scouting')).toBeInTheDocument();
+  });
+
   describe('RosterTracker — sort chips', () => {
     it('defaults to Spend, descending', () => {
       const teams = [

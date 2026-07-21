@@ -143,3 +143,58 @@ describe('AuctionHeader — TE caption', () => {
     expect(screen.getByText(/TE PPR\+1 \/ 1st Down\+0\.25/)).toBeInTheDocument();
   });
 });
+
+describe('AuctionHeader — settings caption', () => {
+  it('defaults to the standard 12-team Superflex $1,000/30-man caption with no TE Premium segment', () => {
+    render(
+      <AuctionHeader
+        ownerBudget={1000}
+        mySpent={0}
+        remaining={1000}
+        posStats={POS_STATS}
+        grandTotal={1000}
+        totalPlayerCount={267}
+        scoringSettings={{ ...DEFAULT_SCORING_SETTINGS }}
+      />,
+    );
+    expect(
+      screen.getByText('12-Team · Superflex · $1,000 Budget · 30-Man Rosters'),
+    ).toBeInTheDocument();
+  });
+
+  it('reflects a 1QB, $200-budget, 10-team, 20-man draft truthfully', () => {
+    render(
+      <AuctionHeader
+        ownerBudget={200}
+        mySpent={0}
+        remaining={200}
+        posStats={POS_STATS}
+        grandTotal={200}
+        totalPlayerCount={267}
+        scoringSettings={{ ...DEFAULT_SCORING_SETTINGS }}
+        teamCount={10}
+        budget={200}
+        rosterSize={20}
+        startingLineup={['QB', 'RB', 'RB', 'WR', 'WR', 'TE', 'FLEX']}
+      />,
+    );
+    expect(screen.getByText('10-Team · 1QB · $200 Budget · 20-Man Rosters')).toBeInTheDocument();
+  });
+
+  it('adds a TE Premium segment only when scoring settings actually grant one', () => {
+    render(
+      <AuctionHeader
+        ownerBudget={1000}
+        mySpent={0}
+        remaining={1000}
+        posStats={POS_STATS}
+        grandTotal={1000}
+        totalPlayerCount={267}
+        scoringSettings={{ ...DEFAULT_SCORING_SETTINGS, pprTE: 1.5 }}
+      />,
+    );
+    expect(
+      screen.getByText('12-Team · Superflex · TE Premium · $1,000 Budget · 30-Man Rosters'),
+    ).toBeInTheDocument();
+  });
+});

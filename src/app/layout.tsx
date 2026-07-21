@@ -27,7 +27,7 @@ const jetbrainsMono = JetBrains_Mono({
 
 export const metadata: Metadata = {
   title: 'DraftOps | Dynasty Auction Tool',
-  description: '12-team Superflex dynasty auction tracker with live budget management',
+  description: 'Fantasy football dynasty auction draft tracker with live budget management',
 };
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {

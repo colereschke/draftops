@@ -4,7 +4,13 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import AuctionSheet from '@/components/AuctionSheet/AuctionSheet';
 import type { Player, ClaimedBid, LeagueTeam } from '@/types';
-import { DEFAULT_SCORING_SETTINGS } from '@/types';
+import {
+  DEFAULT_BUDGET,
+  DEFAULT_ROSTER_SIZE,
+  DEFAULT_SCORING_SETTINGS,
+  DEFAULT_STARTING_LINEUP,
+  DEFAULT_TEAM_COUNT,
+} from '@/types';
 
 const MOCK_PLAYERS: Player[] = [
   {
@@ -41,6 +47,7 @@ jest.mock('@/lib/actions', () => ({
   logBid: (...args: unknown[]) => mockLogBid(...args),
   updateBid: (...args: unknown[]) => mockUpdateBid(...args),
   deleteBid: (...args: unknown[]) => mockDeleteBid(...args),
+  restoreBid: jest.fn(),
 }));
 
 jest.mock('@/components/Onboarding/OnboardingContext', () => ({
@@ -95,6 +102,10 @@ function renderSheet(overrides: Partial<React.ComponentProps<typeof AuctionSheet
       ownerHandle="coreschke"
       ownerBudget={1000}
       scoringSettings={{ ...DEFAULT_SCORING_SETTINGS }}
+      teamCount={DEFAULT_TEAM_COUNT}
+      budget={DEFAULT_BUDGET}
+      rosterSize={DEFAULT_ROSTER_SIZE}
+      startingLineup={DEFAULT_STARTING_LINEUP}
       {...overrides}
     />,
   );
@@ -194,6 +205,25 @@ describe('AuctionSheet with claimed bids', () => {
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: /available only/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /sort by player/i })).toBeInTheDocument();
+  });
+
+  it('renders the bid recovery panel with the deleted bids supplied by the draft page', () => {
+    renderSheet({
+      deletedBids: [
+        {
+          id: 12,
+          player: 'Josh Allen',
+          position: 'QB',
+          price: 110,
+          teamHandle: 'coreschke',
+          deletedAt: new Date(Date.now() - 5 * 60 * 1000).toISOString(),
+          supersededAt: null,
+        },
+      ],
+    });
+
+    expect(screen.getByTestId('bid-history-panel')).toBeInTheDocument();
+    expect(screen.getByTestId('deleted-bid-12')).toHaveTextContent('Josh Allen');
   });
 
   it('shows LIVE badge for a player in the nominatedPlayers prop', () => {
@@ -557,5 +587,16 @@ describe('AuctionSheet with claimed bids', () => {
     // Both players tie at budget 100 (the default sort column) — SF rank breaks the
     // tie ascending, so the better-ranked player (rank 2) is shown first.
     expect(order).toEqual(['player-row-2', 'player-row-5']);
+  });
+
+  it('threads league settings through to the header caption', () => {
+    renderSheet({
+      teamCount: 8,
+      budget: 200,
+      rosterSize: 16,
+      startingLineup: ['QB', 'RB', 'RB', 'WR', 'WR', 'TE', 'FLEX'],
+    });
+
+    expect(screen.getByText('8-Team · 1QB · $200 Budget · 16-Man Rosters')).toBeInTheDocument();
   });
 });

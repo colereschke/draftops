@@ -1,5 +1,7 @@
-import type { TeamStats } from '@/types';
+import type { TeamStats, StartingSlot } from '@/types';
+import { DEFAULT_STARTING_LINEUP } from '@/types';
 import type { ManagerTendency, AppetitePos } from '@/lib/tendencies';
+import { formatLineupFormat } from '@/lib/describeDraftSettings';
 import BudgetRefresher from './BudgetRefresher';
 import ThreatBoard from './ThreatBoard';
 
@@ -9,6 +11,8 @@ interface BudgetPressureViewProps {
   livePosition: AppetitePos | null;
   liveName: string | null;
   ownerHandle: string | null;
+  budget?: number;
+  startingLineup?: StartingSlot[];
 }
 
 export default function BudgetPressureView({
@@ -17,9 +21,17 @@ export default function BudgetPressureView({
   livePosition,
   liveName,
   ownerHandle,
+  budget = 1000,
+  startingLineup = DEFAULT_STARTING_LINEUP,
 }: BudgetPressureViewProps) {
   const roomLiquidity = teams.reduce((sum, team) => sum + team.buyingPower, 0);
   const lowPowerCount = teams.filter((team) => team.buyingPower < 50).length;
+  const settingsCaption = [
+    `${teams.length}-Team`,
+    formatLineupFormat(startingLineup),
+    `$${budget.toLocaleString()} Budget`,
+    'Live Threat',
+  ].join(' · ');
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -30,7 +42,7 @@ export default function BudgetPressureView({
         <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-stretch">
           <section className="rounded-lg border border-border-subtle bg-card px-4 py-3">
             <div className="font-label mb-1 text-[10px] tracking-[2.5px] text-muted-foreground uppercase">
-              {teams.length}-Team · Superflex · $1,000 Budget · Live Threat
+              {settingsCaption}
             </div>
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>

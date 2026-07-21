@@ -22,6 +22,7 @@ const mockPlayerFindMany = jest.fn();
 const mockAuctionFindMany = jest.fn();
 const mockAuctionCreate = jest.fn();
 const mockAuctionCreateManyAndReturn = jest.fn();
+const mockBidAuditCreate = jest.fn();
 const mockNominationDeleteMany = jest.fn();
 const mockWithActiveOwnedDraftMutation = jest.fn();
 
@@ -56,6 +57,7 @@ jest.mock('@/lib/db', () => ({
       create: (...args: unknown[]) => mockAuctionCreate(...args),
       createManyAndReturn: (...args: unknown[]) => mockAuctionCreateManyAndReturn(...args),
     },
+    bidAuditEvent: { create: (...args: unknown[]) => mockBidAuditCreate(...args) },
     nominatedPlayer: { deleteMany: (...args: unknown[]) => mockNominationDeleteMany(...args) },
   },
 }));
@@ -102,6 +104,7 @@ function transactionClient() {
       create: mockAuctionCreate,
       createManyAndReturn: mockAuctionCreateManyAndReturn,
     },
+    bidAuditEvent: { create: mockBidAuditCreate },
     nominatedPlayer: { deleteMany: mockNominationDeleteMany },
   };
 }
@@ -117,7 +120,18 @@ beforeEach(() => {
   mockTeamFindFirst.mockResolvedValue({ id: TEAM.id, budget: 1000 });
   mockPlayerFindMany.mockResolvedValue([PLAYER]);
   mockAuctionFindMany.mockResolvedValue([]);
-  mockAuctionCreate.mockResolvedValue({});
+  mockAuctionCreate.mockImplementation((args: { data: Record<string, unknown> }) =>
+    Promise.resolve({
+      id: 99,
+      ...args.data,
+      notes: null,
+      createdAt: new Date('2026-07-19T12:00:00.000Z'),
+      updatedAt: new Date('2026-07-19T12:00:00.000Z'),
+      deletedAt: null,
+      supersededAt: null,
+    }),
+  );
+  mockBidAuditCreate.mockResolvedValue({ id: 1 });
   mockAuctionCreateManyAndReturn.mockImplementation((args: { data: Array<{ playerId: number }> }) =>
     Promise.resolve(args.data.map(({ playerId }) => ({ playerId }))),
   );
@@ -248,6 +262,10 @@ describe('Sleeper roster actions', () => {
         diagnostics: expect.objectContaining({ alreadyLoggedCount: 1 }),
       }),
     });
+    expect(mockAuctionFindMany).toHaveBeenCalledWith({
+      where: { draftId: 4, deletedAt: null },
+      select: { playerId: true },
+    });
   });
 
   it('rethrows an unexpected preview failure instead of masking it as a Sleeper error', async () => {
@@ -357,7 +375,17 @@ describe('Sleeper roster actions', () => {
         code: 'P2002',
         meta: { target: ['draftId', 'playerId'] },
       })
-      .mockResolvedValueOnce({ id: 44 });
+      .mockImplementationOnce((args: { data: Record<string, unknown> }) =>
+        Promise.resolve({
+          id: 44,
+          ...args.data,
+          notes: null,
+          createdAt: new Date('2026-07-19T12:00:00.000Z'),
+          updatedAt: new Date('2026-07-19T12:00:00.000Z'),
+          deletedAt: null,
+          supersededAt: null,
+        }),
+      );
 
     await expect(
       logSleeperRosterCatchUp({
@@ -395,7 +423,15 @@ describe('Sleeper roster actions', () => {
           price: args.data.price,
           position: args.data.position,
         });
-        return Promise.resolve({ id: args.data.playerId });
+        return Promise.resolve({
+          id: args.data.playerId,
+          ...args.data,
+          notes: null,
+          createdAt: new Date('2026-07-19T12:00:00.000Z'),
+          updatedAt: new Date('2026-07-19T12:00:00.000Z'),
+          deletedAt: null,
+          supersededAt: null,
+        });
       },
     );
     mockWithActiveOwnedDraftMutation.mockImplementation(

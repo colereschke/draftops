@@ -58,7 +58,7 @@ export async function POST(
           select: { id: true, name: true },
         }),
         tx.auctionResult.findFirst({
-          where: { playerId: input.playerId, draftId: draft.id },
+          where: { playerId: input.playerId, draftId: draft.id, deletedAt: null },
           select: { id: true },
         }),
       ]);

@@ -16,6 +16,7 @@ const SAFE_IDENTIFIER = /^[A-Za-z0-9:_-]+$/;
 const SAFE_ACTION = /^[a-z][a-z0-9_.-]*$/;
 const SAFE_ENVIRONMENTS = new Set(['development', 'preview', 'production', 'test']);
 const HMAC_SHA256 = /^[a-f0-9]{64}$/;
+const DISCORD_SNOWFLAKE = /\d{17,20}/;
 
 export interface SentryEvent {
   type?: string;
@@ -54,7 +55,8 @@ function sanitizeIdentifier(value: unknown): string | undefined {
     typeof value !== 'string' ||
     value.length === 0 ||
     value.length > MAX_IDENTIFIER_LENGTH ||
-    !SAFE_IDENTIFIER.test(value)
+    !SAFE_IDENTIFIER.test(value) ||
+    DISCORD_SNOWFLAKE.test(value)
   ) {
     return undefined;
   }
@@ -80,7 +82,7 @@ function sanitizeEnvironment(value: unknown): string | undefined {
 }
 
 function sanitizeExceptionType(value: unknown): string | undefined {
-  if (typeof value !== 'string') {
+  if (typeof value !== 'string' || DISCORD_SNOWFLAKE.test(value)) {
     return undefined;
   }
 
@@ -139,7 +141,9 @@ function sanitizeTags(tags: SentryEvent['tags']): SentryEvent['tags'] | undefine
             : key === 'deployment.environment'
               ? sanitizeEnvironment(value)
               : key === 'user.correlation_id'
-                ? typeof value === 'string' && HMAC_SHA256.test(value)
+                ? typeof value === 'string' &&
+                  HMAC_SHA256.test(value) &&
+                  !DISCORD_SNOWFLAKE.test(value)
                   ? value
                   : undefined
                 : sanitizeIdentifier(value);

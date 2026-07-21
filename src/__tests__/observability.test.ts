@@ -122,4 +122,26 @@ describe('server observability', () => {
       expect.objectContaining({ errorSummary: 'Failed for user [redacted-user-id]' }),
     );
   });
+
+  it('drops structured-log correlation fields containing Discord-style snowflakes', () => {
+    const error = jest.spyOn(console, 'error').mockImplementation();
+    const snowflake = '123456789012345678';
+    process.env.VERCEL_DEPLOYMENT_ID = `deployment-${snowflake}`;
+
+    logServerError({
+      incidentId: `incident-${snowflake}`,
+      action: 'render',
+      routePath: '/draft/7',
+      draftId: `draft-${snowflake}`,
+      requestId: `request-${snowflake}`,
+      error: new Error('safe failure'),
+    });
+
+    expect(JSON.parse(error.mock.calls[0]?.[0] as string)).toEqual({
+      event: 'server_error',
+      action: 'render',
+      routePath: '/draft/7',
+      errorSummary: 'safe failure',
+    });
+  });
 });

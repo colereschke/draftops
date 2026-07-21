@@ -90,6 +90,31 @@ describe('sanitizeSentryEvent', () => {
     );
   });
 
+  it('drops correlation tags and exception types containing Discord-style snowflakes', () => {
+    const snowflake = '123456789012345678';
+    const event = sanitizeSentryEvent({
+      type: `RequestError-${snowflake}`,
+      exception: { values: [{ type: `DatabaseError-${snowflake}`, value: 'safe failure' }] },
+      tags: {
+        'incident.id': `incident-${snowflake}`,
+        action: 'render',
+        'route.path': '/draft/7',
+        'draft.id': `draft-${snowflake}`,
+        'request.id': `request-${snowflake}`,
+        'deployment.id': `deployment-${snowflake}`,
+      },
+    });
+
+    expect(event).toEqual({
+      exception: { values: [{ value: 'safe failure' }] },
+      tags: {
+        action: 'render',
+        'route.path': '/draft/7',
+      },
+    });
+    expect(JSON.stringify(event)).not.toContain(snowflake);
+  });
+
   it.each(['mailto:cole@example.test', 'javascript:alert(secret)', 'data:text/plain,secret'])(
     'rejects opaque request URL schemes: %s',
     (url) => {

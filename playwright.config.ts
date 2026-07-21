@@ -27,7 +27,7 @@ export default defineConfig({
     },
     {
       name: 'authenticated',
-      testMatch: /(bid|nominate|rosters)\.spec\.ts/,
+      testMatch: /(bid|csp|nominate|rosters)\.spec\.ts/,
       use: { ...devices['Desktop Chrome'], storageState: './e2e/.auth/user.json' },
     },
     {

@@ -41,7 +41,21 @@ export async function GET(
 
   const body = JSON.stringify(
     serializeDraftExport({
-      draft: { id: draft.id, name: draft.name, status: draft.status, budget: draft.budget },
+      draft: {
+        id: draft.id,
+        name: draft.name,
+        status: draft.status,
+        budget: draft.budget,
+        teamCount: draft.teamCount,
+        rosterSize: draft.rosterSize,
+        playerValueSourceBudget: draft.playerValueSourceBudget,
+        startingLineup: draft.startingLineup,
+        scoringSettings: draft.scoringSettings,
+        targetRoster: draft.targetRoster,
+        futurePickAuctionMode: draft.futurePickAuctionMode,
+        sleeperLeagueId: draft.sleeperLeagueId,
+        activeProjectionValueSetId: draft.activeProjectionValueSetId,
+      },
       bids,
       auditEvents,
       completionSnapshot,

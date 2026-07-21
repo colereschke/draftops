@@ -24,7 +24,21 @@ const BID = {
 describe('serializeDraftExport', () => {
   it('uses ISO timestamps and deterministically orders audit events', () => {
     const exported = serializeDraftExport({
-      draft: { id: 4, name: 'Startup', status: 'ACTIVE', budget: 1000 },
+      draft: {
+        id: 4,
+        name: 'Startup',
+        status: 'ACTIVE',
+        budget: 1000,
+        teamCount: 12,
+        rosterSize: 30,
+        playerValueSourceBudget: 1000,
+        startingLineup: { QB: 1, RB: 2, WR: 3, TE: 1, FLEX: 2, SUPER_FLEX: 1 },
+        scoringSettings: { ppr: 1, tightEndPremium: 1 },
+        targetRoster: { QB: 3, RB: 8, WR: 10, TE: 4 },
+        futurePickAuctionMode: 'PACKAGES',
+        sleeperLeagueId: '12345',
+        activeProjectionValueSetId: 9,
+      },
       bids: [BID],
       auditEvents: [
         {
@@ -57,6 +71,21 @@ describe('serializeDraftExport', () => {
       createdAt: '2026-07-21T12:00:00.000Z',
       updatedAt: '2026-07-21T13:00:00.000Z',
       team: { handle: 'coreschke', displayName: 'Cole' },
+    });
+    expect(exported.draft).toEqual({
+      id: 4,
+      name: 'Startup',
+      status: 'ACTIVE',
+      budget: 1000,
+      teamCount: 12,
+      rosterSize: 30,
+      playerValueSourceBudget: 1000,
+      startingLineup: { QB: 1, RB: 2, WR: 3, TE: 1, FLEX: 2, SUPER_FLEX: 1 },
+      scoringSettings: { ppr: 1, tightEndPremium: 1 },
+      targetRoster: { QB: 3, RB: 8, WR: 10, TE: 4 },
+      futurePickAuctionMode: 'PACKAGES',
+      sleeperLeagueId: '12345',
+      activeProjectionValueSetId: 9,
     });
     expect(exported.auditEvents.map((event) => event.id)).toEqual([3, 8]);
     expect(exported.completionSnapshot).toEqual({

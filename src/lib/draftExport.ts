@@ -1,4 +1,4 @@
-import type { BidAuditEventType, Prisma } from '@prisma/client';
+import type { BidAuditEventType, FuturePickAuctionMode, Prisma } from '@prisma/client';
 
 export interface ExportedTeam {
   id: number;
@@ -45,6 +45,15 @@ export interface ExportableDraft {
   name: string;
   status: string;
   budget: number;
+  teamCount: number;
+  rosterSize: number;
+  playerValueSourceBudget: number;
+  startingLineup: Prisma.JsonValue | null;
+  scoringSettings: Prisma.JsonValue | null;
+  targetRoster: Prisma.JsonValue | null;
+  futurePickAuctionMode: FuturePickAuctionMode;
+  sleeperLeagueId: string | null;
+  activeProjectionValueSetId: number | null;
 }
 
 export interface DraftExportInput {

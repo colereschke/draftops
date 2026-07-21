@@ -46,7 +46,21 @@ const BID = {
 beforeEach(() => {
   jest.clearAllMocks();
   mockAuth.mockResolvedValue({ user: { id: 'owner-1' } });
-  mockGetDraft.mockResolvedValue({ id: 4, name: 'Startup', status: 'ACTIVE', budget: 1000 });
+  mockGetDraft.mockResolvedValue({
+    id: 4,
+    name: 'Startup',
+    status: 'ACTIVE',
+    budget: 1000,
+    teamCount: 12,
+    rosterSize: 30,
+    playerValueSourceBudget: 1000,
+    startingLineup: { QB: 1, RB: 2 },
+    scoringSettings: { ppr: 1 },
+    targetRoster: { QB: 3, RB: 8 },
+    futurePickAuctionMode: 'PACKAGES',
+    sleeperLeagueId: 'sleeper-league',
+    activeProjectionValueSetId: 5,
+  });
   mockAuctionFindMany.mockResolvedValue([BID]);
   mockAuditFindMany.mockResolvedValue([]);
   mockSnapshotFindUnique.mockResolvedValue(null);
@@ -72,7 +86,7 @@ describe('draft export routes', () => {
   });
 
   it('exports JSON with no-store attachment headers and ordered audit history', async () => {
-    await jsonGet(REQUEST, PARAMS);
+    const response = await jsonGet(REQUEST, PARAMS);
 
     expect(mockAuctionFindMany).toHaveBeenCalledWith({
       where: { draftId: 4, deletedAt: null },
@@ -82,6 +96,19 @@ describe('draft export routes', () => {
     expect(mockAuditFindMany).toHaveBeenCalledWith({
       where: { draftId: 4 },
       orderBy: [{ occurredAt: 'asc' }, { id: 'asc' }],
+    });
+    await expect(response.json()).resolves.toMatchObject({
+      draft: {
+        teamCount: 12,
+        rosterSize: 30,
+        playerValueSourceBudget: 1000,
+        startingLineup: { QB: 1, RB: 2 },
+        scoringSettings: { ppr: 1 },
+        targetRoster: { QB: 3, RB: 8 },
+        futurePickAuctionMode: 'PACKAGES',
+        sleeperLeagueId: 'sleeper-league',
+        activeProjectionValueSetId: 5,
+      },
     });
   });
 

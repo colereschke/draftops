@@ -33,14 +33,23 @@ describe('security headers', () => {
         value: 'camera=(), microphone=(), geolocation=(), payment=(), usb=(), browsing-topics=()',
       },
     ]);
-    const csp = headers.document[0]?.value ?? '';
     expect(headers.document[0]?.key).toBe('Content-Security-Policy-Report-Only');
-    expect(csp).toContain("connect-src 'self' https://example.ingest.us.sentry.io");
-    expect(csp).toContain("script-src 'self' 'unsafe-inline'");
-    expect(csp).toContain("script-src-attr 'none'");
-    expect(csp).toContain('upgrade-insecure-requests');
-    expect(csp).not.toContain("'unsafe-eval'");
-    expect(csp).not.toContain(' ws:');
+    expect(headers.document[0]?.value).toBe(
+      "default-src 'self'; script-src 'self' 'unsafe-inline'; script-src-attr 'none'; style-src " +
+        "'self' 'unsafe-inline'; img-src 'self' blob: data:; font-src 'self' data:; connect-src " +
+        "'self' https://example.ingest.us.sentry.io; worker-src 'self' blob:; manifest-src 'self'; " +
+        "media-src 'none'; frame-src 'none'; object-src 'none'; base-uri 'self'; form-action 'self'; " +
+        "frame-ancestors 'none'; upgrade-insecure-requests",
+    );
+  });
+
+  it('uses self only for connect-src when the Sentry DSN is invalid', () => {
+    const csp = buildSecurityHeaders({
+      nodeEnv: 'production',
+      sentryDsn: 'https://public@example.invalid/123',
+    }).document[0]?.value;
+
+    expect(csp).toContain("connect-src 'self';");
   });
 
   it('adds development-only React diagnostics and HMR allowances', () => {

@@ -31,10 +31,12 @@ export default async function BudgetPage({ params }: { params: Promise<{ draftId
       teamHandle: team.handle,
     })),
   );
+  const startingLineup = (draft.startingLineup ?? DEFAULT_STARTING_LINEUP) as StartingSlot[];
+
   const players = await getActiveDraftPlayers({
     draftId,
     bids,
-    startingLineup: (draft.startingLineup ?? DEFAULT_STARTING_LINEUP) as StartingSlot[],
+    startingLineup,
     futurePickAuctionMode: fromPrismaFuturePickMode(draft.futurePickAuctionMode),
   });
   const posByPlayerId = new Map(
@@ -60,6 +62,8 @@ export default async function BudgetPage({ params }: { params: Promise<{ draftId
       livePosition={live?.position ?? null}
       liveName={live?.name ?? null}
       ownerHandle={draft.ownerTeam?.handle ?? null}
+      budget={draft.budget}
+      startingLineup={startingLineup}
     />
   );
 }

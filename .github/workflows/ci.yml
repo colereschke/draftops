@@ -44,10 +44,9 @@ jobs:
     name: Production build
     runs-on: ubuntu-latest
 
-    # Placeholder values so `next build` can evaluate config/env-dependent
-    # modules without reaching a live provider. Never real secrets.
+    # The production build must not require database configuration. These placeholders let
+    # `next build` evaluate auth config without reaching a live provider. Never real secrets.
     env:
-      DATABASE_URL: postgresql://user:pass@localhost:5432/placeholder
       AUTH_SECRET: ci-build-placeholder-secret-not-a-real-credential
       AUTH_DISCORD_ID: ci-build-placeholder
       AUTH_DISCORD_SECRET: ci-build-placeholder

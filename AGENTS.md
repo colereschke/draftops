@@ -262,9 +262,17 @@ Prisma 7 changed how connections are configured:
 
 - `datasource` block in `schema.prisma` takes no `url` field — connection config lives in `prisma.config.ts`
 - Uses `@prisma/adapter-pg` (pg Pool) — do not instantiate PrismaClient without the adapter
-- `db.ts` creates a `Pool` from `DATABASE_URL` and passes a `PrismaPg` adapter to `PrismaClient`
+- `db.ts` creates a `Pool` from the pooled runtime `DATABASE_URL` and passes a `PrismaPg` adapter to `PrismaClient`
 - `prisma.config.ts` loads `.env.local` explicitly via `dotenv` (Prisma CLI does not auto-load it)
 - `postinstall` script runs `prisma generate` automatically after `pnpm install`
+- On Vercel, runtime functions use pooled `DATABASE_URL`; migration builds use direct `DIRECT_URL`.
+  `DIRECT_URL` is required when `VERCEL=1`.
+- `DATABASE_POOL_MAX` is per application instance, defaults to 3, and accepts whole numbers from 1
+  through 10. The pg client connection timeout is 5 seconds and idle timeout is 10 seconds.
+  Application names are `draftops-development`, `draftops-preview`, `draftops-production`, and
+  `draftops-test`.
+- Vercel function and Neon compute regions must be checked and matched before merge. See
+  `docs/operations/database-connections.md` for capacity and monitoring operations.
 
 After any schema change: `pnpm prisma migrate dev --name <description>`
 After pulling changes with new migrations: `pnpm prisma migrate dev` (applies pending)
@@ -274,7 +282,9 @@ After pulling changes with new migrations: `pnpm prisma migrate dev` (applies pe
 Required in `.env.local` (never commit):
 
 ```
-DATABASE_URL=          # Postgres connection string (Neon or local)
+DATABASE_URL=          # Pooled runtime Postgres connection string (Neon or local)
+DIRECT_URL=            # Direct migration Postgres connection string; required for Vercel builds
+DATABASE_POOL_MAX=     # Optional per-instance max, default 3; whole-number range 1-10
 AUTH_SECRET=           # Auth.js secret (generate with: openssl rand -base64 32)
 AUTH_DISCORD_ID=       # Discord OAuth app client ID
 AUTH_DISCORD_SECRET=   # Discord OAuth app client secret
@@ -329,7 +339,7 @@ Source: ETR dynasty rankings CSV (~267 players), normalized ×5 to a $1,000 sour
 
 ## What's Next
 
-**Deploy Milestone** (Vercel + Neon) — done. `prisma migrate deploy` is wired into the Vercel build command. Generated `data/generated/*` files are local/CLI inputs only; deployed runtime code must use persisted `SleeperPlayer` identity data.
+**Deploy Milestone** (Vercel + Neon) — done. `prisma migrate deploy` is wired into the Vercel build command using `DIRECT_URL`; runtime uses pooled `DATABASE_URL`. Build imports must not require a live database. Generated `data/generated/*` files are local/CLI inputs only; deployed runtime code must use persisted `SleeperPlayer` identity data. Fonts are self-hosted local WOFF2 files.
 
 **Longer term** (see `ROADMAP.md`):
 

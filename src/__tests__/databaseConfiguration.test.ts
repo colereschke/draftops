@@ -1,3 +1,6 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+
 import {
   getDatabasePoolConfiguration,
   resolveMigrationDatabaseUrl,
@@ -83,5 +86,16 @@ describe('resolveMigrationDatabaseUrl', () => {
 
   it('returns undefined when no local migration URL is configured', () => {
     expect(resolveMigrationDatabaseUrl({ DATABASE_URL: ' ' })).toBeUndefined();
+  });
+});
+
+describe('CI database configuration', () => {
+  it('keeps the production build job free of database URLs', () => {
+    const ciWorkflow = readFileSync(join(process.cwd(), '.github/workflows/ci.yml'), 'utf8');
+    const buildJob = ciWorkflow.match(/^  build:\n[\s\S]*?(?=^  [\w-]+:|(?![\s\S]))/m)?.[0];
+
+    expect(buildJob).toBeDefined();
+    expect(buildJob).not.toContain('DATABASE_URL:');
+    expect(buildJob).not.toContain('DIRECT_URL:');
   });
 });

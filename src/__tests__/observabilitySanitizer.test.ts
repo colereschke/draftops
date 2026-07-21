@@ -1,6 +1,18 @@
 import { sanitizeSentryEvent } from '@/lib/observabilitySanitizer';
 
 describe('sanitizeSentryEvent', () => {
+  it('retains safe release and environment metadata', () => {
+    const event = sanitizeSentryEvent({
+      release: 'draftops@1.2.3+abc123',
+      environment: 'production',
+    } as never);
+
+    expect(event).toEqual({
+      release: 'draftops@1.2.3+abc123',
+      environment: 'production',
+    });
+  });
+
   it('removes queries, bodies, headers, user data, and secrets', () => {
     const event = sanitizeSentryEvent({
       exception: {
@@ -113,6 +125,24 @@ describe('sanitizeSentryEvent', () => {
       },
     });
     expect(JSON.stringify(event)).not.toContain(snowflake);
+  });
+
+  it('drops secret-bearing identifiers and exception types', () => {
+    const event = sanitizeSentryEvent({
+      type: 'token-secret',
+      exception: { values: [{ type: 'PasswordSecret', value: 'safe failure' }] },
+      tags: {
+        'incident.id': 'token-secret',
+        'draft.id': 'password-secret',
+        'request.id': 'credential-secret',
+        'deployment.id': 'api-key-secret',
+      },
+    });
+
+    expect(event).toEqual({
+      exception: { values: [{ value: 'safe failure' }] },
+    });
+    expect(JSON.stringify(event)).not.toMatch(/token|password|credential|api-key|secret/i);
   });
 
   it.each(['mailto:cole@example.test', 'javascript:alert(secret)', 'data:text/plain,secret'])(

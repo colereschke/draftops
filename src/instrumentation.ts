@@ -3,6 +3,10 @@ import type { Instrumentation } from 'next';
 
 import { deriveIncidentDetails } from '@/lib/incident';
 import { logServerError } from '@/lib/observabilityLogger';
+import {
+  sanitizeObservabilityEnvironment,
+  sanitizeObservabilityIdentifier,
+} from '@/lib/observabilitySanitizer';
 
 export async function register(): Promise<void> {
   if (process.env.NEXT_RUNTIME === 'edge') {
@@ -17,6 +21,10 @@ export const onRequestError: Instrumentation.onRequestError = (error, request, e
   const { incidentId } = deriveIncidentDetails(error);
   const draftId = getDraftId(request.path);
   const requestId = getHeader(request.headers, 'x-vercel-id');
+  const deploymentId = sanitizeObservabilityIdentifier(process.env.VERCEL_DEPLOYMENT_ID);
+  const deploymentEnvironment = sanitizeObservabilityEnvironment(
+    process.env.VERCEL_ENV ?? process.env.NODE_ENV,
+  );
 
   Sentry.withScope((scope) => {
     scope.setTag('incident.id', incidentId);
@@ -27,6 +35,12 @@ export const onRequestError: Instrumentation.onRequestError = (error, request, e
     }
     if (requestId) {
       scope.setTag('request.id', requestId);
+    }
+    if (deploymentId) {
+      scope.setTag('deployment.id', deploymentId);
+    }
+    if (deploymentEnvironment) {
+      scope.setTag('deployment.environment', deploymentEnvironment);
     }
     Sentry.captureRequestError(error, request, errorContext);
   });

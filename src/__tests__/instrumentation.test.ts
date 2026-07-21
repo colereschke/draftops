@@ -70,6 +70,36 @@ describe('onRequestError', () => {
     expect(logServerError).toHaveBeenCalledWith(expect.objectContaining({ incidentId }));
   });
 
+  it('attaches safe deployment correlation tags', async () => {
+    const originalDeploymentId = process.env.VERCEL_DEPLOYMENT_ID;
+    const originalEnvironment = process.env.VERCEL_ENV;
+    process.env.VERCEL_DEPLOYMENT_ID = 'deployment-123';
+    process.env.VERCEL_ENV = 'preview';
+
+    try {
+      await onRequestError(
+        new Error('database unavailable'),
+        { path: '/draft/42', method: 'GET', headers: {} },
+        { routePath: '/draft/[draftId]', routeType: 'render' } as never,
+      );
+
+      expect(mockSetTag).toHaveBeenCalledWith('deployment.id', 'deployment-123');
+      expect(mockSetTag).toHaveBeenCalledWith('deployment.environment', 'preview');
+    } finally {
+      if (originalDeploymentId === undefined) {
+        delete process.env.VERCEL_DEPLOYMENT_ID;
+      } else {
+        process.env.VERCEL_DEPLOYMENT_ID = originalDeploymentId;
+      }
+
+      if (originalEnvironment === undefined) {
+        delete process.env.VERCEL_ENV;
+      } else {
+        process.env.VERCEL_ENV = originalEnvironment;
+      }
+    }
+  });
+
   it('registers the Edge Sentry configuration without loading Node-only observability', async () => {
     const originalRuntime = process.env.NEXT_RUNTIME;
     process.env.NEXT_RUNTIME = 'edge';

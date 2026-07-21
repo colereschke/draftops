@@ -97,14 +97,10 @@ describe('PlayerTable', () => {
     expect(onRowClick).toHaveBeenCalledWith(PLAYERS[0]);
   });
 
-  it('opens a player row with the keyboard', async () => {
-    const user = userEvent.setup();
-    const { onRowClick } = renderTable();
+  it('does not expose the row itself as a redundant keyboard stop', () => {
+    renderTable();
 
-    screen.getByTestId('player-row-1').focus();
-    await user.keyboard('{Enter}');
-
-    expect(onRowClick).toHaveBeenCalledWith(PLAYERS[0]);
+    expect(screen.getByTestId('player-row-1')).not.toHaveAttribute('tabindex');
   });
 
   it('row actions can be operated with the keyboard', async () => {

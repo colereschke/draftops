@@ -161,7 +161,9 @@ export default function RosterTracker({
   const packagesHeld = teams.reduce((sum, t) => sum + t.pkgCount, 0);
 
   return (
-    <div
+    <main
+      id="main-content"
+      tabIndex={-1}
       className={
         isDesktop
           ? 'flex h-[calc(100vh-3.5rem)] flex-col bg-background text-foreground'
@@ -258,6 +260,6 @@ export default function RosterTracker({
           ))}
         </div>
       )}
-    </div>
+    </main>
   );
 }

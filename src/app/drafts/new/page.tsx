@@ -291,7 +291,11 @@ export default function NewDraftPage() {
   }
 
   return (
-    <main style={{ padding: '2rem', maxWidth: '680px', margin: '0 auto' }}>
+    <main
+      id="main-content"
+      tabIndex={-1}
+      style={{ padding: '2rem', maxWidth: '680px', margin: '0 auto' }}
+    >
       <div
         style={{
           display: 'flex',
@@ -379,7 +383,7 @@ export default function NewDraftPage() {
           <p
             data-testid="sleeper-import-error"
             style={{
-              color: '#e05050',
+              color: 'var(--destructive)',
               fontFamily: 'var(--font-barlow)',
               fontSize: '0.8rem',
               marginTop: '0.5rem',
@@ -899,7 +903,7 @@ export default function NewDraftPage() {
           <p
             data-testid="draft-form-error"
             style={{
-              color: '#e05050',
+              color: 'var(--destructive)',
               fontFamily: 'var(--font-barlow)',
               fontSize: '0.875rem',
               marginBottom: '0.75rem',

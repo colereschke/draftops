@@ -6,6 +6,7 @@ import type { Player } from '@/types';
 import { POS_COLORS } from '@/lib/posColors';
 import { Command, CommandInput, CommandList, CommandItem } from '@/components/ui/command';
 import { normalizeName } from '@/lib/sleeperNormalize';
+import { cn } from '@/lib/utils';
 
 interface WatchlistSidebarProps {
   players: Player[];
@@ -147,26 +148,34 @@ export default function WatchlistSidebar({
               value={search}
               onValueChange={setSearch}
               placeholder="Add player I want..."
+              aria-label="Add player to watchlist"
+              autoComplete="off"
             />
-            {search.trim() !== '' && searchResults.length > 0 && (
-              <CommandList className="absolute top-full right-0 left-0 z-10 mt-1 rounded-[5px] border border-border bg-popover">
-                {searchResults.map((p) => (
-                  <CommandItem
-                    key={p.player}
-                    value={p.player}
-                    onSelect={() => {
-                      onAddToWatchlist(p);
-                      setSearch('');
-                    }}
-                  >
-                    <span className="font-semibold text-foreground">{p.player}</span>
-                    <span className="ml-1.5 font-mono text-[10px] text-muted-foreground">
-                      {p.pos} · ${p.budget}
-                    </span>
-                  </CommandItem>
-                ))}
-              </CommandList>
-            )}
+            {/* Always mounted (rather than conditionally rendered) so CommandInput's
+                aria-controls target always resolves to a real element in the DOM —
+                visibility is toggled via CSS instead of mount/unmount. */}
+            <CommandList
+              className={cn(
+                'absolute top-full right-0 left-0 z-10 mt-1 rounded-[5px] border border-border bg-popover',
+                (search.trim() === '' || searchResults.length === 0) && 'hidden',
+              )}
+            >
+              {searchResults.map((p) => (
+                <CommandItem
+                  key={p.player}
+                  value={p.player}
+                  onSelect={() => {
+                    onAddToWatchlist(p);
+                    setSearch('');
+                  }}
+                >
+                  <span className="font-semibold text-foreground">{p.player}</span>
+                  <span className="ml-1.5 font-mono text-[10px] text-muted-foreground">
+                    {p.pos} · ${p.budget}
+                  </span>
+                </CommandItem>
+              ))}
+            </CommandList>
           </Command>
         </div>
       ) : null}

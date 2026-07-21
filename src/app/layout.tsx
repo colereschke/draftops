@@ -3,6 +3,7 @@ import { Barlow_Condensed, Inter, JetBrains_Mono } from 'next/font/google';
 import { auth } from '@/auth';
 import NavBar from '@/components/NavBar';
 import NavBarGate from '@/components/NavBar/NavBarGate';
+import SkipLink from '@/components/SkipLink';
 import './globals.css';
 
 const inter = Inter({
@@ -38,6 +39,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
       className={`${inter.variable} ${barlowCondensed.variable} ${jetbrainsMono.variable}`}
     >
       <body style={{ fontFamily: 'var(--font-inter), sans-serif' }}>
+        <SkipLink />
         <NavBarGate>
           <NavBar session={session} />
         </NavBarGate>

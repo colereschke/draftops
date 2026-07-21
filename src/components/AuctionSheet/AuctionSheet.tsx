@@ -365,7 +365,7 @@ export default function AuctionSheet({
   ).length;
 
   return (
-    <div className="min-h-screen bg-background text-foreground">
+    <main id="main-content" tabIndex={-1} className="min-h-screen bg-background text-foreground">
       <MutationStatus message={mutationStatus} />
       {isReadOnly ? <DraftReadOnlyBanner /> : null}
       <div data-onboarding-target="value-sheet">
@@ -447,7 +447,7 @@ export default function AuctionSheet({
           onClose={() => setShowSleeperSync(false)}
         />
       ) : null}
-    </div>
+    </main>
   );
 }
 

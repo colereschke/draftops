@@ -106,4 +106,35 @@ describe('RankingsUploadForm', () => {
     );
     expect(input.value).toBe('');
   });
+
+  it('announces a successful upload through the shared live region', async () => {
+    mockUpload.mockResolvedValue({ ok: true });
+    render(<RankingsUploadForm summary={null} />);
+    const input = screen.getByTestId('rankings-upload-button').querySelector('input')!;
+    const user = userEvent.setup();
+
+    await user.upload(
+      input,
+      makeFile('Player,Team,Position,Age,2QBAuction\nJosh Allen,BUF,QB,30.1,$51'),
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('mutation-status')).toHaveTextContent(/uploaded successfully/i);
+    });
+  });
+
+  it('announces a failed upload through the shared live region', async () => {
+    mockUpload.mockResolvedValue({ ok: false, errors: ['Missing required column(s): Age'] });
+    render(<RankingsUploadForm summary={null} />);
+    const input = screen.getByTestId('rankings-upload-button').querySelector('input')!;
+    const user = userEvent.setup();
+
+    await user.upload(input, makeFile('Player,Team\nJosh Allen,BUF'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('mutation-status')).toHaveTextContent(
+        /missing required column\(s\): age/i,
+      );
+    });
+  });
 });

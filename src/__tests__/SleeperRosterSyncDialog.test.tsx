@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import SleeperRosterSyncDialog from '@/components/SleeperRosterSync/SleeperRosterSyncDialog';
 import type { LeagueTeam } from '@/types';
@@ -69,6 +69,10 @@ beforeEach(() => {
   mockPreviewMatch.mockResolvedValue(MATCH_RESPONSE);
   mockSaveMapping.mockResolvedValue({ ok: true, preview: PREVIEW });
   mockLogCatchUp.mockResolvedValue({ ok: true, createdPlayerIds: [3], conflicts: [] });
+});
+
+afterEach(() => {
+  jest.useRealTimers();
 });
 
 describe('SleeperRosterSyncDialog', () => {
@@ -198,7 +202,7 @@ describe('SleeperRosterSyncDialog', () => {
 
     await user.type(screen.getByTestId('sleeper-sync-price-3'), '4.5');
     await user.click(screen.getByTestId('sleeper-sync-submit'));
-    expect(screen.getByTestId('sleeper-sync-error')).toHaveTextContent('whole-dollar');
+    expect(await screen.findByTestId('sleeper-sync-error')).toHaveTextContent('whole-dollar');
     expect(mockLogCatchUp).not.toHaveBeenCalled();
   });
 
@@ -319,5 +323,75 @@ describe('SleeperRosterSyncDialog', () => {
         entries: [{ playerId: 3, teamId: 7, price: 42 }],
       }),
     );
+  });
+
+  it('announces a failure through the shared live region', async () => {
+    mockPreview.mockResolvedValueOnce({ ok: false, code: 'sleeper_error' });
+    render(
+      <SleeperRosterSyncDialog
+        draftId={4}
+        teams={TEAMS}
+        initiallyConfigured={true}
+        sleeperLeagueId="league-1"
+        onClose={jest.fn()}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('mutation-status')).toHaveTextContent(/sleeper/i);
+    });
+  });
+
+  it('announces a successful catch-up import through the shared live region', async () => {
+    const user = userEvent.setup();
+    render(
+      <SleeperRosterSyncDialog
+        draftId={4}
+        teams={TEAMS}
+        initiallyConfigured={true}
+        onClose={jest.fn()}
+      />,
+    );
+    await screen.findByTestId('sleeper-sync-price-3');
+
+    await user.type(screen.getByTestId('sleeper-sync-price-3'), '42');
+    await user.click(screen.getByTestId('sleeper-sync-submit'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('mutation-status')).toHaveTextContent(/imported 1 price/i);
+    });
+  });
+
+  it('re-announces identical repeated validation failures by clearing the message before re-setting it', async () => {
+    jest.useFakeTimers();
+    const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
+    render(
+      <SleeperRosterSyncDialog
+        draftId={4}
+        teams={TEAMS}
+        initiallyConfigured={true}
+        onClose={jest.fn()}
+      />,
+    );
+    await screen.findByTestId('sleeper-sync-price-3');
+
+    await user.type(screen.getByTestId('sleeper-sync-price-3'), '4.5');
+    await user.click(screen.getByTestId('sleeper-sync-submit'));
+    act(() => {
+      jest.advanceTimersByTime(50);
+    });
+    expect(screen.getByTestId('sleeper-sync-error')).toHaveTextContent('whole-dollar');
+
+    await user.click(screen.getByTestId('sleeper-sync-submit'));
+    // Immediately after the second identical failure, before the delayed re-set fires, the
+    // error paragraph must be gone entirely — this is the real DOM mutation that lets
+    // aria-live re-announce identical text. If this assertion fails, the fix regressed to
+    // setting the same string twice with no intermediate change.
+    expect(screen.queryByTestId('sleeper-sync-error')).not.toBeInTheDocument();
+
+    act(() => {
+      jest.advanceTimersByTime(50);
+    });
+    expect(screen.getByTestId('sleeper-sync-error')).toHaveTextContent('whole-dollar');
   });
 });

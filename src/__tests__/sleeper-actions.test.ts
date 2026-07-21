@@ -1,9 +1,20 @@
 import { importFromSleeper } from '@/lib/sleeper-actions';
-import type { SleeperLeague, SleeperUser, SleeperRoster } from '@/lib/sleeper';
+import {
+  SleeperClientError,
+  type SleeperClientFailureCode,
+  type SleeperLeague,
+  type SleeperUser,
+  type SleeperRoster,
+} from '@/lib/sleeper';
 
 const mockFetchLeague = jest.fn();
 const mockFetchUsers = jest.fn();
 const mockFetchRosters = jest.fn();
+const mockAuth = jest.fn();
+
+jest.mock('@/auth', () => ({
+  auth: () => mockAuth(),
+}));
 
 jest.mock('@/lib/sleeper', () => {
   const actual = jest.requireActual('@/lib/sleeper') as typeof import('@/lib/sleeper');
@@ -34,12 +45,47 @@ const MOCK_ROSTERS: SleeperRoster[] = [
 
 beforeEach(() => {
   jest.clearAllMocks();
+  mockAuth.mockResolvedValue({ user: { id: 'user-1' } });
   mockFetchLeague.mockResolvedValue(MOCK_LEAGUE);
   mockFetchUsers.mockResolvedValue(MOCK_USERS);
   mockFetchRosters.mockResolvedValue(MOCK_ROSTERS);
 });
 
 describe('importFromSleeper', () => {
+  it('returns a sign-in error without contacting Sleeper for an anonymous request', async () => {
+    mockAuth.mockResolvedValue(null);
+
+    await expect(importFromSleeper('1360707683916734464')).resolves.toEqual({
+      ok: false,
+      error: 'Sign in to import a Sleeper league.',
+    });
+    expect(mockFetchLeague).not.toHaveBeenCalled();
+    expect(mockFetchUsers).not.toHaveBeenCalled();
+    expect(mockFetchRosters).not.toHaveBeenCalled();
+  });
+
+  it('rejects a non-string league ID without contacting Sleeper', async () => {
+    await expect(importFromSleeper(null as unknown as string)).resolves.toEqual({
+      ok: false,
+      error: 'Enter a valid Sleeper league ID.',
+    });
+    expect(mockFetchLeague).not.toHaveBeenCalled();
+    expect(mockFetchUsers).not.toHaveBeenCalled();
+    expect(mockFetchRosters).not.toHaveBeenCalled();
+  });
+
+  it('returns the generic error when authentication rejects', async () => {
+    mockAuth.mockRejectedValue(new Error('Auth provider unavailable'));
+
+    await expect(importFromSleeper('1360707683916734464')).resolves.toEqual({
+      ok: false,
+      error: "Couldn't reach Sleeper — try again.",
+    });
+    expect(mockFetchLeague).not.toHaveBeenCalled();
+    expect(mockFetchUsers).not.toHaveBeenCalled();
+    expect(mockFetchRosters).not.toHaveBeenCalled();
+  });
+
   it('calls fetchSleeperLeague, fetchSleeperLeagueUsers, and fetchSleeperLeagueRosters with the provided leagueId', async () => {
     await importFromSleeper('1360707683916734464');
     expect(mockFetchLeague).toHaveBeenCalledWith('1360707683916734464');
@@ -57,21 +103,25 @@ describe('importFromSleeper', () => {
     }
   });
 
-  it('returns league-not-found error when fetchSleeperLeague throws NOT_FOUND', async () => {
-    mockFetchLeague.mockRejectedValue(new Error('NOT_FOUND'));
-    const result = await importFromSleeper('bad-id');
-    expect(result.ok).toBe(false);
-    if (!result.ok) {
-      expect(result.error).toMatch(/league not found/i);
-    }
+  it.each<[SleeperClientFailureCode, string]>([
+    ['INVALID_LEAGUE_ID', 'Enter a valid Sleeper league ID.'],
+    ['NOT_FOUND', 'League not found. Check your Sleeper league ID.'],
+    ['TIMEOUT', 'Sleeper timed out. Try again in a moment.'],
+    ['RATE_LIMITED', 'Sleeper is rate-limiting requests. Try again shortly.'],
+    ['MALFORMED_RESPONSE', 'Sleeper returned unexpected league data. Try again later.'],
+    ['UNAVAILABLE', 'Sleeper is unavailable — try again.'],
+  ])('returns actionable copy for %s', async (code, error) => {
+    mockFetchLeague.mockRejectedValue(new SleeperClientError(code));
+
+    await expect(importFromSleeper('1360707683916734464')).resolves.toEqual({ ok: false, error });
   });
 
   it('returns generic error on unexpected failure', async () => {
     mockFetchLeague.mockRejectedValue(new Error('Network error'));
-    const result = await importFromSleeper('valid-id');
+    const result = await importFromSleeper('1360707683916734464');
     expect(result.ok).toBe(false);
     if (!result.ok) {
-      expect(result.error).toMatch(/couldn't reach sleeper/i);
+      expect(result.error).toBe("Couldn't reach Sleeper — try again.");
     }
   });
 });

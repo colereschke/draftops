@@ -33,7 +33,7 @@ interface TeamRow {
 type ImportState =
   | { status: 'idle' }
   | { status: 'error'; message: string }
-  | { status: 'success'; confirm: string; warning: string | null };
+  | { status: 'success'; confirm: string; warnings: string[] };
 
 function defaultTeams(count: number): TeamRow[] {
   return Array.from({ length: count }, (_, i) => ({
@@ -191,14 +191,16 @@ export default function NewDraftPage() {
         })),
       );
       setImportedLeagueId(leagueId.trim());
-      const warning =
-        trimmedUsername && data.ownerIndex === null
-          ? `Couldn't match '${trimmedUsername}' to a team in this league — select yours manually.`
-          : null;
+      const warnings = [...data.warnings];
+      if (trimmedUsername && data.ownerIndex === null) {
+        warnings.push(
+          `Couldn't match '${trimmedUsername}' to a team in this league — select yours manually.`,
+        );
+      }
       setImportState({
         status: 'success',
         confirm: `Imported from Sleeper · ${data.teamCount} teams · ${data.startingLineup.length} starting slots`,
-        warning,
+        warnings,
       });
     });
   }
@@ -401,7 +403,7 @@ export default function NewDraftPage() {
             >
               {importState.confirm}
             </p>
-            {importState.warning && (
+            {importState.warnings.length > 0 && (
               <p
                 data-testid="sleeper-import-warning"
                 style={{
@@ -412,7 +414,7 @@ export default function NewDraftPage() {
                   marginBottom: 0,
                 }}
               >
-                {importState.warning}
+                {importState.warnings.join(' ')}
               </p>
             )}
           </>

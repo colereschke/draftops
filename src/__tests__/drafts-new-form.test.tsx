@@ -3,19 +3,21 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import NewDraftPage from '@/app/drafts/new/page';
 import { createDraft } from '@/lib/actions';
-import { reportClientError } from '@/lib/reportClientError';
+import { captureClientError, createIncidentId } from '@/lib/clientObservability';
 import type { SleeperImportResult } from '@/lib/sleeper';
 import { DEFAULT_SCORING_SETTINGS } from '@/types';
 
 jest.mock('@/lib/actions', () => ({
   createDraft: jest.fn(),
 }));
-jest.mock('@/lib/reportClientError', () => ({
-  reportClientError: jest.fn(),
+jest.mock('@/lib/clientObservability', () => ({
+  captureClientError: jest.fn(),
+  createIncidentId: jest.fn(() => 'client-incident-123'),
 }));
 
 const mockPush = jest.fn();
-const mockReportClientError = jest.mocked(reportClientError);
+const mockCaptureClientError = jest.mocked(captureClientError);
+const mockCreateIncidentId = jest.mocked(createIncidentId);
 jest.mock('next/navigation', () => ({ useRouter: () => ({ push: mockPush }) }));
 
 const mockImportFromSleeper = jest.fn();
@@ -34,7 +36,8 @@ beforeEach(() => {
   (createDraft as jest.Mock).mockClear();
   (createDraft as jest.Mock).mockResolvedValue({ ok: true, data: { draftId: 1 } });
   mockPush.mockClear();
-  mockReportClientError.mockClear();
+  mockCaptureClientError.mockClear();
+  mockCreateIncidentId.mockClear();
 });
 
 const MOCK_IMPORT_RESULT: SleeperImportResult = {
@@ -575,7 +578,8 @@ describe('NewDraftPage — createDraft result handling', () => {
         'Draft creation failed. Please try again.',
       );
     });
-    expect(mockReportClientError).toHaveBeenCalledWith(error);
+    expect(mockCreateIncidentId).toHaveBeenCalledTimes(1);
+    expect(mockCaptureClientError).toHaveBeenCalledWith(error, 'client-incident-123');
     expect(mockPush).not.toHaveBeenCalled();
   });
 

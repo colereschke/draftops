@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import { createDraft } from '@/lib/actions';
 import { importFromSleeper } from '@/lib/sleeper-actions';
 import { getRankingSummary, type RankingSummary } from '@/lib/rankings-actions';
-import { reportClientError } from '@/lib/reportClientError';
+import { captureClientError, createIncidentId } from '@/lib/clientObservability';
 import { useNumericField } from '@/lib/useNumericField';
 import { draftInputSchema, MIN_TEAMS, MAX_TEAMS, type DraftInput } from '@/lib/draftInputSchema';
 import type { DraftMutationCode } from '@/lib/draftMutation';
@@ -284,7 +284,7 @@ export default function NewDraftPage() {
       } catch (error) {
         const reportedError =
           error instanceof Error ? error : new Error('Unknown draft creation error');
-        reportClientError(reportedError);
+        captureClientError(reportedError, createIncidentId());
         setError('Draft creation failed. Please try again.');
       }
     });

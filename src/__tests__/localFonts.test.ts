@@ -34,7 +34,10 @@ describe('local application fonts', () => {
       expect(() => execFileSync('git', ['ls-files', '--error-unmatch', assetPath])).not.toThrow();
 
       const checksum = createHash('sha256').update(readFileSync(assetPath)).digest('hex');
-      expect(manifest).toContain(`\`${checksum}\``);
+      const manifestRow = manifest.split('\n').find((line) => line.includes(`\`${filename}\``));
+      const declaredChecksum = manifestRow?.match(/`([a-f0-9]{64})`/)?.[1];
+
+      expect(declaredChecksum).toBe(checksum);
     }
   });
 });

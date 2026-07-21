@@ -19,6 +19,8 @@ no browser-controlled report payload is sent to the server.
 - Keep API and server-action authentication/ownership checks independent of `src/proxy.ts`.
 - Place the request boundary at `src/proxy.ts`; proxy matchers must remain literal constants.
 - Parse `NEXT_PUBLIC_SENTRY_DSN` as a URL and allow only a valid HTTPS Sentry ingest origin.
+- Permit the public-key username in a standard public Sentry DSN; reject a password or an invalid
+  HTTPS ingest origin so no secret or arbitrary environment value enters the CSP.
 - Retain only directive, disposition, document pathname, and blocked scheme/origin in browser tests.
 - Use `data-testid` selectors in browser tests, single quotes, trailing commas, and 2-space indent.
 
@@ -143,7 +145,6 @@ export function getSentryIngestOrigin(dsn: string | undefined): string | undefin
     const url = new URL(dsn);
     if (
       url.protocol !== 'https:' ||
-      url.username ||
       url.password ||
       url.pathname === '/' ||
       !SENTRY_INGEST_HOST.test(url.hostname)

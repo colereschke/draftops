@@ -136,6 +136,11 @@ export type ScoringSettings = {
   teFDBonus: number; // extra per TE receiving first down
 };
 
+// Matches the Draft model's own @default values in prisma/schema.prisma.
+export const DEFAULT_TEAM_COUNT = 12;
+export const DEFAULT_BUDGET = 1000;
+export const DEFAULT_ROSTER_SIZE = 30;
+
 export const DEFAULT_STARTING_LINEUP: StartingSlot[] = [
   'QB',
   'RB',

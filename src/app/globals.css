@@ -12,7 +12,7 @@
   --border-default: #30343a;
   --text-primary: #f2f3ee;
   --text-secondary: #a8ada4;
-  --text-muted: #687066;
+  --text-muted: #838980;
 
   --pos-qb: #4f83e8;
   --pos-rb: #4caf6e;
@@ -24,7 +24,7 @@
   --age-young: #4caf6e;
   --age-prime: #f3f1e8;
   --age-aging: #e8a030;
-  --age-old: #9f363c;
+  --age-old: #f87171;
 
   /* shadcn/ui canonical tokens, mapped onto the palette above.
      Dark-only app: one value set, no .dark class toggle. */
@@ -42,6 +42,8 @@
   --muted-foreground: var(--text-muted);
   --accent: #202328;
   --accent-foreground: var(--text-primary);
+  /* Aliased to --age-old (not a standalone red) — tuning age-band color here also
+     recolors every system error surface (ErrorText, error boundaries, form errors). */
   --destructive: var(--age-old);
   --border: var(--border-default);
   --input: var(--border-default);
@@ -139,5 +141,14 @@ body {
 @media (prefers-reduced-motion: reduce) {
   .ticker-scroll {
     animation: none;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }

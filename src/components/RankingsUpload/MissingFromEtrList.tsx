@@ -53,6 +53,8 @@ export default function MissingFromEtrList({ names }: MissingFromEtrListProps) {
             type="text"
             data-testid="missing-from-etr-search"
             placeholder="Filter…"
+            aria-label="Filter missing-from-ETR players"
+            autoComplete="off"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             style={{

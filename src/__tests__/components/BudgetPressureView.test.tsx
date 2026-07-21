@@ -74,4 +74,34 @@ describe('BudgetPressureView', () => {
     expect(screen.getByTestId('threat-row-coreschke')).toBeInTheDocument();
     expect(screen.getByTestId('threat-row-rival_b')).toBeInTheDocument();
   });
+
+  it('defaults to Superflex and the $1,000 budget caption when settings are not provided', () => {
+    render(
+      <BudgetPressureView
+        teams={teams}
+        tendencies={tendencies}
+        livePosition="WR"
+        liveName="Puka Nacua"
+        ownerHandle="coreschke"
+      />,
+    );
+    expect(
+      screen.getByText('2-Team · Superflex · $1,000 Budget · Live Threat'),
+    ).toBeInTheDocument();
+  });
+
+  it('reflects a non-default budget and lineup format truthfully', () => {
+    render(
+      <BudgetPressureView
+        teams={teams}
+        tendencies={tendencies}
+        livePosition="WR"
+        liveName="Puka Nacua"
+        ownerHandle="coreschke"
+        budget={200}
+        startingLineup={['QB', 'RB', 'RB', 'WR', 'WR', 'TE', 'FLEX']}
+      />,
+    );
+    expect(screen.getByText('2-Team · 1QB · $200 Budget · Live Threat')).toBeInTheDocument();
+  });
 });

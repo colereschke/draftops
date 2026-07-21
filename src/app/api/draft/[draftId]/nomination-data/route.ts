@@ -22,7 +22,7 @@ export async function GET(
   const [teams, watchlistEntries, nominatedEntries] = await Promise.all([
     prisma.team.findMany({
       where: { draftId: draft.id },
-      include: { results: true },
+      include: { results: { where: { deletedAt: null } } },
     }),
     prisma.playerWatchlist.findMany({
       where: { draftId: draft.id },

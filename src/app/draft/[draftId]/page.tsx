@@ -1,18 +1,15 @@
 import { notFound } from 'next/navigation';
 import { prisma } from '@/lib/db';
 import AuctionSheet from '@/components/AuctionSheet/AuctionSheet';
+import type { DeletedBid } from '@/components/BidHistory/BidHistoryPanel';
 import type { ClaimedBid, LeagueTeam } from '@/types';
 import { auth } from '@/auth';
 import { getDraft } from '@/lib/draft';
 import { getActiveDraftPlayers } from '@/lib/activeDraftPlayers';
 import { fromPrismaFuturePickMode } from '@/lib/futurePickAssets';
 import { computeSpreads } from '@/lib/valueSpread';
-import {
-  DEFAULT_STARTING_LINEUP,
-  DEFAULT_SCORING_SETTINGS,
-  type StartingSlot,
-  type ScoringSettings,
-} from '@/types';
+import { toStartingLineup } from '@/lib/startingLineup';
+import { DEFAULT_SCORING_SETTINGS, type ScoringSettings } from '@/types';
 
 export default async function DraftHomePage({ params }: { params: Promise<{ draftId: string }> }) {
   const draftId = parseInt((await params).draftId, 10);
@@ -21,9 +18,9 @@ export default async function DraftHomePage({ params }: { params: Promise<{ draf
   const draft = await getDraft(session.user.id, draftId);
   if (!draft) notFound();
 
-  const [rawBids, teams, nominatedEntries] = await Promise.all([
+  const [rawBids, deletedBidRows, teams, nominatedEntries] = await Promise.all([
     prisma.auctionResult.findMany({
-      where: { draftId },
+      where: { draftId, deletedAt: null },
       select: {
         id: true,
         playerId: true,
@@ -33,6 +30,19 @@ export default async function DraftHomePage({ params }: { params: Promise<{ draf
         teamId: true,
         team: { select: { handle: true } },
       },
+    }),
+    prisma.auctionResult.findMany({
+      where: { draftId, deletedAt: { not: null } },
+      select: {
+        id: true,
+        player: true,
+        position: true,
+        price: true,
+        deletedAt: true,
+        supersededAt: true,
+        team: { select: { handle: true } },
+      },
+      orderBy: { deletedAt: 'desc' },
     }),
     prisma.team.findMany({
       where: { draftId },
@@ -54,6 +64,23 @@ export default async function DraftHomePage({ params }: { params: Promise<{ draf
     teamId: r.teamId,
     teamHandle: r.team.handle,
   }));
+  const deletedBids: DeletedBid[] = deletedBidRows.flatMap((bid) =>
+    bid.deletedAt === null
+      ? []
+      : [
+          {
+            id: bid.id,
+            player: bid.player,
+            position: bid.position,
+            price: bid.price,
+            teamHandle: bid.team.handle,
+            deletedAt: bid.deletedAt.toISOString(),
+            supersededAt: bid.supersededAt?.toISOString() ?? null,
+          },
+        ],
+  );
+
+  const startingLineup = toStartingLineup(draft.startingLineup);
 
   const activePlayers = await getActiveDraftPlayers({
     draftId,
@@ -62,7 +89,7 @@ export default async function DraftHomePage({ params }: { params: Promise<{ draf
       price: bid.price,
       teamHandle: bid.team.handle,
     })),
-    startingLineup: (draft.startingLineup ?? DEFAULT_STARTING_LINEUP) as StartingSlot[],
+    startingLineup,
     futurePickAuctionMode: fromPrismaFuturePickMode(draft.futurePickAuctionMode),
   });
 
@@ -83,9 +110,14 @@ export default async function DraftHomePage({ params }: { params: Promise<{ draf
       ownerHandle={draft.ownerTeam?.handle ?? null}
       ownerBudget={draft.ownerTeam?.budget ?? 1000}
       scoringSettings={(draft.scoringSettings ?? DEFAULT_SCORING_SETTINGS) as ScoringSettings}
+      teamCount={draft.teamCount}
+      budget={draft.budget}
+      rosterSize={draft.rosterSize}
+      startingLineup={startingLineup}
       sleeperSyncConfigured={sleeperSyncConfigured}
       sleeperLeagueId={draft.sleeperLeagueId}
       isReadOnly={draft.status === 'COMPLETE'}
+      deletedBids={deletedBids}
     />
   );
 }

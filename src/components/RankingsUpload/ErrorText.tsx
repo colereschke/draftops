@@ -7,7 +7,7 @@ interface ErrorTextProps {
 }
 
 const BASE_STYLE: React.CSSProperties = {
-  color: '#e05050',
+  color: 'var(--destructive)',
   fontFamily: 'var(--font-barlow)',
   fontSize: '0.8rem',
 };

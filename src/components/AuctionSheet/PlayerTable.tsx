@@ -162,22 +162,10 @@ export default function PlayerTable({
                     ? 'Reopen this player and use Remove in the bid modal to undo this bid.'
                     : undefined
                 }
-                tabIndex={onRowClick ? 0 : undefined}
                 onClick={onRowClick ? () => onRowClick(p) : undefined}
-                onKeyDown={
-                  onRowClick
-                    ? (event) => {
-                        if (event.key === 'Enter' || event.key === ' ') {
-                          event.preventDefault();
-                          onRowClick(p);
-                        }
-                      }
-                    : undefined
-                }
                 className={cn(
                   'border-b-border-subtle hover:bg-card',
-                  onRowClick &&
-                    'cursor-pointer focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none',
+                  onRowClick && 'cursor-pointer',
                   claim && 'bg-background',
                   !claim && isNominated && 'bg-[color-mix(in_srgb,var(--pos-pick)_9%,transparent)]',
                   !claim && !isNominated && i % 2 !== 0 && 'bg-card/45',

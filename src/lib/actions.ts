@@ -21,7 +21,12 @@ import {
   DraftMutationFailure,
   type DraftMutationResult,
 } from '@/lib/draftMutation';
-import { createBidRecord, deleteBidRecord, updateBidRecord } from '@/lib/bidMutation';
+import {
+  createBidRecord,
+  deleteBidRecord,
+  restoreBidRecord,
+  updateBidRecord,
+} from '@/lib/bidMutation';
 import { draftInputSchema, type DraftInput } from '@/lib/draftInputSchema';
 
 export async function logBid(data: {
@@ -69,6 +74,22 @@ export async function deleteBid(data: {
   if (!session) return { ok: false, code: 'UNAUTHORIZED' };
 
   const result = await deleteBidRecord({
+    userId: session.user.id,
+    draftId: data.draftId,
+    bidId: data.id,
+  });
+  if (result.ok) revalidatePath(`/draft/${data.draftId}`);
+  return result;
+}
+
+export async function restoreBid(data: {
+  id: number;
+  draftId: number;
+}): Promise<DraftMutationResult<{ bidId: number }>> {
+  const session = await auth();
+  if (!session) return { ok: false, code: 'UNAUTHORIZED' };
+
+  const result = await restoreBidRecord({
     userId: session.user.id,
     draftId: data.draftId,
     bidId: data.id,

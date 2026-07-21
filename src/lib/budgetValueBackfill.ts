@@ -1,6 +1,6 @@
 import type { Prisma, PrismaClient } from '@prisma/client';
-import type { FuturePickAssetKind, Player, Position, ScoringSettings, StartingSlot } from '@/types';
-import { DEFAULT_SCORING_SETTINGS, DEFAULT_STARTING_LINEUP } from '@/types';
+import type { FuturePickAssetKind, Player, Position, ScoringSettings } from '@/types';
+import { DEFAULT_SCORING_SETTINGS } from '@/types';
 import {
   type ApplyProjectionValuesOptions,
   type ApplyProjectionValuesResult,
@@ -8,6 +8,7 @@ import {
 } from '@/lib/projectionApplication';
 import { adjustPlayerValues } from '@/lib/valueAdjustment';
 import { getBudgetScale, scaleWholeDollar } from '@/lib/valuationBudget';
+import { toStartingLineup } from '@/lib/startingLineup';
 
 export interface BudgetValueBackfillPlayer {
   id: number;
@@ -372,23 +373,6 @@ function toSourcePlayer(player: BudgetValueBackfillPlayer): Player {
 function toFuturePickAssetKind(value: string | null, playerId: number): FuturePickAssetKind | null {
   if (value === 'pick' || value === 'package' || value === null) return value;
   throw new Error(`Invalid future pick asset kind for player ${playerId}: ${value}`);
-}
-
-function toStartingLineup(value: unknown): StartingSlot[] {
-  if (!Array.isArray(value)) return [...DEFAULT_STARTING_LINEUP];
-  const slots = value.filter(isStartingSlot);
-  return slots.length > 0 ? slots : [...DEFAULT_STARTING_LINEUP];
-}
-
-function isStartingSlot(value: unknown): value is StartingSlot {
-  return (
-    value === 'QB' ||
-    value === 'RB' ||
-    value === 'WR' ||
-    value === 'TE' ||
-    value === 'FLEX' ||
-    value === 'SUPER_FLEX'
-  );
 }
 
 function toScoringSettings(value: unknown): ScoringSettings {

@@ -237,13 +237,15 @@ export default function NominationHelper({
 
   if (!data) {
     return (
-      <div
+      <main
+        id="main-content"
+        tabIndex={-1}
         data-onboarding-nomination-state={draftError ? 'error' : 'loading'}
         data-testid="nomination-helper-state"
         className="flex h-[400px] items-center justify-center text-muted-foreground"
       >
         {draftError ?? 'Loading nomination data...'}
-      </div>
+      </main>
     );
   }
 
@@ -255,7 +257,9 @@ export default function NominationHelper({
   );
 
   return (
-    <div
+    <main
+      id="main-content"
+      tabIndex={-1}
       data-testid="nomination-helper-layout"
       data-onboarding-nomination-state="ready"
       className="flex min-h-screen flex-col bg-background text-foreground md:flex-row"
@@ -330,7 +334,7 @@ export default function NominationHelper({
           isReadOnly={isReadOnly}
         />
       </div>
-    </div>
+    </main>
   );
 }
 

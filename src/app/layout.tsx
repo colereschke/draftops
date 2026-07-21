@@ -3,6 +3,7 @@ import { Barlow_Condensed, Inter, JetBrains_Mono } from 'next/font/google';
 import { auth } from '@/auth';
 import NavBar from '@/components/NavBar';
 import NavBarGate from '@/components/NavBar/NavBarGate';
+import SkipLink from '@/components/SkipLink';
 import './globals.css';
 
 const inter = Inter({
@@ -26,7 +27,7 @@ const jetbrainsMono = JetBrains_Mono({
 
 export const metadata: Metadata = {
   title: 'DraftOps | Dynasty Auction Tool',
-  description: '12-team Superflex dynasty auction tracker with live budget management',
+  description: 'Fantasy football dynasty auction draft tracker with live budget management',
 };
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
@@ -38,6 +39,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
       className={`${inter.variable} ${barlowCondensed.variable} ${jetbrainsMono.variable}`}
     >
       <body style={{ fontFamily: 'var(--font-inter), sans-serif' }}>
+        <SkipLink />
         <NavBarGate>
           <NavBar session={session} />
         </NavBarGate>

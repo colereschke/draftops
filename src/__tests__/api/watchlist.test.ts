@@ -150,6 +150,10 @@ describe('POST /api/draft/[draftId]/watchlist', () => {
       where: { id: 10, draftId: 1 },
       select: { id: true, name: true },
     });
+    expect(mockAuctionResultFindFirst).toHaveBeenCalledWith({
+      where: { playerId: 10, draftId: 1, deletedAt: null },
+      select: { id: true },
+    });
     expect(mockUpsert).toHaveBeenCalledWith({
       where: { playerId_draftId: { playerId: 10, draftId: 1 } },
       create: { playerId: 10, playerName: 'Josh Allen', draftId: 1 },

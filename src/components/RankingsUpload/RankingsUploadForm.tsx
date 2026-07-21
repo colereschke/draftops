@@ -3,6 +3,7 @@
 import { useRef, useState, useTransition } from 'react';
 import { uploadRankingsCsv } from '@/lib/rankings-actions';
 import ErrorText from './ErrorText';
+import MutationStatus from '@/components/MutationStatus';
 
 export interface RankingSummaryView {
   fileName: string | null;
@@ -19,6 +20,7 @@ interface RankingsUploadFormProps {
 
 export default function RankingsUploadForm({ summary }: RankingsUploadFormProps) {
   const [errors, setErrors] = useState<string[] | null>(null);
+  const [mutationStatus, setMutationStatus] = useState('');
   const [isPending, startTransition] = useTransition();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -26,15 +28,20 @@ export default function RankingsUploadForm({ summary }: RankingsUploadFormProps)
     const file = e.target.files?.[0];
     if (!file) return;
     setErrors(null);
+    setMutationStatus('');
     startTransition(async () => {
       try {
         const text = await file.text();
         const result = await uploadRankingsCsv(file.name, text);
         if (!result.ok) {
           setErrors(result.errors);
+          setMutationStatus(result.errors.join(' '));
+        } else {
+          setMutationStatus('Rankings uploaded successfully.');
         }
       } catch {
         setErrors(['Upload failed — please try again.']);
+        setMutationStatus('Upload failed — please try again.');
       } finally {
         if (fileInputRef.current) fileInputRef.current.value = '';
       }
@@ -50,6 +57,7 @@ export default function RankingsUploadForm({ summary }: RankingsUploadFormProps)
         marginBottom: '1.5rem',
       }}
     >
+      <MutationStatus message={mutationStatus} />
       {summary ? (
         <div data-testid="rankings-summary">
           <p style={{ margin: 0, fontFamily: 'var(--font-mono)', color: 'var(--text-primary)' }}>

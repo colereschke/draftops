@@ -44,7 +44,9 @@ export default function Error({ error, reset }: ErrorBoundaryProps) {
   }, [error, hasDigest, incidentId]);
 
   return (
-    <div
+    <main
+      id="main-content"
+      tabIndex={-1}
       style={{
         display: 'flex',
         flexDirection: 'column',
@@ -57,7 +59,7 @@ export default function Error({ error, reset }: ErrorBoundaryProps) {
         fontFamily: '"Inter", "Helvetica Neue", sans-serif',
       }}
     >
-      <div style={{ fontSize: 14, color: '#e05050', fontWeight: 600 }}>
+      <div style={{ fontSize: 14, color: 'var(--destructive)', fontWeight: 600 }}>
         Failed to load auction data
       </div>
       <div style={{ fontSize: 12, color: '#4a5168', maxWidth: 320, textAlign: 'center' }}>
@@ -81,6 +83,6 @@ export default function Error({ error, reset }: ErrorBoundaryProps) {
       >
         Try Again
       </button>
-    </div>
+    </main>
   );
 }

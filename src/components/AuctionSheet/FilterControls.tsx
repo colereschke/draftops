@@ -94,6 +94,8 @@ export default function FilterControls({
           value={search}
           onChange={(e) => onSearchChange(e.target.value)}
           placeholder="Search player or team..."
+          aria-label="Search player or team"
+          autoComplete="off"
           className="w-full rounded-md bg-background text-[12px] focus-visible:border-border focus-visible:ring-1 focus-visible:ring-border md:w-[210px]"
         />
 

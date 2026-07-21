@@ -17,6 +17,7 @@ import type {
 } from '@/lib/sleeper-roster-actions';
 import type { SleeperRosterPreview } from '@/lib/sleeperRosterSync';
 import { POS_COLORS } from '@/lib/posColors';
+import MutationStatus from '@/components/MutationStatus';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
@@ -75,6 +76,7 @@ export default function SleeperRosterSyncDialog({
   const [view, setView] = useState<SyncView>(initiallyConfigured ? 'loading' : 'configuration');
   const [preview, setPreview] = useState<SleeperRosterPreview | null>(null);
   const [error, setError] = useState<string>('');
+  const [successMessage, setSuccessMessage] = useState('');
   const [leagueId, setLeagueId] = useState<string>(sleeperLeagueId ?? '');
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
   const [matchCandidates, setMatchCandidates] = useState<SleeperRosterCandidate[] | null>(null);
@@ -83,7 +85,53 @@ export default function SleeperRosterSyncDialog({
   const [prices, setPrices] = useState<Record<number, string>>({});
   const [conflicts, setConflicts] = useState<Map<number, string>>(new Map());
   const autoSyncedRef = useRef(false);
+  const errorTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const successTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  useEffect(() => {
+    return () => {
+      if (errorTimeoutRef.current) clearTimeout(errorTimeoutRef.current);
+      if (successTimeoutRef.current) clearTimeout(successTimeoutRef.current);
+    };
+  }, []);
+
+  // Setting `error`/`successMessage` to a string identical to their current value produces no
+  // DOM mutation, so aria-live silently fails to re-announce a repeated identical outcome (e.g.
+  // two consecutive validation failures with the same message). Routing every real message
+  // through these clears the timeout, blanks the state (a real change), then re-sets it a tick
+  // later so the live region always sees two distinct commits.
+  const announceError = useCallback((text: string) => {
+    if (errorTimeoutRef.current) clearTimeout(errorTimeoutRef.current);
+    setError('');
+    errorTimeoutRef.current = setTimeout(() => setError(text), 50);
+  }, []);
+
+  const clearError = useCallback(() => {
+    if (errorTimeoutRef.current) {
+      clearTimeout(errorTimeoutRef.current);
+      errorTimeoutRef.current = null;
+    }
+    setError('');
+  }, []);
+
+  const announceSuccess = useCallback((text: string) => {
+    if (successTimeoutRef.current) clearTimeout(successTimeoutRef.current);
+    setSuccessMessage('');
+    successTimeoutRef.current = setTimeout(() => setSuccessMessage(text), 50);
+  }, []);
+
+  const clearSuccess = useCallback(() => {
+    if (successTimeoutRef.current) {
+      clearTimeout(successTimeoutRef.current);
+      successTimeoutRef.current = null;
+    }
+    setSuccessMessage('');
+  }, []);
+
+  // loadPreview/fetchInitialPreview intentionally use plain setError, not announceError: their
+  // outcome feeds straight into a view transition that can trigger the auto-sync effect below,
+  // whose own clearError() would otherwise race the delayed re-set and cancel it before it ever
+  // renders. They're not a repeated-click path anyway (mount-once or explicit Retry).
   async function loadPreview() {
     setView('loading');
     setError('');
@@ -134,15 +182,15 @@ export default function SleeperRosterSyncDialog({
     async (idOverride?: string) => {
       const targetLeagueId = (idOverride ?? leagueId).trim();
       if (!targetLeagueId) {
-        setError(responseMessage('invalid_league_id'));
+        announceError(responseMessage('invalid_league_id'));
         return;
       }
       setIsSyncing(true);
-      setError('');
+      clearError();
       try {
         const response = await previewSleeperRosterMatch({ draftId, leagueId: targetLeagueId });
         if (!response.ok) {
-          setError(responseMessage(response.code));
+          announceError(responseMessage(response.code));
           setIsSyncing(false);
           return;
         }
@@ -162,11 +210,11 @@ export default function SleeperRosterSyncDialog({
         });
         setIsSyncing(false);
       } catch {
-        setError('Unable to sync with Sleeper. Please try again.');
+        announceError('Unable to sync with Sleeper. Please try again.');
         setIsSyncing(false);
       }
     },
-    [draftId, leagueId],
+    [draftId, leagueId, announceError, clearError],
   );
 
   // Auto-sync only from a league ID the draft already had saved (the `sleeperLeagueId` prop) —
@@ -188,7 +236,7 @@ export default function SleeperRosterSyncDialog({
 
   async function saveConfiguration() {
     if (!matchCandidates) {
-      setError('Sync with Sleeper before saving a mapping.');
+      announceError('Sync with Sleeper before saving a mapping.');
       return;
     }
     const mappings = matchCandidates.flatMap((candidate) => {
@@ -198,16 +246,17 @@ export default function SleeperRosterSyncDialog({
         : [];
     });
     if (!leagueId.trim() || mappings.length !== matchCandidates.length) {
-      setError('Enter a league ID and assign every Sleeper roster to one team.');
+      announceError('Enter a league ID and assign every Sleeper roster to one team.');
       return;
     }
     if (new Set(mappings.map((mapping) => mapping.teamId)).size !== mappings.length) {
-      setError('Each draft team can only be mapped to one Sleeper roster.');
+      announceError('Each draft team can only be mapped to one Sleeper roster.');
       return;
     }
 
     setView('loading');
-    setError('');
+    clearError();
+    clearSuccess();
     try {
       const response = await saveSleeperRosterMapping({
         draftId,
@@ -215,14 +264,15 @@ export default function SleeperRosterSyncDialog({
         mappings,
       });
       if (!response.ok) {
-        setError(responseMessage(response.code));
+        announceError(responseMessage(response.code));
         setView('configuration');
         return;
       }
       setPreview(response.preview);
       setView('preview');
+      announceSuccess('Sleeper roster mapping saved.');
     } catch {
-      setError('Unable to save the Sleeper roster mapping. Please try again.');
+      announceError('Unable to save the Sleeper roster mapping. Please try again.');
       setView('configuration');
     }
   }
@@ -242,28 +292,30 @@ export default function SleeperRosterSyncDialog({
       return rawPrice !== '' && (!Number.isInteger(Number(rawPrice)) || Number(rawPrice) <= 0);
     });
     if (hasInvalidPrice) {
-      setError('Enter a whole-dollar price greater than zero for each filled row.');
+      announceError('Enter a whole-dollar price greater than zero for each filled row.');
       return;
     }
     if (entries.length === 0) {
-      setError('Enter at least one price to import. Blank rows are left untouched.');
+      announceError('Enter at least one price to import. Blank rows are left untouched.');
       return;
     }
 
-    setError('');
+    clearError();
+    clearSuccess();
     setConflicts(new Map());
     try {
       const response = await logSleeperRosterCatchUp({ draftId, entries });
       if (!response.ok) {
-        setError(responseMessage(response.code));
+        announceError(responseMessage(response.code));
         return;
       }
       setConflicts(
         new Map(response.conflicts.map((conflict) => [conflict.playerId, conflict.reason])),
       );
+      announceSuccess(`Imported ${entries.length} price${entries.length === 1 ? '' : 's'}.`);
       router.refresh();
     } catch {
-      setError('Unable to save the catch-up results. Please try again.');
+      announceError('Unable to save the catch-up results. Please try again.');
     }
   }
 
@@ -271,6 +323,7 @@ export default function SleeperRosterSyncDialog({
     <Dialog open onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-2xl">
         <DialogTitle>Sleeper roster catch-up</DialogTitle>
+        <MutationStatus message={error || successMessage} />
         {view === 'loading' && <p data-testid="sleeper-sync-loading">Loading Sleeper roster…</p>}
 
         {view === 'configuration' && (

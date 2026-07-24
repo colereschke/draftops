@@ -9,7 +9,7 @@ requires-python = ">=3.11"
 dependencies = ["pdfplumber>=0.11.4"]
 
 [project.optional-dependencies]
-dev = ["mypy>=2.3.0", "pytest>=8.3.4", "ruff>=0.8.4"]
+dev = ["mypy>=2.3.0", "pytest>=8.3.4", "ruff>=0.16.0"]
 
 [tool.mypy]
 python_version = "3.11"

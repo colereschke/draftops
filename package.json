@@ -57,8 +57,8 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "dotenv": "^17.4.2",
-    "eslint": "^9",
-    "eslint-config-next": "16.2.10",
+    "eslint": "^10",
+    "eslint-config-next": "16.2.11",
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-react-hooks": "^7.1.1",
     "husky": "^9.1.7",
@@ -66,12 +66,12 @@
     "jest-axe": "^10.0.0",
     "jest-environment-jsdom": "^30.4.1",
     "lint-staged": "^17.0.8",
-    "prettier": "^3.9.5",
+    "prettier": "^3.9.6",
     "prisma": "^7.8.0",
     "shadcn": "^4.13.0",
     "tailwindcss": "^4",
     "tsx": "^4.22.4",
     "typescript": "^5",
-    "typescript-eslint": "^8.64.0"
+    "typescript-eslint": "^8.65.0"
   }
 }

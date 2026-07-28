@@ -3,7 +3,7 @@
 
 import { useState, useMemo, useOptimistic, useTransition } from 'react';
 import dynamic from 'next/dynamic';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import type {
   Player,
   Position,
@@ -15,6 +15,8 @@ import type {
 import { logBid, updateBid, deleteBid } from '@/lib/actions';
 import BidModal from '@/components/BidModal';
 import { useOnboarding } from '@/components/Onboarding/OnboardingContext';
+import { useDebouncedValue } from '@/lib/useDebouncedValue';
+import { useUrlQuerySync } from '@/lib/useUrlQuerySync';
 import AuctionHeader from './AuctionHeader';
 import FilterControls, { type PositionFilter, type StrategyFilter } from './FilterControls';
 import PlayerTable, { type SortKey } from './PlayerTable';
@@ -22,6 +24,7 @@ import DraftReadOnlyBanner from '@/components/DraftReadOnlyBanner';
 import MutationStatus from '@/components/MutationStatus';
 import BidHistoryPanel, { type DeletedBid } from '@/components/BidHistory/BidHistoryPanel';
 import type { DraftMutationCode } from '@/lib/draftMutation';
+import { parseAuctionSheetSearchParams, buildAuctionSheetQueryString } from './urlState';
 
 const SleeperRosterSyncDialog = dynamic(
   () => import('@/components/SleeperRosterSync/SleeperRosterSyncDialog'),
@@ -72,13 +75,17 @@ export default function AuctionSheet({
 }: AuctionSheetProps) {
   const router = useRouter();
   const { progress, recordBidLogged } = useOnboarding();
-  const [posFilter, setPosFilter] = useState<PositionFilter>('ALL');
-  const [strategyFilter, setStrategyFilter] = useState<StrategyFilter>('ALL');
-  const [search, setSearch] = useState<string>('');
-  const [sortBy, setSortBy] = useState<SortKey>('budget');
-  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
+  const searchParams = useSearchParams();
+  const initialUrlState = parseAuctionSheetSearchParams(searchParams);
+  const [posFilter, setPosFilter] = useState<PositionFilter>(initialUrlState.posFilter);
+  const [strategyFilter, setStrategyFilter] = useState<StrategyFilter>(
+    initialUrlState.strategyFilter,
+  );
+  const [search, setSearch] = useState<string>(initialUrlState.search);
+  const [sortBy, setSortBy] = useState<SortKey>(initialUrlState.sortBy);
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>(initialUrlState.sortDir);
   const [showNotes, setShowNotes] = useState<boolean>(false);
-  const [availableOnly, setAvailableOnly] = useState<boolean>(false);
+  const [availableOnly, setAvailableOnly] = useState<boolean>(initialUrlState.availableOnly);
   const [modalPlayer, setModalPlayer] = useState<Player | null>(null);
   const [modalError, setModalError] = useState<string>('');
   const [mutationStatus, setMutationStatus] = useState<string>('');
@@ -87,6 +94,21 @@ export default function AuctionSheet({
   const [extraNominated, setExtraNominated] = useState<Array<number | string>>([]);
   const [clearedNominations, setClearedNominations] = useState<Set<number | string>>(new Set());
   const [showSleeperSync, setShowSleeperSync] = useState<boolean>(false);
+
+  const debouncedSearch = useDebouncedValue(search, 400);
+  const urlQuery = useMemo(
+    () =>
+      buildAuctionSheetQueryString({
+        posFilter,
+        strategyFilter,
+        search: debouncedSearch,
+        sortBy,
+        sortDir,
+        availableOnly,
+      }),
+    [posFilter, strategyFilter, debouncedSearch, sortBy, sortDir, availableOnly],
+  );
+  useUrlQuerySync(urlQuery);
 
   const [optimisticBids, dispatchOptimistic] = useOptimistic<ClaimedBid[], OptimisticAction>(
     claimedBids,
@@ -290,7 +312,8 @@ export default function AuctionSheet({
     let data = [...players];
     if (posFilter !== 'ALL') data = data.filter((p) => p.pos === posFilter);
     if (availableOnly) data = data.filter((p) => !claimMap.has(playerIdentityKey(p)));
-    if (strategyFilter !== 'ALL') data = data.filter((p) => p.strategyTag === strategyFilter);
+    if (strategyFilter !== 'ALL' && hasStrategyTags)
+      data = data.filter((p) => p.strategyTag === strategyFilter);
     if (search) {
       const q = search.toLowerCase();
       data = data.filter(
@@ -339,7 +362,17 @@ export default function AuctionSheet({
       return a.sfRank - b.sfRank;
     });
     return data;
-  }, [posFilter, search, availableOnly, strategyFilter, claimMap, sortBy, sortDir, players]);
+  }, [
+    posFilter,
+    search,
+    availableOnly,
+    strategyFilter,
+    hasStrategyTags,
+    claimMap,
+    sortBy,
+    sortDir,
+    players,
+  ]);
 
   const handleSort = (col: SortKey) => {
     if (sortBy === col) {

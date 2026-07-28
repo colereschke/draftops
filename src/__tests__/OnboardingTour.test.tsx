@@ -14,6 +14,7 @@ let mockPathname = '/draft/5';
 jest.mock('next/navigation', () => ({
   useRouter: () => mockRouter,
   usePathname: () => mockPathname,
+  useSearchParams: () => new URLSearchParams(),
 }));
 
 jest.mock('@/lib/onboarding-actions', () => ({

@@ -7,6 +7,8 @@ import type { Player } from '@/types';
 
 jest.mock('next/navigation', () => ({
   useRouter: () => ({ replace: jest.fn() }),
+  usePathname: () => '/draft/1/nominate',
+  useSearchParams: () => new URLSearchParams(),
 }));
 
 jest.mock('@/components/Onboarding/OnboardingContext', () => ({

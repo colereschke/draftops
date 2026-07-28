@@ -30,6 +30,8 @@ jest.mock('@/lib/onboarding', () => ({
 
 jest.mock('next/navigation', () => ({
   useRouter: () => ({ replace: jest.fn(), refresh: jest.fn() }),
+  usePathname: () => '/draft/1',
+  useSearchParams: () => new URLSearchParams(),
   notFound: jest.fn(),
   redirect: jest.fn(),
 }));

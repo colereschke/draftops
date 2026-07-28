@@ -16,7 +16,7 @@ export default function DraftNotFound() {
       >
         Draft not found
       </h1>
-      <p className="max-w-sm text-[12px] text-muted-foreground">
+      <p className="max-w-[24rem] text-[12px] text-muted-foreground">
         This draft doesn&apos;t exist, or you don&apos;t have access to it.
       </p>
       <Link

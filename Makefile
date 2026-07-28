@@ -101,11 +101,17 @@ db-stop: ## Stop the local PostgreSQL service (WSL2)
 
 .PHONY: db-migrate
 db-migrate: ## Run pending database migrations
-	pnpm prisma migrate dev
+	pnpm prisma migrate deploy
 
 .PHONY: db-seed
 db-seed: ## Seed the database with league teams
 	pnpm db:seed
+
+.PHONY: setup-smoke
+setup-smoke: ## Verify setup against a local PostgreSQL test database
+	pnpm tsx scripts/setupSmoke.ts --validate
+	DIRECT_URL="$(DATABASE_URL)" $(MAKE) setup
+	pnpm tsx scripts/setupSmoke.ts
 
 .PHONY: db-reset
 db-reset: ## Reset DB and re-run migrations + seed (destructive!)

@@ -84,6 +84,8 @@ async function main(): Promise<void> {
   const databaseUrl = process.env.DATABASE_URL;
 
   assertSetupSmokeDatabases(databaseUrl, process.env.DIRECT_URL);
+  if (process.argv.includes('--validate')) return;
+
   await verifySetupSeed(databaseUrl);
   console.log('Seeded 12 teams');
 }

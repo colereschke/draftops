@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useMemo, useCallback } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { ArrowUp, ArrowDown, ArrowUpDown } from 'lucide-react';
 import type { TeamWithRoster, StartingSlot } from '@/types';
 import { DEFAULT_STARTING_LINEUP } from '@/types';
@@ -8,7 +9,13 @@ import type { AppetitePos, ManagerTendency } from '@/lib/tendencies';
 import { APPETITE_POSITIONS } from '@/lib/tendencies.constants';
 import { POS_COLORS } from '@/lib/posColors';
 import { useMediaQuery } from '@/lib/useMediaQuery';
+import { useUrlQuerySync } from '@/lib/useUrlQuerySync';
 import { formatLineupFormat } from '@/lib/describeDraftSettings';
+import {
+  parseRosterTrackerSearchParams,
+  buildRosterTrackerQueryString,
+  type RosterTrackerSortKey,
+} from './urlState';
 import DossierCard from './DossierCard';
 import TeamDetailPane from './TeamDetailPane';
 
@@ -19,7 +26,7 @@ interface RosterTrackerProps {
   startingLineup?: StartingSlot[];
 }
 
-type SortKey = 'spend' | 'aggression' | 'buys' | 'age' | AppetitePos;
+type SortKey = RosterTrackerSortKey;
 type SortDir = 'asc' | 'desc';
 type OrderedEntry = { team: TeamWithRoster; tendency: ManagerTendency };
 
@@ -111,9 +118,12 @@ export default function RosterTracker({
   ownerHandle,
   startingLineup = DEFAULT_STARTING_LINEUP,
 }: RosterTrackerProps) {
+  const searchParams = useSearchParams();
+  const initialUrlState = parseRosterTrackerSearchParams(searchParams);
+
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
-  const [sortBy, setSortBy] = useState<SortKey>('spend');
-  const [sortDir, setSortDir] = useState<SortDir>('desc');
+  const [sortBy, setSortBy] = useState<SortKey>(initialUrlState.sortBy);
+  const [sortDir, setSortDir] = useState<SortDir>(initialUrlState.sortDir);
   const isDesktop = useMediaQuery('(min-width: 1024px)');
 
   const tendencyById = useMemo(() => new Map(tendencies.map((t) => [t.teamId, t])), [tendencies]);
@@ -150,9 +160,17 @@ export default function RosterTracker({
     });
   }, [teams, tendencyById, sortBy, sortDir, ownerHandle]);
 
-  const [selectedTeamId, setSelectedTeamId] = useState<number | null>(
-    () => ordered[0]?.team.id ?? null,
+  const [selectedTeamId, setSelectedTeamId] = useState<number | null>(() => {
+    const fromUrl = initialUrlState.selectedTeamId;
+    if (fromUrl !== null && ordered.some(({ team }) => team.id === fromUrl)) return fromUrl;
+    return ordered[0]?.team.id ?? null;
+  });
+
+  const urlQuery = useMemo(
+    () => buildRosterTrackerQueryString({ sortBy, sortDir, selectedTeamId }),
+    [sortBy, sortDir, selectedTeamId],
   );
+  useUrlQuerySync(urlQuery);
 
   const selected = ordered.find(({ team }) => team.id === selectedTeamId) ?? ordered[0] ?? null;
 

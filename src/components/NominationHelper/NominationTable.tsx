@@ -73,6 +73,7 @@ export default function NominationTable({
               <ToggleGroupItem
                 key={pos}
                 value={pos}
+                data-testid={`nomination-pos-filter-${pos}`}
                 className="font-label rounded-[5px] border border-border px-2.5 py-1 text-[11px] font-semibold tracking-wide text-muted-foreground"
                 style={
                   active

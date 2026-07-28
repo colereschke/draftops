@@ -62,6 +62,8 @@ const mockRouterRefresh = jest.fn();
 
 jest.mock('next/navigation', () => ({
   useRouter: () => ({ refresh: mockRouterRefresh }),
+  usePathname: () => '/draft/1',
+  useSearchParams: () => new URLSearchParams(),
 }));
 
 const mockTeams: LeagueTeam[] = [

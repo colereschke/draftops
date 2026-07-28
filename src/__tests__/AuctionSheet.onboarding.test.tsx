@@ -28,6 +28,8 @@ jest.mock('@/components/Onboarding/OnboardingContext', () => ({
 
 jest.mock('next/navigation', () => ({
   useRouter: () => ({ refresh: jest.fn() }),
+  usePathname: () => '/draft/1',
+  useSearchParams: () => new URLSearchParams(),
 }));
 
 const mockUseOnboarding = jest.mocked(useOnboarding);

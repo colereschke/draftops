@@ -4,14 +4,7 @@
 import { useState, useMemo, useOptimistic, useTransition } from 'react';
 import dynamic from 'next/dynamic';
 import { useRouter, useSearchParams } from 'next/navigation';
-import type {
-  Player,
-  Position,
-  ClaimedBid,
-  LeagueTeam,
-  ScoringSettings,
-  StartingSlot,
-} from '@/types';
+import type { Player, ClaimedBid, LeagueTeam, ScoringSettings, StartingSlot } from '@/types';
 import { logBid, updateBid, deleteBid } from '@/lib/actions';
 import BidModal from '@/components/BidModal';
 import { useOnboarding } from '@/components/Onboarding/OnboardingContext';
@@ -25,6 +18,13 @@ import MutationStatus from '@/components/MutationStatus';
 import BidHistoryPanel, { type DeletedBid } from '@/components/BidHistory/BidHistoryPanel';
 import type { DraftMutationCode } from '@/lib/draftMutation';
 import { parseAuctionSheetSearchParams, buildAuctionSheetQueryString } from './urlState';
+import {
+  createClaimMap,
+  createNominatedSet,
+  getAuctionMetrics,
+  getPlayerIdentityKey,
+  selectAuctionPlayers,
+} from './auctionSelectors';
 
 const SleeperRosterSyncDialog = dynamic(
   () => import('@/components/SleeperRosterSync/SleeperRosterSyncDialog'),
@@ -121,33 +121,19 @@ export default function AuctionSheet({
     },
   );
 
-  const claimMap = useMemo(
-    () => new Map(optimisticBids.map((b) => [bidIdentityKey(b), b])),
-    [optimisticBids],
-  );
+  const claimMap = useMemo(() => createClaimMap(optimisticBids), [optimisticBids]);
 
   const nominatedSet = useMemo(
-    () =>
-      new Set(
-        [...nominatedPlayers, ...extraNominated].filter(
-          (playerId) => !clearedNominations.has(playerId),
-        ),
-      ),
+    () => createNominatedSet(nominatedPlayers, extraNominated, clearedNominations),
     [nominatedPlayers, extraNominated, clearedNominations],
-  );
-
-  const futurePickYear = useMemo(
-    () => players.find((p) => p.futurePickYear != null)?.futurePickYear ?? null,
-    [players],
   );
 
   const hasStrategyTags = useMemo(() => players.some((p) => p.strategyTag != null), [players]);
 
-  const mySpent = useMemo(() => {
-    const myTeam = ownerHandle ? teams.find((t) => t.handle === ownerHandle) : null;
-    if (!myTeam) return 0;
-    return optimisticBids.filter((b) => b.teamId === myTeam.id).reduce((s, b) => s + b.price, 0);
-  }, [teams, optimisticBids, ownerHandle]);
+  const { mySpent, posStats, grandTotal, totalPlayerCount, futurePickYear } = useMemo(
+    () => getAuctionMetrics(players, claimMap, teams, ownerHandle),
+    [players, claimMap, teams, ownerHandle],
+  );
 
   const hasClaims = optimisticBids.length > 0 && !availableOnly;
 
@@ -175,7 +161,7 @@ export default function AuctionSheet({
 
   function handleModalSubmit({ price, teamId }: { price: number; teamId: number }) {
     if (!modalPlayer || isPending) return;
-    const existingBid = claimMap.get(playerIdentityKey(modalPlayer));
+    const existingBid = claimMap.get(getPlayerIdentityKey(modalPlayer));
     const team = teams.find((t) => t.id === teamId);
     if (!team) return;
     setModalError('');
@@ -246,7 +232,7 @@ export default function AuctionSheet({
 
   function handleModalDelete() {
     if (!modalPlayer || isPending) return;
-    const existingBid = claimMap.get(playerIdentityKey(modalPlayer));
+    const existingBid = claimMap.get(getPlayerIdentityKey(modalPlayer));
     if (!existingBid) return;
     setModalError('');
     startTransition(async () => {
@@ -269,7 +255,7 @@ export default function AuctionSheet({
   }
 
   function handleNominate(player: Player) {
-    const key = playerIdentityKey(player);
+    const key = getPlayerIdentityKey(player);
     if (typeof key !== 'number' || nominatingIds.has(key)) return;
     setNominatingIds((prev) => new Set(prev).add(key));
     setExtraNominated((prev) => [...prev, key]);
@@ -308,71 +294,31 @@ export default function AuctionSheet({
 
   const remaining = ownerBudget - mySpent;
 
-  const filtered = useMemo<Player[]>(() => {
-    let data = [...players];
-    if (posFilter !== 'ALL') data = data.filter((p) => p.pos === posFilter);
-    if (availableOnly) data = data.filter((p) => !claimMap.has(playerIdentityKey(p)));
-    if (strategyFilter !== 'ALL' && hasStrategyTags)
-      data = data.filter((p) => p.strategyTag === strategyFilter);
-    if (search) {
-      const q = search.toLowerCase();
-      data = data.filter(
-        (p) => p.player.toLowerCase().includes(q) || p.team.toLowerCase().includes(q),
-      );
-    }
-    if (sortBy === 'spread') {
-      data.sort((a, b) => {
-        const aV = a.spread ?? null;
-        const bV = b.spread ?? null;
-        if (aV === null && bV === null) return a.sfRank - b.sfRank;
-        if (aV === null) return 1; // nulls always last
-        if (bV === null) return -1;
-        if (aV !== bV) return sortDir === 'asc' ? aV - bV : bV - aV;
-        return a.sfRank - b.sfRank;
-      });
-      return data;
-    }
-    if (sortBy === 'claimedPrice') {
-      data.sort((a, b) => {
-        const aV = claimMap.get(playerIdentityKey(a))?.price ?? null;
-        const bV = claimMap.get(playerIdentityKey(b))?.price ?? null;
-        // Unclaimed players have no bid price, so they sort as a group after every claimed
-        // player, ordered among themselves by target value (budget) instead of sfRank.
-        if (aV === null && bV === null) {
-          if (a.budget !== b.budget)
-            return sortDir === 'asc' ? a.budget - b.budget : b.budget - a.budget;
-          return a.sfRank - b.sfRank;
-        }
-        if (aV === null) return 1;
-        if (bV === null) return -1;
-        if (aV !== bV) return sortDir === 'asc' ? aV - bV : bV - aV;
-        return a.sfRank - b.sfRank;
-      });
-      return data;
-    }
-    data.sort((a, b) => {
-      let aV: string | number | null = a[sortBy] as string | number | null;
-      let bV: string | number | null = b[sortBy] as string | number | null;
-      if (aV === null || aV === undefined) aV = 9999;
-      if (bV === null || bV === undefined) bV = 9999;
-      if (typeof aV === 'string') aV = aV.toLowerCase();
-      if (typeof bV === 'string') bV = bV.toLowerCase();
-      if (aV < bV) return sortDir === 'asc' ? -1 : 1;
-      if (aV > bV) return sortDir === 'asc' ? 1 : -1;
-      return a.sfRank - b.sfRank;
-    });
-    return data;
-  }, [
-    posFilter,
-    search,
-    availableOnly,
-    strategyFilter,
-    hasStrategyTags,
-    claimMap,
-    sortBy,
-    sortDir,
-    players,
-  ]);
+  const filtered = useMemo(
+    () =>
+      selectAuctionPlayers({
+        players,
+        claimMap,
+        posFilter,
+        strategyFilter,
+        hasStrategyTags,
+        search,
+        availableOnly,
+        sortBy,
+        sortDir,
+      }),
+    [
+      players,
+      claimMap,
+      posFilter,
+      strategyFilter,
+      hasStrategyTags,
+      search,
+      availableOnly,
+      sortBy,
+      sortDir,
+    ],
+  );
 
   const handleSort = (col: SortKey) => {
     if (sortBy === col) {
@@ -382,20 +328,6 @@ export default function AuctionSheet({
       setSortDir(col === 'sfRank' || col === 'player' ? 'asc' : 'desc');
     }
   };
-
-  const posStats = useMemo(() => {
-    const stats = {} as Record<'QB' | 'RB' | 'WR' | 'TE', { count: number; total: number }>;
-    (['QB', 'RB', 'WR', 'TE'] as const).forEach((pos) => {
-      const pp = players.filter((p) => p.pos === pos && !claimMap.has(playerIdentityKey(p)));
-      stats[pos] = { count: pp.length, total: pp.reduce((s, p) => s + p.budget, 0) };
-    });
-    return stats;
-  }, [claimMap, players]);
-
-  const grandTotal = Object.values(posStats).reduce((s, v) => s + v.total, 0);
-  const totalPlayerCount = players.filter(
-    (p) => !(['PKG', 'PICK'] as Position[]).includes(p.pos),
-  ).length;
 
   return (
     <main id="main-content" tabIndex={-1} className="min-h-screen bg-background text-foreground">
@@ -461,13 +393,13 @@ export default function AuctionSheet({
         <BidModal
           player={modalPlayer}
           teams={teams}
-          existingBid={claimMap.get(playerIdentityKey(modalPlayer))}
+          existingBid={claimMap.get(getPlayerIdentityKey(modalPlayer))}
           onClose={() => setModalPlayer(null)}
           onSubmit={handleModalSubmit}
-          onDelete={claimMap.has(playerIdentityKey(modalPlayer)) ? handleModalDelete : undefined}
+          onDelete={claimMap.has(getPlayerIdentityKey(modalPlayer)) ? handleModalDelete : undefined}
           serverError={modalError}
           isSubmitting={isPending}
-          isNominated={nominatedSet.has(playerIdentityKey(modalPlayer))}
+          isNominated={nominatedSet.has(getPlayerIdentityKey(modalPlayer))}
           onNominate={() => handleNominate(modalPlayer)}
         />
       ) : null}
@@ -482,12 +414,4 @@ export default function AuctionSheet({
       ) : null}
     </main>
   );
-}
-
-function playerIdentityKey(player: Player): number | string {
-  return player.id ?? player.player;
-}
-
-function bidIdentityKey(bid: ClaimedBid): number | string {
-  return bid.playerId ?? bid.player;
 }

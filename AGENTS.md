@@ -48,7 +48,7 @@ src/
 │   │   ├── draft/[draftId]/             # Per-draft info, nomination, nominated, and watchlist routes
 │   │   ├── drafts/route.ts              # GET/POST draft collection
 │   │   └── health/route.ts              # PostgreSQL health check
-│   ├── draft/[draftId]/              # Value sheet plus budget, nominate, and teams subpages
+│   ├── draft/[draftId]/              # Value sheet plus budget, nominate, and teams subpages; each segment (and budget/teams/nominate) has its own loading.tsx/error.tsx, plus a not-found.tsx one level up at draft/ — see What's Built (HARD-018)
 │   ├── drafts/                       # Draft list and validated draft-creation form
 │   ├── rankings/page.tsx             # Profile-level custom rankings upload and match resolution
 │   ├── sign-in/page.tsx              # Branded Discord OAuth sign-in screen
@@ -84,6 +84,7 @@ src/
 │   ├── projectionApplication.ts      # Stage, validate, and atomically activate projection value sets
 │   ├── tendencies.ts                 # Shared manager behavior engine for /teams and /budget
 │   ├── threat.ts                     # Position-specific budget threat ranking
+│   ├── useUrlQuerySync.ts            # Mirrors a query string into the URL via history.replaceState (never pushState) — see What's Built (HARD-018)
 │   ├── valueAdjustment.ts            # Draft-settings fallback-value adjustment
 │   ├── valueSpread.ts                # Advisory dynasty-versus-projection spread tags
 │   └── teams.ts                      # Default seed teams only; runtime reads draft settings
@@ -342,6 +343,7 @@ OWNER_DISCORD_ID=      # Your Discord user ID — seeds ownerId on the default d
 - **Teams and budget** — manager dossier cards and a position-aware live threat board use shared revealed buying-tendency data rather than count-vs-target need framing.
 - **Nomination helper** — ranks available players by rival demand, with persisted watchlist and live-nomination controls.
 - **Brand** — gavel `LogoMark`/`LogoLockup`, static favicon, and responsive sign-in `ValueTicker`.
+- **URL-synced view state (HARD-018)** — the value sheet, teams page, and nominate page mirror filter/search/sort/selection state into the URL via `history.replaceState` (never `pushState`, so in-page clicks don't pollute back-button history) through a shared `useUrlQuerySync` hook and one allowlist-validated `urlState.ts` parse/serialize module per component. Every `/draft/[draftId]/*` route segment has a tailored `loading.tsx`/`error.tsx`; the shared `not-found.tsx` lives one level up at `src/app/draft/`, not inside `[draftId]/`, since only a parent segment's `not-found.tsx` can catch a `notFound()` thrown by `[draftId]/layout.tsx` itself.
 
 ## Player Data
 

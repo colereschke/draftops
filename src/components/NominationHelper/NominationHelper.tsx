@@ -1,15 +1,17 @@
 'use client';
 
 import { useState, useMemo, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import type { Player, Position } from '@/types';
 import { computeNominationScores, type ScoredPlayer } from '@/lib/nominationScoring';
 import { useOnboarding } from '@/components/Onboarding/OnboardingContext';
+import { useUrlQuerySync } from '@/lib/useUrlQuerySync';
 import MutationStatus from '@/components/MutationStatus';
 import WatchlistSidebar from './WatchlistSidebar';
 import NominationTable from './NominationTable';
 import DraftReadOnlyBanner from '@/components/DraftReadOnlyBanner';
 import { useNominationData, type NominationData } from './useNominationData';
+import { parseNominationPosFilter, buildNominationQueryString } from './urlState';
 
 interface NominationHelperProps {
   draftId: number;
@@ -44,7 +46,12 @@ export default function NominationHelper({
     draftId,
     onUnauthorized: handleUnauthorized,
   });
-  const [posFilter, setPosFilter] = useState<'ALL' | Position>('ALL');
+  const searchParams = useSearchParams();
+  const [posFilter, setPosFilter] = useState<'ALL' | Position>(
+    parseNominationPosFilter(searchParams),
+  );
+  const urlQuery = useMemo(() => buildNominationQueryString(posFilter), [posFilter]);
+  useUrlQuerySync(urlQuery);
   const [pendingIds, setPendingIds] = useState<Set<number>>(new Set());
   const [mutationStatus, setMutationStatus] = useState<string>('');
 

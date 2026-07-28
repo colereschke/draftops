@@ -13,6 +13,8 @@ import {
 
 jest.mock('next/navigation', () => ({
   useRouter: () => ({ refresh: jest.fn(), replace: jest.fn() }),
+  usePathname: () => '/draft/1',
+  useSearchParams: () => new URLSearchParams(),
 }));
 
 jest.mock('@/lib/actions', () => ({

@@ -3,7 +3,7 @@ import ValueSheetLoading from '@/app/draft/[draftId]/loading';
 import TeamsLoading from '@/app/draft/[draftId]/teams/loading';
 import BudgetLoading from '@/app/draft/[draftId]/budget/loading';
 import NominateLoading from '@/app/draft/[draftId]/nominate/loading';
-import DraftNotFound from '@/app/draft/[draftId]/not-found';
+import DraftNotFound from '@/app/draft/not-found';
 import DraftError from '@/app/draft/[draftId]/error';
 import TeamsError from '@/app/draft/[draftId]/teams/error';
 import BudgetError from '@/app/draft/[draftId]/budget/error';

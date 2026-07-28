@@ -61,12 +61,24 @@ make dev     # start at http://localhost:3000
 
 Visit any page and you'll be redirected to the Discord sign-in screen.
 
-Before creating a draft, import a usable projection source into PostgreSQL. Draft creation is
-intentionally rejected when no current projection source can be applied:
+Before creating a draft, import a usable projection source into PostgreSQL. The default importer
+reads ignored local files, so first follow the [projection ETL guide](scripts/projections/README.md):
+place Mike Clay's 2026 guide at `data/raw/NFLDK2026_CS_ClayProjections2026.pdf` and Sleeper's player
+database at `data/raw/sleeper_players.json`, then generate the projection and ETR-match CSVs:
 
 ```bash
-pnpm tsx prisma/apply-projection-values.ts
+make projections-setup
+make projections-generate
+uv run python -m draftops_projections.match_etr_values \
+  --etr-csv existing_project_docs/auction-tool/src/Dynasty_Rankings.csv \
+  --sleeper-json data/raw/sleeper_players.json \
+  --output-csv data/generated/etr_sleeper_matches.csv
+pnpm tsx prisma/apply-projection-values.ts \
+  --projections-csv data/generated/master_projections.csv \
+  --etr-matches-csv data/generated/etr_sleeper_matches.csv
 ```
+
+Draft creation is intentionally rejected when no current projection source can be applied.
 
 ## Features
 
@@ -119,16 +131,22 @@ The persisted value fields have distinct semantics:
 Projection source data must be imported into Postgres before creating drafts. Draft creation fails
 loudly if no usable projection source exists.
 
-To import projection data before creating drafts:
+To import projection data before creating drafts, generate the ignored local CSV inputs with the
+[projection ETL guide](scripts/projections/README.md), then run:
 
 ```bash
-pnpm tsx prisma/apply-projection-values.ts
+pnpm tsx prisma/apply-projection-values.ts \
+  --projections-csv data/generated/master_projections.csv \
+  --etr-matches-csv data/generated/etr_sleeper_matches.csv
 ```
 
 To refresh/import projection data and reapply it to an existing draft:
 
 ```bash
-pnpm tsx prisma/apply-projection-values.ts --draft-id <draft-id>
+pnpm tsx prisma/apply-projection-values.ts \
+  --draft-id <draft-id> \
+  --projections-csv data/generated/master_projections.csv \
+  --etr-matches-csv data/generated/etr_sleeper_matches.csv
 ```
 
 ### Existing-draft budget backfill

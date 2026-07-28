@@ -4,13 +4,13 @@ import { join } from 'node:path';
 const readTrackedFile = (fileName: string) => readFileSync(join(process.cwd(), fileName), 'utf8');
 
 describe('setup documentation', () => {
-  test('lists every required Auth.js environment variable in the safe template', () => {
+  test('keeps every required Auth.js environment variable empty in the safe template', () => {
     const environmentTemplate = readTrackedFile('.env.example');
 
-    expect(environmentTemplate).toContain('AUTH_SECRET=');
-    expect(environmentTemplate).toContain('AUTH_DISCORD_ID=');
-    expect(environmentTemplate).toContain('AUTH_DISCORD_SECRET=');
-    expect(environmentTemplate).toContain('OWNER_DISCORD_ID=');
+    expect(environmentTemplate).toMatch(/^AUTH_SECRET=$/m);
+    expect(environmentTemplate).toMatch(/^AUTH_DISCORD_ID=$/m);
+    expect(environmentTemplate).toMatch(/^AUTH_DISCORD_SECRET=$/m);
+    expect(environmentTemplate).toMatch(/^OWNER_DISCORD_ID=$/m);
   });
 
   test('describes the PostgreSQL setup and smoke command', () => {

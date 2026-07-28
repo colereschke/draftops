@@ -130,4 +130,12 @@ describe('AuctionSheet URL state', () => {
     expect(window.location.search).toBe('?q=jeff');
     jest.useRealTimers();
   });
+
+  it('filters visible rows immediately while search URL synchronization is debounced', async () => {
+    const user = userEvent.setup();
+    renderSheet();
+    await user.type(screen.getByLabelText('Search player or team'), 'jeff');
+    expect(screen.queryByTestId('player-row-1')).not.toBeInTheDocument();
+    expect(screen.getByTestId('player-row-5')).toBeInTheDocument();
+  });
 });

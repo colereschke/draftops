@@ -244,6 +244,7 @@ export default function BidModal({
             <div className="mr-auto flex flex-wrap items-center gap-sm">
               {isEdit && onDelete && !deleteArmed && (
                 <Button
+                  data-testid="bid-remove"
                   variant="destructive"
                   size="touch"
                   type="button"
@@ -265,6 +266,7 @@ export default function BidModal({
                     Keep
                   </Button>
                   <Button
+                    data-testid="bid-confirm-remove"
                     variant="destructive"
                     size="touch"
                     type="button"

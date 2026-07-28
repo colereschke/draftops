@@ -302,8 +302,8 @@ describe('AuctionSheet with claimed bids', () => {
     renderSheet({ claimedBids: [mockClaim] });
 
     await user.click(screen.getByTestId('player-row-1'));
-    await user.click(screen.getByRole('button', { name: /^remove$/i }));
-    await user.click(screen.getByRole('button', { name: /confirm remove/i }));
+    await user.click(screen.getByTestId('bid-remove'));
+    await user.click(screen.getByTestId('bid-confirm-remove'));
 
     await waitFor(() => expect(mockDeleteBid).toHaveBeenCalledWith({ id: 1, draftId: 1 }));
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();

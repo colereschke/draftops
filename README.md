@@ -16,8 +16,10 @@ A dynasty fantasy football auction startup draft tool. Built for a 12-team Super
 
 ## Getting Started
 
-**Prerequisites:** [Node.js](https://nodejs.org) 20+, [pnpm](https://pnpm.io) 11+, and local
-[PostgreSQL](https://www.postgresql.org/). Production uses Neon PostgreSQL.
+**Prerequisites:** [Node.js](https://nodejs.org) 20+, [pnpm](https://pnpm.io) 11+,
+[Python](https://www.python.org/) 3.11+, [uv](https://docs.astral.sh/uv/), and local
+[PostgreSQL](https://www.postgresql.org/). Python and uv are required for the projection setup.
+Production uses Neon PostgreSQL.
 
 ### 1. Create a Discord OAuth app
 
@@ -73,10 +75,13 @@ uv run python -m draftops_projections.match_etr_values \
   --etr-csv existing_project_docs/auction-tool/src/Dynasty_Rankings.csv \
   --sleeper-json data/raw/sleeper_players.json \
   --output-csv data/generated/etr_sleeper_matches.csv
+pnpm tsx prisma/sync-sleeper-players.ts
 pnpm tsx prisma/apply-projection-values.ts \
-  --projections-csv data/generated/master_projections.csv \
-  --etr-matches-csv data/generated/etr_sleeper_matches.csv
+  --projections-csv data/generated/master_projections.csv
 ```
+
+The Sleeper sync must run before importing projections or creating a draft. The projection importer
+uses `--etr-matches-csv` only when `--draft-id` reapplies values to an existing draft.
 
 Draft creation is intentionally rejected when no current projection source can be applied.
 
@@ -132,12 +137,12 @@ Projection source data must be imported into Postgres before creating drafts. Dr
 loudly if no usable projection source exists.
 
 To import projection data before creating drafts, generate the ignored local CSV inputs with the
-[projection ETL guide](scripts/projections/README.md), then run:
+[projection ETL guide](scripts/projections/README.md), sync Sleeper identities, then run:
 
 ```bash
+pnpm tsx prisma/sync-sleeper-players.ts
 pnpm tsx prisma/apply-projection-values.ts \
-  --projections-csv data/generated/master_projections.csv \
-  --etr-matches-csv data/generated/etr_sleeper_matches.csv
+  --projections-csv data/generated/master_projections.csv
 ```
 
 To refresh/import projection data and reapply it to an existing draft:

@@ -7,9 +7,30 @@ function setupSmokeDatabaseError(): Error {
   return new Error(SETUP_SMOKE_DATABASE_ERROR);
 }
 
+interface SetupSmokeDatabase {
+  identity: string;
+}
+
 export function assertSetupSmokeDatabase(
   databaseUrl: string | undefined,
 ): asserts databaseUrl is string {
+  parseSetupSmokeDatabase(databaseUrl);
+}
+
+export function assertSetupSmokeDatabases(
+  databaseUrl: string | undefined,
+  directUrl: string | undefined,
+): asserts databaseUrl is string {
+  const database = parseSetupSmokeDatabase(databaseUrl);
+  if (!directUrl) return;
+
+  const directDatabase = parseSetupSmokeDatabase(directUrl);
+  if (database.identity !== directDatabase.identity) {
+    throw setupSmokeDatabaseError();
+  }
+}
+
+function parseSetupSmokeDatabase(databaseUrl: string | undefined): SetupSmokeDatabase {
   if (!databaseUrl) {
     throw setupSmokeDatabaseError();
   }
@@ -28,6 +49,10 @@ export function assertSetupSmokeDatabase(
   if (!isLoopbackHost || !parsedDatabaseUrl.pathname.endsWith('_test')) {
     throw setupSmokeDatabaseError();
   }
+
+  return {
+    identity: `${parsedDatabaseUrl.port || '5432'}${parsedDatabaseUrl.pathname}`,
+  };
 }
 
 export async function verifySetupSeed(databaseUrl: string): Promise<void> {
@@ -50,7 +75,7 @@ export async function verifySetupSeed(databaseUrl: string): Promise<void> {
 async function main(): Promise<void> {
   const databaseUrl = process.env.DATABASE_URL;
 
-  assertSetupSmokeDatabase(databaseUrl);
+  assertSetupSmokeDatabases(databaseUrl, process.env.DIRECT_URL);
   await verifySetupSeed(databaseUrl);
   console.log('Seeded 12 teams');
 }

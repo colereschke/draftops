@@ -1,6 +1,6 @@
 /** @jest-environment node */
 
-import { assertSetupSmokeDatabase } from './setupSmoke';
+import { assertSetupSmokeDatabase, assertSetupSmokeDatabases } from './setupSmoke';
 
 describe('assertSetupSmokeDatabase', () => {
   it.each([
@@ -19,6 +19,24 @@ describe('assertSetupSmokeDatabase', () => {
   it('accepts a localhost PostgreSQL test database', () => {
     expect(() =>
       assertSetupSmokeDatabase('postgresql://draftops:secret@localhost:5432/draftops_setup_test'),
+    ).not.toThrow();
+  });
+
+  it('rejects an unsafe DIRECT_URL when DATABASE_URL is safe', () => {
+    expect(() =>
+      assertSetupSmokeDatabases(
+        'postgresql://draftops:secret@localhost:5432/draftops_setup_test',
+        'postgresql://draftops:secret@ep-blue-forest-123.us-east-2.aws.neon.tech/draftops_test',
+      ),
+    ).toThrow('Setup smoke tests require a local PostgreSQL database ending in _test');
+  });
+
+  it('accepts matching local PostgreSQL test databases', () => {
+    expect(() =>
+      assertSetupSmokeDatabases(
+        'postgresql://draftops:secret@localhost:5432/draftops_setup_test',
+        'postgresql://draftops:secret@127.0.0.1:5432/draftops_setup_test',
+      ),
     ).not.toThrow();
   });
 });

@@ -29,6 +29,25 @@ describe('setup documentation', () => {
     expect(projectionGuide).toMatch(/cannot be\s+committed or distributed/);
   });
 
+  test('documents the Sleeper identity bootstrap before projection import', () => {
+    const readme = readTrackedFile('README.md');
+    const sleeperSync = 'pnpm tsx prisma/sync-sleeper-players.ts';
+    const projectionImport = 'pnpm tsx prisma/apply-projection-values.ts';
+
+    expect(readme).toContain(sleeperSync);
+    expect(readme.indexOf(sleeperSync)).toBeLessThan(readme.indexOf(projectionImport));
+    expect(readme).toContain('[Python](https://www.python.org/) 3.11+');
+    expect(readme).toContain('[uv](https://docs.astral.sh/uv/)');
+  });
+
+  test('describes the current proxy and error routes in agent guidance', () => {
+    const agentGuidance = readTrackedFile('AGENTS.md');
+
+    expect(agentGuidance).toContain('src/proxy.ts');
+    expect(agentGuidance).not.toContain('middleware.ts');
+    expect(agentGuidance).not.toContain('log-error/route.ts');
+  });
+
   test('keeps the agent guidance identical across supported assistants', () => {
     expect(readTrackedFile('AGENTS.md')).toBe(readTrackedFile('CLAUDE.md'));
   });

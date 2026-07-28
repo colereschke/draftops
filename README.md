@@ -16,7 +16,8 @@ A dynasty fantasy football auction startup draft tool. Built for a 12-team Super
 
 ## Getting Started
 
-**Prerequisites:** [Node.js](https://nodejs.org) 20+, [pnpm](https://pnpm.io) 11+
+**Prerequisites:** [Node.js](https://nodejs.org) 20+, [pnpm](https://pnpm.io) 11+, and local
+[PostgreSQL](https://www.postgresql.org/). Production uses Neon PostgreSQL.
 
 ### 1. Create a Discord OAuth app
 
@@ -29,17 +30,25 @@ DraftOps uses Discord for authentication. Each developer needs their own Discord
    ```
 3. Copy your **Client ID** and generate a **Client Secret** (OAuth2 → General)
 
-### 2. Configure environment variables
+### 2. Configure PostgreSQL and environment variables
 
-Create `.env.local` in the repo root:
+Create a local database, then copy the safe template:
 
 ```bash
-AUTH_SECRET=        # any random string: openssl rand -base64 32
-AUTH_DISCORD_ID=    # client ID from step 1
-AUTH_DISCORD_SECRET= # client secret from step 1
+createdb draftops
+cp .env.example .env.local
 ```
 
-`AUTH_SECRET` just signs JWT cookies locally — it doesn't need to match anyone else's.
+Set the following values in `.env.local`; the template contains no credentials:
+
+- `DATABASE_URL` is the pooled runtime PostgreSQL connection string. For local development, it can
+  point at `draftops`.
+- `DIRECT_URL` is the direct PostgreSQL connection used for migrations. In Vercel, it must be the
+  direct Neon URL while `DATABASE_URL` remains the pooled Neon URL.
+- `AUTH_SECRET` signs Auth.js cookies. Generate one with `openssl rand -base64 32`.
+- `AUTH_DISCORD_ID` and `AUTH_DISCORD_SECRET` are the OAuth client ID and secret from step 1.
+- `OWNER_DISCORD_ID` is your Discord user ID; it identifies the owner when the default draft is
+  seeded.
 
 ### 3. Install and run
 
@@ -52,13 +61,20 @@ make dev     # start at http://localhost:3000
 
 Visit any page and you'll be redirected to the Discord sign-in screen.
 
+Before creating a draft, import a usable projection source into PostgreSQL. Draft creation is
+intentionally rejected when no current projection source can be applied:
+
+```bash
+pnpm tsx prisma/apply-projection-values.ts
+```
+
 ## Features
 
-- **Value sheet** (`/`) — ~270 players ranked by SF position with floor / target / ceiling bid prices, position filters, search, sort, age color coding, and bid logging via modal
+- **Value sheet** (`/draft/[draftId]`) — ~270 players ranked by SF position with floor / target / ceiling bid prices, position filters, search, sort, age color coding, and bid logging via modal
 - **Live auction log** — log, edit, and delete bids as they happen; won players dim in the sheet; nominated players show a teal "LIVE" badge
-- **Team roster tracker** (`/teams`) — expandable rows per team showing won players, spend/remaining/buying power, and delta vs. target budget per player
-- **Budget pressure view** (`/budget`) — teams sorted by buying power with a visual bar; auto-refreshes every 20 seconds
-- **Nomination helper** (`/nominate`) — ranks available players by rival demand score; personal watchlist sidebar persists to DB and excludes players from suggestions
+- **Team roster tracker** (`/draft/[draftId]/teams`) — expandable rows per team showing won players, spend/remaining/buying power, and delta vs. target budget per player
+- **Budget pressure view** (`/draft/[draftId]/budget`) — teams sorted by buying power with a visual bar; auto-refreshes every 20 seconds
+- **Nomination helper** (`/draft/[draftId]/nominate`) — ranks available players by rival demand score; personal watchlist sidebar persists to DB and excludes players from suggestions
 - **In-auction tracking** — "Nom" button marks a player as currently up for bidding; persists to DB so state survives page refreshes; auto-clears when the bid is logged
 
 ## Dynasty Value Pipeline
@@ -141,6 +157,7 @@ outside version control until the updated fallback and active totals have been v
 
 ```bash
 make setup          # First-time setup (install + migrate + seed)
+make setup-smoke    # Guarded clean-setup verification against a local *_test database
 make dev            # Start dev server
 make test           # Run test suite
 make test-e2e       # Run Playwright smoke tests (see below)
@@ -149,6 +166,16 @@ make db-seed        # Re-seed league teams
 make db-reset       # Wipe and re-seed (destructive)
 make db-studio      # Open Prisma Studio (visual DB browser)
 make help           # Show all commands
+```
+
+### Verify a clean local setup
+
+Use a disposable local database only. The command refuses non-loopback hosts and names without an
+`_test` suffix before it runs migrations or seeding:
+
+```bash
+createdb draftops_setup_test
+DATABASE_URL="postgresql://<user>@localhost:5432/draftops_setup_test" make setup-smoke
 ```
 
 ### Running Playwright smoke tests locally
@@ -170,7 +197,7 @@ DATABASE_URL="postgresql://<user>@localhost:5432/draftops_e2e_scratch" AUTH_SECR
 | Framework       | Next.js 16 (App Router)                                  |
 | Language        | TypeScript 5                                             |
 | Styling         | Tailwind CSS 4 + CSS custom properties                   |
-| Database        | SQLite via Prisma 7                                      |
+| Database        | PostgreSQL via Prisma 7 (Neon in production)             |
 | Package manager | pnpm 11                                                  |
 | Testing         | Jest + React Testing Library                             |
 | Linting         | ESLint 9 + typescript-eslint + eslint-plugin-react-hooks |
@@ -181,28 +208,17 @@ DATABASE_URL="postgresql://<user>@localhost:5432/draftops_e2e_scratch" AUTH_SECR
 
 ```
 src/
-├── app/                        # Next.js App Router pages and layouts
-│   ├── api/                    # API routes (nomination-data, watchlist, nominated)
-│   ├── budget/                 # /budget — buying power view
-│   ├── nominate/               # /nominate — nomination helper
-│   └── teams/                  # /teams — team roster tracker
-├── components/
-│   ├── AuctionSheet/           # Main player value sheet + bid logging
-│   ├── BidModal/               # Log/edit/delete bid modal
-│   ├── BudgetPressure/         # Budget pressure table + auto-refresh
-│   ├── NominationHelper/       # Nomination scorer + watchlist + in-auction sidebar
-│   └── RosterTracker/          # Expandable team roster view
-├── data/players.ts             # ~270 players with scaled bid values
-├── lib/
-│   ├── actions.ts              # Server actions: logBid, updateBid, deleteBid
-│   ├── nominationScoring.ts    # Core nomination scoring logic
-│   ├── db.ts                   # Prisma client singleton
-│   └── teams.ts                # League team definitions
+├── app/                        # Draft-scoped App Router pages and API routes
+├── components/                 # Auction sheet, budget, nominations, rosters, and onboarding UI
+├── data/players.ts             # Server-only fallback player seed source
+├── lib/                        # Auth-gated mutations, draft loaders, and valuation logic
 └── types/index.ts              # Shared TypeScript types
 prisma/
-├── schema.prisma               # Team + AuctionResult + PlayerWatchlist + NominatedPlayer models
-├── seed.ts                     # Seeds 12 league teams
-└── dev.db                      # Local SQLite database (gitignored)
+├── schema.prisma               # Draft-scoped auction, projection, rankings, and identity models
+├── migrations/                 # PostgreSQL migration history
+├── seed.ts                     # Idempotently seeds the default draft and 12 teams
+└── apply-projection-values.ts  # Imports projection values into PostgreSQL
+prisma.config.ts                # Prisma 7 connection configuration
 ```
 
 ## Roadmap

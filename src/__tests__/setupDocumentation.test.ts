@@ -20,6 +20,12 @@ describe('setup documentation', () => {
     expect(readme).not.toContain('SQLite via Prisma 7');
   });
 
+  test('forces setup migrations to use the validated smoke database', () => {
+    const makefile = readTrackedFile('Makefile');
+
+    expect(makefile).toContain('DIRECT_URL="$(DATABASE_URL)" $(MAKE) setup');
+  });
+
   test('documents how to acquire the untracked projection inputs', () => {
     const projectionGuide = readTrackedFile('scripts/projections/README.md');
 

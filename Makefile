@@ -110,7 +110,7 @@ db-seed: ## Seed the database with league teams
 .PHONY: setup-smoke
 setup-smoke: ## Verify setup against a local PostgreSQL test database
 	node --import tsx -e "import('./scripts/setupSmoke.ts').then(({ assertSetupSmokeDatabases }) => assertSetupSmokeDatabases(process.env.DATABASE_URL, process.env.DIRECT_URL))"
-	$(MAKE) setup
+	DIRECT_URL="$(DATABASE_URL)" $(MAKE) setup
 	pnpm tsx scripts/setupSmoke.ts
 
 .PHONY: db-reset

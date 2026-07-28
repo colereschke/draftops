@@ -13,6 +13,15 @@ import type { DraftMutationCode } from '@/lib/draftMutation';
 import type { SleeperImportResult } from '@/lib/sleeper';
 import type { FuturePickAuctionMode, StartingSlot } from '@/types';
 import { DEFAULT_STARTING_LINEUP, DEFAULT_TARGET_ROSTER, DEFAULT_SCORING_SETTINGS } from '@/types';
+import {
+  cancelLinkStyle,
+  colHeaderStyle,
+  inputStyle,
+  labelStyle,
+  sectionHeaderStyle,
+  subSectionStyle,
+} from './draftFormStyles';
+import { defaultTeams, sortStartingLineup, type ImportState, type TeamRow } from './draftFormTypes';
 
 function describeCreateDraftError(code: DraftMutationCode): string {
   if (code === 'UNAUTHORIZED') return 'You must be signed in to create a draft.';
@@ -21,26 +30,6 @@ function describeCreateDraftError(code: DraftMutationCode): string {
   }
   if (code === 'DUPLICATE_TEAM') return 'Two teams share a handle or Sleeper roster ID.';
   return 'Something went wrong. Check your draft settings and try again.';
-}
-
-interface TeamRow {
-  handle: string;
-  displayName: string;
-  isMine: boolean;
-  sleeperRosterId?: number;
-}
-
-type ImportState =
-  | { status: 'idle' }
-  | { status: 'error'; message: string }
-  | { status: 'success'; confirm: string; warnings: string[] };
-
-function defaultTeams(count: number): TeamRow[] {
-  return Array.from({ length: count }, (_, i) => ({
-    handle: `team-${i + 1}`,
-    displayName: '',
-    isMine: i === 0,
-  }));
 }
 
 export default function NewDraftPage() {
@@ -139,12 +128,8 @@ export default function NewDraftPage() {
 
   const SLOT_OPTIONS: StartingSlot[] = ['QB', 'RB', 'WR', 'TE', 'FLEX', 'SUPER_FLEX'];
 
-  function sortSlots(slots: StartingSlot[]): StartingSlot[] {
-    return [...slots].sort((a, b) => SLOT_OPTIONS.indexOf(a) - SLOT_OPTIONS.indexOf(b));
-  }
-
   function addSlot() {
-    setStartingLineup((prev) => sortSlots([...prev, 'FLEX']));
+    setStartingLineup((prev) => sortStartingLineup([...prev, 'FLEX']));
   }
 
   function removeSlot(index: number) {
@@ -152,7 +137,7 @@ export default function NewDraftPage() {
   }
 
   function updateSlot(index: number, slot: StartingSlot) {
-    setStartingLineup((prev) => sortSlots(prev.map((s, i) => (i === index ? slot : s))));
+    setStartingLineup((prev) => sortStartingLineup(prev.map((s, i) => (i === index ? slot : s))));
   }
 
   function handleImport() {
@@ -877,6 +862,7 @@ export default function NewDraftPage() {
               }}
             >
               <input
+                data-testid={`team-handle-${i}`}
                 type="text"
                 value={team.handle}
                 onChange={(e) => updateTeam(i, 'handle', e.target.value)}
@@ -884,6 +870,7 @@ export default function NewDraftPage() {
                 style={inputStyle}
               />
               <input
+                data-testid={`team-display-name-${i}`}
                 type="text"
                 value={team.displayName}
                 onChange={(e) => updateTeam(i, 'displayName', e.target.value)}
@@ -892,6 +879,7 @@ export default function NewDraftPage() {
               />
               <div style={{ display: 'flex', justifyContent: 'center' }}>
                 <input
+                  data-testid={`team-mine-${i}`}
                   type="radio"
                   name="mine"
                   checked={team.isMine}
@@ -942,62 +930,3 @@ export default function NewDraftPage() {
     </main>
   );
 }
-
-const labelStyle: React.CSSProperties = {
-  display: 'flex',
-  flexDirection: 'column',
-  gap: '0.3rem',
-  fontFamily: 'var(--font-barlow)',
-  fontSize: '0.8rem',
-  color: 'var(--text-secondary)',
-  textTransform: 'uppercase',
-  letterSpacing: '0.05em',
-};
-
-const inputStyle: React.CSSProperties = {
-  background: 'var(--bg-base)',
-  border: '1px solid #2a2f3e',
-  borderRadius: '4px',
-  color: 'var(--text-primary)',
-  fontFamily: 'var(--font-mono)',
-  fontSize: '0.875rem',
-  padding: '0.35rem 0.6rem',
-  width: '100%',
-  boxSizing: 'border-box',
-};
-
-const colHeaderStyle: React.CSSProperties = {
-  fontFamily: 'var(--font-barlow)',
-  fontSize: '0.7rem',
-  color: 'var(--text-secondary)',
-  textTransform: 'uppercase',
-  letterSpacing: '0.05em',
-};
-
-const sectionHeaderStyle: React.CSSProperties = {
-  fontFamily: 'var(--font-barlow)',
-  fontSize: '0.8rem',
-  color: 'var(--text-secondary)',
-  textTransform: 'uppercase',
-  letterSpacing: '0.05em',
-  marginBottom: '0.75rem',
-};
-
-const subSectionStyle: React.CSSProperties = {
-  fontFamily: 'var(--font-barlow)',
-  fontSize: '0.72rem',
-  color: 'var(--text-secondary)',
-  textTransform: 'uppercase',
-  letterSpacing: '0.03em',
-  marginBottom: '0.4rem',
-};
-
-const cancelLinkStyle: React.CSSProperties = {
-  color: 'var(--text-secondary)',
-  fontFamily: 'var(--font-barlow)',
-  fontSize: '0.875rem',
-  fontWeight: 700,
-  letterSpacing: '0.05em',
-  textDecoration: 'none',
-  textTransform: 'uppercase',
-};

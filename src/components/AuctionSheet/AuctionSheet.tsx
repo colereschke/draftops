@@ -1,11 +1,10 @@
 // src/components/AuctionSheet/AuctionSheet.tsx
 'use client';
 
-import { useState, useMemo, useOptimistic, useTransition } from 'react';
+import { useState, useMemo } from 'react';
 import dynamic from 'next/dynamic';
 import { useRouter, useSearchParams } from 'next/navigation';
 import type { Player, ClaimedBid, LeagueTeam, ScoringSettings, StartingSlot } from '@/types';
-import { logBid, updateBid, deleteBid } from '@/lib/actions';
 import BidModal from '@/components/BidModal';
 import { useOnboarding } from '@/components/Onboarding/OnboardingContext';
 import { useDebouncedValue } from '@/lib/useDebouncedValue';
@@ -16,10 +15,9 @@ import PlayerTable, { type SortKey } from './PlayerTable';
 import DraftReadOnlyBanner from '@/components/DraftReadOnlyBanner';
 import MutationStatus from '@/components/MutationStatus';
 import BidHistoryPanel, { type DeletedBid } from '@/components/BidHistory/BidHistoryPanel';
-import type { DraftMutationCode } from '@/lib/draftMutation';
 import { parseAuctionSheetSearchParams, buildAuctionSheetQueryString } from './urlState';
+import { useAuctionBidMutations } from './useAuctionBidMutations';
 import {
-  createClaimMap,
   createNominatedSet,
   getAuctionMetrics,
   getPlayerIdentityKey,
@@ -30,11 +28,6 @@ const SleeperRosterSyncDialog = dynamic(
   () => import('@/components/SleeperRosterSync/SleeperRosterSyncDialog'),
   { ssr: false },
 );
-
-type OptimisticAction =
-  | { type: 'add'; bid: ClaimedBid }
-  | { type: 'update'; bid: ClaimedBid }
-  | { type: 'delete'; id: number };
 
 interface AuctionSheetProps {
   players: Player[];
@@ -87,13 +80,33 @@ export default function AuctionSheet({
   const [showNotes, setShowNotes] = useState<boolean>(false);
   const [availableOnly, setAvailableOnly] = useState<boolean>(initialUrlState.availableOnly);
   const [modalPlayer, setModalPlayer] = useState<Player | null>(null);
-  const [modalError, setModalError] = useState<string>('');
-  const [mutationStatus, setMutationStatus] = useState<string>('');
-  const [isPending, startTransition] = useTransition();
   const [nominatingIds, setNominatingIds] = useState<Set<number>>(new Set());
   const [extraNominated, setExtraNominated] = useState<Array<number | string>>([]);
   const [clearedNominations, setClearedNominations] = useState<Set<number | string>>(new Set());
   const [showSleeperSync, setShowSleeperSync] = useState<boolean>(false);
+  const {
+    claimMap,
+    isPending,
+    modalError,
+    mutationStatus,
+    setMutationStatus,
+    submitBid,
+    deleteBidForPlayer,
+  } = useAuctionBidMutations({
+    claimedBids,
+    teams,
+    draftId,
+    onCreateSuccess: async (player) => {
+      if (player.id !== undefined) {
+        setClearedNominations((previous) => new Set(previous).add(player.id as number));
+        setExtraNominated((previous) =>
+          previous.filter((nominatedId) => nominatedId !== player.id),
+        );
+      }
+      await recordBidLogged(player.player);
+      setModalPlayer(null);
+    },
+  });
 
   const debouncedSearch = useDebouncedValue(search, 400);
   const urlQuery = useMemo(
@@ -110,19 +123,6 @@ export default function AuctionSheet({
   );
   useUrlQuerySync(urlQuery);
 
-  const [optimisticBids, dispatchOptimistic] = useOptimistic<ClaimedBid[], OptimisticAction>(
-    claimedBids,
-    (state, action) => {
-      if (action.type === 'add') return [...state, action.bid];
-      if (action.type === 'update')
-        return state.map((b) => (b.id === action.bid.id ? action.bid : b));
-      if (action.type === 'delete') return state.filter((b) => b.id !== action.id);
-      return state;
-    },
-  );
-
-  const claimMap = useMemo(() => createClaimMap(optimisticBids), [optimisticBids]);
-
   const nominatedSet = useMemo(
     () => createNominatedSet(nominatedPlayers, extraNominated, clearedNominations),
     [nominatedPlayers, extraNominated, clearedNominations],
@@ -135,122 +135,22 @@ export default function AuctionSheet({
     [players, claimMap, teams, ownerHandle],
   );
 
-  const hasClaims = optimisticBids.length > 0 && !availableOnly;
-
-  function handleMutationFailure(code: DraftMutationCode) {
-    if (code === 'UNAUTHORIZED') {
-      window.location.href = '/sign-in';
-      return;
-    }
-    const messages: Partial<Record<DraftMutationCode, string>> = {
-      INVALID_INPUT: 'Use positive whole-dollar prices and valid draft records.',
-      NOT_FOUND: 'Draft not configured. Please check your setup.',
-      DRAFT_COMPLETE: 'This draft is complete and now read-only. Refresh to view final results.',
-      TEAM_NOT_FOUND: 'That team is not part of this draft.',
-      PLAYER_NOT_FOUND: 'That player is not part of this draft.',
-      BID_NOT_FOUND: 'That bid no longer exists. Refresh to see the latest results.',
-      PLAYER_ALREADY_CLAIMED: 'That player has already been won by another team.',
-      ROSTER_FULL: 'That team has no open roster spots for another player.',
-      BID_EXCEEDS_MAX: 'This bid must leave at least $1 for every open roster spot.',
-    };
-    const message = messages[code] ?? 'Unable to save this bid. Please try again.';
-    setModalError(message);
-    setMutationStatus(message);
-    router.refresh();
-  }
+  const hasClaims = claimMap.size > 0 && !availableOnly;
 
   function handleModalSubmit({ price, teamId }: { price: number; teamId: number }) {
     if (!modalPlayer || isPending) return;
-    const existingBid = claimMap.get(getPlayerIdentityKey(modalPlayer));
-    const team = teams.find((t) => t.id === teamId);
-    if (!team) return;
-    setModalError('');
-
-    if (existingBid) {
-      const updated: ClaimedBid = { ...existingBid, price, teamId, teamHandle: team.handle };
-      startTransition(async () => {
-        dispatchOptimistic({ type: 'update', bid: updated });
-        setMutationStatus('Saving bid…');
-        try {
-          const result = await updateBid({ id: existingBid.id, price, teamId, draftId });
-          if (!result.ok) {
-            handleMutationFailure(result.code);
-            return;
-          }
-          setMutationStatus('Bid saved.');
-          setModalPlayer(null);
-        } catch {
-          setModalError('Failed to save bid. Please try again.');
-          setMutationStatus('Failed to save bid. Please try again.');
-          router.refresh();
-        }
-      });
-    } else {
-      if (modalPlayer.id === undefined) {
-        setModalError('Player identity missing. Please refresh and try again.');
-        return;
-      }
-      const playerId = modalPlayer.id;
-      const tempBid: ClaimedBid = {
-        id: -Date.now(),
-        playerId,
-        player: modalPlayer.player,
-        position: modalPlayer.pos,
-        price,
-        teamId,
-        teamHandle: team.handle,
-      };
-      startTransition(async () => {
-        dispatchOptimistic({ type: 'add', bid: tempBid });
-        setMutationStatus('Saving bid…');
-        try {
-          const result = await logBid({
-            playerId,
-            price,
-            teamId,
-            draftId,
-          });
-          if (!result.ok) {
-            handleMutationFailure(result.code);
-            return;
-          }
-          setMutationStatus('Bid saved.');
-          setClearedNominations((previous) => new Set(previous).add(playerId));
-          setExtraNominated((previous) =>
-            previous.filter((nominatedId) => nominatedId !== playerId),
-          );
-          await recordBidLogged(modalPlayer.player);
-          setModalPlayer(null);
-        } catch {
-          setModalError('Failed to log bid. Please try again.');
-          setMutationStatus('Failed to log bid. Please try again.');
-          router.refresh();
-        }
-      });
-    }
+    const player = modalPlayer;
+    const isEditing = claimMap.has(getPlayerIdentityKey(player));
+    void submitBid(player, { price, teamId }).then((saved) => {
+      if (saved && isEditing) setModalPlayer(null);
+    });
   }
 
   function handleModalDelete() {
     if (!modalPlayer || isPending) return;
-    const existingBid = claimMap.get(getPlayerIdentityKey(modalPlayer));
-    if (!existingBid) return;
-    setModalError('');
-    startTransition(async () => {
-      dispatchOptimistic({ type: 'delete', id: existingBid.id });
-      setMutationStatus('Removing bid…');
-      try {
-        const result = await deleteBid({ id: existingBid.id, draftId });
-        if (!result.ok) {
-          handleMutationFailure(result.code);
-          return;
-        }
-        setMutationStatus('Bid removed.');
-        setModalPlayer(null);
-      } catch {
-        setModalError('Failed to remove bid. Please try again.');
-        setMutationStatus('Failed to remove bid. Please try again.');
-        router.refresh();
-      }
+    const player = modalPlayer;
+    void deleteBidForPlayer(player).then((removed) => {
+      if (removed) setModalPlayer(null);
     });
   }
 

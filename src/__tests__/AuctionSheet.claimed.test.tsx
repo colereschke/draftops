@@ -281,6 +281,35 @@ describe('AuctionSheet with claimed bids', () => {
     expect(screen.getByRole('dialog')).toBeInTheDocument();
   });
 
+  it('updates a claimed player and closes the edit dialog after save succeeds', async () => {
+    const user = userEvent.setup();
+    renderSheet({ claimedBids: [mockClaim] });
+
+    await user.click(screen.getByTestId('player-row-1'));
+    await user.clear(screen.getByTestId('bid-price'));
+    await user.type(screen.getByTestId('bid-price'), '125');
+    await user.click(screen.getByTestId('bid-submit'));
+
+    await waitFor(() =>
+      expect(mockUpdateBid).toHaveBeenCalledWith({ id: 1, price: 125, teamId: 1, draftId: 1 }),
+    );
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(screen.getByTestId('mutation-status')).toHaveTextContent('Bid saved.');
+  });
+
+  it('removes a claimed player and closes the dialog after confirmation succeeds', async () => {
+    const user = userEvent.setup();
+    renderSheet({ claimedBids: [mockClaim] });
+
+    await user.click(screen.getByTestId('player-row-1'));
+    await user.click(screen.getByRole('button', { name: /^remove$/i }));
+    await user.click(screen.getByRole('button', { name: /confirm remove/i }));
+
+    await waitFor(() => expect(mockDeleteBid).toHaveBeenCalledWith({ id: 1, draftId: 1 }));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(screen.getByTestId('mutation-status')).toHaveTextContent('Bid removed.');
+  });
+
   it('shows a stale-page read-only message when the draft completed concurrently', async () => {
     const user = userEvent.setup();
     mockDeleteBid.mockResolvedValue({ ok: false, code: 'DRAFT_COMPLETE' });
@@ -296,6 +325,7 @@ describe('AuctionSheet with claimed bids', () => {
       );
     });
     expect(screen.getByRole('dialog')).toBeInTheDocument();
+    expect(mockRouterRefresh).toHaveBeenCalled();
   });
 
   it('closes modal, shows LIVE badge, and calls /api/draft/1/nominated after clicking Nom', async () => {

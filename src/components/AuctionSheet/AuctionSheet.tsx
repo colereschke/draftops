@@ -312,7 +312,8 @@ export default function AuctionSheet({
     let data = [...players];
     if (posFilter !== 'ALL') data = data.filter((p) => p.pos === posFilter);
     if (availableOnly) data = data.filter((p) => !claimMap.has(playerIdentityKey(p)));
-    if (strategyFilter !== 'ALL') data = data.filter((p) => p.strategyTag === strategyFilter);
+    if (strategyFilter !== 'ALL' && hasStrategyTags)
+      data = data.filter((p) => p.strategyTag === strategyFilter);
     if (search) {
       const q = search.toLowerCase();
       data = data.filter(
@@ -361,7 +362,17 @@ export default function AuctionSheet({
       return a.sfRank - b.sfRank;
     });
     return data;
-  }, [posFilter, search, availableOnly, strategyFilter, claimMap, sortBy, sortDir, players]);
+  }, [
+    posFilter,
+    search,
+    availableOnly,
+    strategyFilter,
+    hasStrategyTags,
+    claimMap,
+    sortBy,
+    sortDir,
+    players,
+  ]);
 
   const handleSort = (col: SortKey) => {
     if (sortBy === col) {

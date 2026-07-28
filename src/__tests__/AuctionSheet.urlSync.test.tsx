@@ -109,6 +109,17 @@ describe('AuctionSheet URL state', () => {
     expect(window.location.search).toBe('');
   });
 
+  it('ignores a stale ?strategy= param when no player has a strategyTag', () => {
+    // hasStrategyTags gates the archetype chips out of the UI entirely when no player carries
+    // a strategyTag (no projections applied). A shared/bookmarked ?strategy= URL from a draft
+    // that once had projections must not silently filter the table down to zero rows with no
+    // visible control left to clear it.
+    mockSearch = 'strategy=BARGAIN';
+    renderSheet();
+    expect(screen.getByTestId('player-row-1')).toBeInTheDocument();
+    expect(screen.getByTestId('player-row-5')).toBeInTheDocument();
+  });
+
   it('debounces the search query before writing it to the URL', async () => {
     jest.useFakeTimers();
     const user = userEvent.setup({ delay: null, advanceTimers: jest.advanceTimersByTime });

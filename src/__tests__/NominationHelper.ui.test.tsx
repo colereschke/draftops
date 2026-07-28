@@ -362,4 +362,16 @@ describe('NominationHelper URL state', () => {
     await user.click(screen.getByTestId('nomination-pos-filter-QB'));
     expect(window.location.search).toBe('?pos=QB');
   });
+
+  it('clears the pos param when switching back to ALL', async () => {
+    const user = userEvent.setup();
+    mockSearch = 'pos=QB';
+    window.history.replaceState(null, '', '/draft/1/nominate?pos=QB');
+    render(<NominationHelper draftId={1} players={PLAYERS} />);
+    await waitFor(() =>
+      expect(screen.getByTestId('nomination-pos-filter-ALL')).toBeInTheDocument(),
+    );
+    await user.click(screen.getByTestId('nomination-pos-filter-ALL'));
+    expect(window.location.search).toBe('');
+  });
 });

@@ -91,6 +91,12 @@
   --text-mono-md: 13px;
   --text-mono-lg: 16px;
 
+  /* These named tokens shadow Tailwind v4's built-in size scale for EVERY utility that
+     resolves a named size token, not just gap-{size} and p-{size}. Using max-w-, min-w-,
+     w-, or h- with xs/sm/md/lg/xl silently resolves through these tiny pixel values
+     instead of Tailwind's real rem-based defaults. Only consume these via gap-{size},
+     p-{size}, px-{size}, etc.; use an arbitrary value (e.g. max-w-[24rem]) for
+     Tailwind's own named width/height sizes. */
   --spacing-xs: 4px;
   --spacing-sm: 8px;
   --spacing-md: 12px;

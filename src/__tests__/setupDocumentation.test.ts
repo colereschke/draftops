@@ -20,6 +20,15 @@ describe('setup documentation', () => {
     expect(readme).not.toContain('SQLite via Prisma 7');
   });
 
+  test('documents how to acquire the untracked projection inputs', () => {
+    const projectionGuide = readTrackedFile('scripts/projections/README.md');
+
+    expect(projectionGuide).toContain('https://api.sleeper.app/v1/players/nfl');
+    expect(projectionGuide).toContain('data/raw/sleeper_players.json');
+    expect(projectionGuide).toContain('licensed');
+    expect(projectionGuide).toMatch(/cannot be\s+committed or distributed/);
+  });
+
   test('keeps the agent guidance identical across supported assistants', () => {
     expect(readTrackedFile('AGENTS.md')).toBe(readTrackedFile('CLAUDE.md'));
   });

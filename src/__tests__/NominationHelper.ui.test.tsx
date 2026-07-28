@@ -5,9 +5,12 @@ import WatchlistSidebar from '@/components/NominationHelper/WatchlistSidebar';
 import type { Player } from '@/types';
 
 const mockRouter = { replace: jest.fn() };
+let mockSearch = '';
 
 jest.mock('next/navigation', () => ({
   useRouter: () => mockRouter,
+  usePathname: () => '/draft/1/nominate',
+  useSearchParams: () => new URLSearchParams(mockSearch),
 }));
 
 const mockRecordPlayerNominated = jest.fn().mockResolvedValue(undefined);
@@ -320,5 +323,43 @@ describe('NominationHelper mutations', () => {
     ).toBeInTheDocument();
 
     resolveRefetch({ ok: true, status: 200, json: async () => dataWithAuction } as Response);
+  });
+});
+
+describe('NominationHelper URL state', () => {
+  beforeEach(() => {
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        teamStats: [],
+        auctionResults: [{ playerId: 999, price: 50 }],
+        watchlist: [],
+        nominated: [],
+        ownerHandle: null,
+        targetRoster: { QB: 4, RB: 9, WR: 11, TE: 3 },
+      }),
+    } as Response);
+    mockSearch = '';
+    window.history.replaceState(null, '', '/draft/1/nominate');
+  });
+
+  afterEach(() => {
+    jest.resetAllMocks();
+  });
+
+  it('hydrates the position filter from the URL on mount', async () => {
+    mockSearch = 'pos=RB';
+    render(<NominationHelper draftId={1} players={PLAYERS} />);
+    await waitFor(() => expect(screen.getByTestId('nomination-pos-filter-RB')).toBeInTheDocument());
+    expect(screen.getByTestId('nomination-pos-filter-RB')).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  it('writes the position filter to the URL when changed', async () => {
+    const user = userEvent.setup();
+    render(<NominationHelper draftId={1} players={PLAYERS} />);
+    await waitFor(() => expect(screen.getByTestId('nomination-pos-filter-QB')).toBeInTheDocument());
+    await user.click(screen.getByTestId('nomination-pos-filter-QB'));
+    expect(window.location.search).toBe('?pos=QB');
   });
 });

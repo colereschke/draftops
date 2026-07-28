@@ -4,6 +4,13 @@ import RosterTracker from '@/components/RosterTracker/RosterTracker';
 import type { TeamWithRoster } from '@/types';
 import type { ManagerTendency } from '@/lib/tendencies';
 
+let mockSearch = '';
+
+jest.mock('next/navigation', () => ({
+  usePathname: () => '/draft/1/teams',
+  useSearchParams: () => new URLSearchParams(mockSearch),
+}));
+
 const makeTeam = (over: Partial<TeamWithRoster> = {}): TeamWithRoster => ({
   id: 1,
   handle: 'coreschke',
@@ -397,6 +404,27 @@ describe('RosterTracker', () => {
         within(screen.getByTestId('dossier-card-1')).queryByTestId('roster-group-QB'),
       ).not.toBeInTheDocument();
       expect(screen.getByTestId('team-detail-pane')).toHaveTextContent('coreschke');
+    });
+
+    it('writes the selected team to the URL when a different team is clicked', async () => {
+      mockDesktop();
+      mockSearch = '';
+      const teams = [makeTeam({ id: 2, handle: 'rival_b', displayName: 'B' }), makeTeam()];
+      const tendencies = [makeTendency({ teamId: 2, handle: 'rival_b' }), makeTendency()];
+      window.history.replaceState(null, '', '/draft/1/teams');
+      render(<RosterTracker teams={teams} tendencies={tendencies} ownerHandle="coreschke" />);
+      await userEvent.click(screen.getByTestId('dossier-expand-2'));
+      expect(window.location.search).toBe('?team=2');
+    });
+
+    it('hydrates the selected team from the URL on mount', () => {
+      mockDesktop();
+      mockSearch = 'team=2';
+      const teams = [makeTeam({ id: 2, handle: 'rival_b', displayName: 'B' }), makeTeam()];
+      const tendencies = [makeTendency({ teamId: 2, handle: 'rival_b' }), makeTendency()];
+      window.history.replaceState(null, '', '/draft/1/teams?team=2');
+      render(<RosterTracker teams={teams} tendencies={tendencies} ownerHandle="coreschke" />);
+      expect(screen.getByTestId('team-detail-pane')).toHaveTextContent('rival_b');
     });
   });
 });

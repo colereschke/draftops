@@ -6,6 +6,7 @@ Fantasy football dynasty auction draft tool built for a 12-team Superflex Sleepe
 
 ```bash
 make setup       # First-time: install + migrate + seed
+make setup-smoke # Verify clean setup against a guarded local *_test database
 make dev         # Dev server at http://localhost:3000
 make check       # Full quality gate: typecheck + lint + format + test
 make test        # Jest only
@@ -13,6 +14,17 @@ make test-e2e    # Playwright smoke tests (use a disposable database)
 make db-studio   # Visual DB browser (Prisma Studio)
 make db-reset    # Wipe DB and re-seed (destructive)
 ```
+
+For an end-to-end local setup check, create a disposable database named with the required
+`_test` suffix, then pass it to the guarded command:
+
+```bash
+createdb draftops_setup_test
+DATABASE_URL="postgresql://<user>@localhost:5432/draftops_setup_test" make setup-smoke
+```
+
+`make setup-smoke` rejects non-loopback URLs and database names that do not end in `_test` before
+it applies migrations or seeds data.
 
 ## Tech Stack
 
@@ -35,7 +47,7 @@ src/
 │   │   ├── auth/[...nextauth]/route.ts  # Auth.js catch-all route
 │   │   ├── draft/[draftId]/             # Per-draft info, nomination, nominated, and watchlist routes
 │   │   ├── drafts/route.ts              # GET/POST draft collection
-│   │   └── log-error/route.ts           # Client error reporting
+│   │   └── health/route.ts              # PostgreSQL health check
 │   ├── draft/[draftId]/              # Value sheet plus budget, nominate, and teams subpages
 │   ├── drafts/                       # Draft list and validated draft-creation form
 │   ├── rankings/page.tsx             # Profile-level custom rankings upload and match resolution
@@ -78,7 +90,7 @@ src/
 └── types/
     └── index.ts                      # Player, Position, StartingSlot, ScoringSettings, DEFAULT_* constants,
                                       # TeamStats, AuctionResultEntry, RosterEntry, TeamWithRoster, ClaimedBid, LeagueTeam
-middleware.ts                         # Auth.js middleware — redirects unauthenticated users to /sign-in
+src/proxy.ts                          # Auth.js proxy — redirects unauthenticated users to /sign-in
 prisma/
 ├── schema.prisma                     # Draft, player, auction, projection, rankings, Sleeper identity, and onboarding models
 ├── seed.ts                           # Upserts default draft + 12 teams (idempotent)
@@ -104,7 +116,7 @@ existing_project_docs/                # Original reference files — do not dele
 | `/rankings`                 | Profile-level custom rankings upload and Sleeper-match resolution.                                        |
 | `/sign-in`                  | Branded Discord OAuth sign-in with a decorative scrolling `ValueTicker`.                                  |
 
-All pages are server components that fetch from Prisma directly and pass data down to `'use client'` components. Every route except `/sign-in` and the Auth.js API route is protected by `middleware.ts`.
+All pages are server components that fetch from Prisma directly and pass data down to `'use client'` components. Every route except `/sign-in` and the Auth.js API route is protected by `src/proxy.ts`.
 
 ## Database Schema
 
@@ -318,7 +330,7 @@ OWNER_DISCORD_ID=      # Your Discord user ID — seeds ownerId on the default d
 
 ## What's Built
 
-- **Auth** — Discord OAuth via Auth.js v5; JWT sessions; middleware protects all routes; `/sign-in` page
+- **Auth** — Discord OAuth via Auth.js v5; JWT sessions; `src/proxy.ts` protects all routes; `/sign-in` page
 - **Draft lifecycle and onboarding** — root routing selects the active draft; `/drafts` manages active/completed drafts; the validated `/drafts/new` form shares `draftInputSchema` with `createDraft`; a first-draft welcome and feature tour persist through `OnboardingProgress`.
 - **Draft integrity** — player-facing records use non-null composite same-draft foreign keys; a player cannot be claimed, watched, nominated, or valued through another draft. Completed drafts render read-only controls.
 - **PostgreSQL** — migrated from SQLite; Neon in prod, local WSL2 Postgres in dev; `@prisma/adapter-pg`

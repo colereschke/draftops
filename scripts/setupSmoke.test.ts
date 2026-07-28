@@ -22,6 +22,22 @@ describe('assertSetupSmokeDatabase', () => {
     ).not.toThrow();
   });
 
+  it('rejects query parameters that override the local PostgreSQL target', () => {
+    expect(() =>
+      assertSetupSmokeDatabase(
+        'postgresql://draftops:secret@localhost:5432/draftops_setup_test?host=example.com&port=6543',
+      ),
+    ).toThrow('Setup smoke tests require a local PostgreSQL database ending in _test');
+  });
+
+  it('accepts non-routing PostgreSQL query parameters', () => {
+    expect(() =>
+      assertSetupSmokeDatabase(
+        'postgresql://draftops:secret@localhost:5432/draftops_setup_test?application_name=setup-smoke',
+      ),
+    ).not.toThrow();
+  });
+
   it('rejects an unsafe DIRECT_URL when DATABASE_URL is safe', () => {
     expect(() =>
       assertSetupSmokeDatabases(

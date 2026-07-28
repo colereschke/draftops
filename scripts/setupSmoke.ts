@@ -2,6 +2,7 @@ import { Client } from 'pg';
 
 const SETUP_SMOKE_DATABASE_ERROR =
   'Setup smoke tests require a local PostgreSQL database ending in _test';
+const ROUTING_QUERY_PARAMETERS = new Set(['database', 'host', 'port']);
 
 function setupSmokeDatabaseError(): Error {
   return new Error(SETUP_SMOKE_DATABASE_ERROR);
@@ -45,8 +46,15 @@ function parseSetupSmokeDatabase(databaseUrl: string | undefined): SetupSmokeDat
 
   const host = parsedDatabaseUrl.hostname.replace(/^\[|\]$/g, '');
   const isLoopbackHost = host === 'localhost' || host === '127.0.0.1' || host === '::1';
+  const hasRoutingQueryParameter = Array.from(parsedDatabaseUrl.searchParams.keys()).some((key) =>
+    ROUTING_QUERY_PARAMETERS.has(key.toLowerCase()),
+  );
 
-  if (!isLoopbackHost || !parsedDatabaseUrl.pathname.endsWith('_test')) {
+  if (
+    !isLoopbackHost ||
+    !parsedDatabaseUrl.pathname.endsWith('_test') ||
+    hasRoutingQueryParameter
+  ) {
     throw setupSmokeDatabaseError();
   }
 

@@ -14,14 +14,24 @@ from the repo root.
 
 ## Inputs
 
-Place raw files here:
+The raw inputs are not included in a checkout and are ignored by git:
 
 ```text
 data/raw/NFLDK2026_CS_ClayProjections2026.pdf
 data/raw/sleeper_players.json
 ```
 
-Both paths are ignored by git.
+Download the public Sleeper NFL player database directly from Sleeper's API:
+
+```bash
+mkdir -p data/raw
+curl --fail --location "https://api.sleeper.app/v1/players/nfl" \
+  --output data/raw/sleeper_players.json
+```
+
+The exact expected PDF filename is `data/raw/NFLDK2026_CS_ClayProjections2026.pdf`. Obtain it
+manually through ESPN's 2026 NFL Projection Guide; it is a licensed external input and cannot be
+committed or distributed with this repository.
 
 ## Generate CSVs
 

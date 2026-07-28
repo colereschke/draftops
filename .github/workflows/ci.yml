@@ -92,21 +92,8 @@ jobs:
 
       - uses: ./.github/actions/setup-pnpm-node
 
-      - name: Deploy migrations against a clean database
-        run: pnpm prisma migrate deploy
-
-      - name: Seed smoke test
-        run: |
-          pnpm db:seed
-          count=$(psql "$DATABASE_URL" -tAc 'SELECT COUNT(*) FROM "Team"')
-          # LEAGUE_TEAMS (src/lib/teams.ts) always seeds exactly 12 teams — a
-          # partial count (not just zero) means seed.ts's swallowed error path
-          # (main().catch(console.error), no non-zero exit) was hit.
-          if [ "$count" -ne 12 ]; then
-            echo "::error::Expected 12 seeded teams, got $count (seed.ts may have failed partway through)"
-            exit 1
-          fi
-          echo "Seeded $count teams"
+      - name: Clean setup smoke test
+        run: make setup-smoke
 
       - name: Integration tests (real PostgreSQL)
         run: pnpm test:integration

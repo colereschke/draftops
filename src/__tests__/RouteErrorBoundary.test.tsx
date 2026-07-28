@@ -17,7 +17,9 @@ describe('RouteErrorBoundary', () => {
       <RouteErrorBoundary error={error} reset={jest.fn()} title="Failed to load team rosters" />,
     );
 
-    expect(screen.getByText('Failed to load team rosters')).toBeInTheDocument();
+    expect(screen.getByTestId('route-error-title')).toHaveTextContent(
+      'Failed to load team rosters',
+    );
     const incident = screen.getByTestId('error-incident-id').textContent;
     expect(incident).toMatch(/^Incident ID: [\w-]+$/);
     expect(screen.queryByText(/postgres|password/i)).not.toBeInTheDocument();

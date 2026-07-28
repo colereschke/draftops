@@ -4,9 +4,12 @@ import { useEffect, useRef, useState } from 'react';
 import { captureClientError } from '@/lib/clientObservability';
 import { deriveIncidentDetails } from '@/lib/incident';
 
-interface RouteErrorBoundaryProps {
+export interface RouteErrorProps {
   error: Error & { digest?: string };
   reset: () => void;
+}
+
+interface RouteErrorBoundaryProps extends RouteErrorProps {
   title: string;
 }
 
@@ -54,16 +57,21 @@ export default function RouteErrorBoundary({ error, reset, title }: RouteErrorBo
         justifyContent: 'center',
         gap: 12,
         minHeight: '100vh',
-        background: '#0a0d14',
-        color: '#e8eaf0',
+        background: 'var(--bg-base)',
+        color: 'var(--text-primary)',
         fontFamily: '"Inter", "Helvetica Neue", sans-serif',
       }}
     >
-      <div style={{ fontSize: 14, color: 'var(--destructive)', fontWeight: 600 }}>{title}</div>
-      <div style={{ fontSize: 12, color: '#4a5168', maxWidth: 320, textAlign: 'center' }}>
+      <div
+        data-testid="route-error-title"
+        style={{ fontSize: 14, color: 'var(--destructive)', fontWeight: 600 }}
+      >
+        {title}
+      </div>
+      <div style={{ fontSize: 12, color: 'var(--text-muted)', maxWidth: 320, textAlign: 'center' }}>
         We logged the problem. Try again, and share the incident ID if it continues.
       </div>
-      <div data-testid="error-incident-id" style={{ fontSize: 12, color: '#4a5168' }}>
+      <div data-testid="error-incident-id" style={{ fontSize: 12, color: 'var(--text-muted)' }}>
         Incident ID: {incidentId}
       </div>
       <button
@@ -72,9 +80,9 @@ export default function RouteErrorBoundary({ error, reset, title }: RouteErrorBo
           marginTop: 8,
           padding: '7px 18px',
           borderRadius: 6,
-          border: '1px solid #2a3048',
+          border: '1px solid var(--border-subtle)',
           background: 'transparent',
-          color: '#8892a4',
+          color: 'var(--text-muted)',
           fontSize: 12,
           cursor: 'pointer',
         }}

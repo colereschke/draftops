@@ -1,5 +1,6 @@
 import { render, screen, waitFor, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import SleeperRosterConfiguration from '@/components/SleeperRosterSync/SleeperRosterConfiguration';
 import SleeperRosterSyncDialog from '@/components/SleeperRosterSync/SleeperRosterSyncDialog';
 import type { LeagueTeam } from '@/types';
 
@@ -76,6 +77,51 @@ afterEach(() => {
 });
 
 describe('SleeperRosterSyncDialog', () => {
+  it('renders configuration display state and forwards configuration events', async () => {
+    const user = userEvent.setup();
+    const onLeagueIdChange = jest.fn();
+    const onSync = jest.fn();
+    const onMappingChange = jest.fn();
+    const onSave = jest.fn();
+
+    render(
+      <SleeperRosterConfiguration
+        leagueId="league-1"
+        isSyncing={false}
+        mappingRows={[
+          {
+            rosterId: 9,
+            label: 'cole',
+            isAutoMatched: true,
+            selectedTeamId: '7',
+            options: [
+              { id: 7, label: 'Cole', disabled: false },
+              { id: 8, label: 'Rival', disabled: false },
+              { id: 10, label: 'Other', disabled: true },
+            ],
+          },
+        ]}
+        hasMatchCandidates={true}
+        onLeagueIdChange={onLeagueIdChange}
+        onSync={onSync}
+        onMappingChange={onMappingChange}
+        onSave={onSave}
+      />,
+    );
+
+    await user.type(screen.getByTestId('sleeper-sync-league-id'), '2');
+    await user.click(screen.getByTestId('sleeper-sync-sync-button'));
+    await user.selectOptions(screen.getByTestId('sleeper-sync-roster-map-9'), '8');
+    await user.click(screen.getByTestId('sleeper-sync-save-mapping'));
+
+    expect(onLeagueIdChange).toHaveBeenLastCalledWith('league-12');
+    expect(onSync).toHaveBeenCalledTimes(1);
+    expect(onMappingChange).toHaveBeenCalledWith(9, '8');
+    expect(onSave).toHaveBeenCalledTimes(1);
+    expect(screen.getByTestId('sleeper-sync-auto-matched-9')).toBeInTheDocument();
+    expect(screen.getByTestId('sleeper-sync-roster-option-9-10')).toBeDisabled();
+  });
+
   it('previews locked winners and submits only entered prices', async () => {
     const user = userEvent.setup();
     render(

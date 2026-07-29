@@ -38,11 +38,14 @@ existing response-code-to-message mapping moves beside this state orchestration 
 the action failure contract.
 
 `SleeperRosterConfiguration.tsx` renders the configuration view only: league ID entry, on-demand
-sync, candidate-to-team mapping controls, selected-team disabling, and mapping save action.
+sync, candidate-to-team mapping controls, precomputed selected-team disabled state, and mapping
+save action. The hook or a pure mapper beside it retains the one-team-per-roster rule; the view
+only renders the supplied disabled state and forwards events.
 
 `SleeperRosterPreview.tsx` renders the preview view only: actionable winner rows and price inputs,
-conflict messages, unresolved-player notices, already-reconciled diagnostics, empty state, and
-catch-up submission action. Position color lookup stays in this rendering component.
+precomputed conflict display messages, unresolved-player notices, already-reconciled diagnostics,
+empty state, and catch-up submission action. The hook or a pure mapper beside it translates
+conflict reasons to display strings; position color lookup stays in this rendering component.
 
 The loading paragraph and retry button remain simple shell branches; extracting them would not
 create a meaningful responsibility boundary.
@@ -63,11 +66,20 @@ count, and refreshes the router after success.
 
 ## Testing and verification
 
-Retain the existing dialog characterization suite unchanged unless selector placement must follow
-the extracted JSX. Its coverage protects the significant behavioral seams: preview and submission,
-configuration and auto-sync, mapping override and duplicate prevention, price validation,
-configuration-required recovery, diagnostics, action failure messaging, repeated live
-announcements, timer cleanup, and conflict reporting.
+Retain the existing dialog characterization suite and strengthen only its application-level seams
+that protect the new hook boundary:
+
+- Saved-ID auto-sync must assert exactly one `previewSleeperRosterMatch` call after effects and
+  resulting transitions settle.
+- Typing an unsaved league ID must assert no match request before the user clicks Sync, then assert
+  exactly one request after that click.
+- Fake-timer coverage must trigger pending error and success announcements, unmount the dialog,
+  and prove neither timer causes a post-unmount update.
+
+The resulting suite protects preview and submission, configuration and auto-sync, mapping override
+and duplicate prevention, price validation, configuration-required recovery, diagnostics, action
+failure messaging, repeated live announcements, timer cleanup, and conflict reporting. It does
+not add isolated extraction tests.
 
 Run the focused dialog suite during each task, then run `pnpm tsc --noEmit`, `pnpm lint`, and the
 full `make check` before review. The full check must run outside the sandbox because

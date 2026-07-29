@@ -50,7 +50,6 @@ export function TeamRosterSection({ teams, onUpdateTeam, onSetMine }: TeamRoster
             style={inputStyle}
           />
           <input
-            data-testid={`team-display-name-${index}`}
             type="text"
             value={team.displayName}
             onChange={(event) => onUpdateTeam(index, 'displayName', event.target.value)}

@@ -135,7 +135,9 @@ describe('SleeperRosterSyncDialog', () => {
     await waitFor(() =>
       expect(mockPreviewMatch).toHaveBeenCalledWith({ draftId: 4, leagueId: 'league-1' }),
     );
-    expect(await screen.findByTestId('sleeper-sync-roster-map-9')).toHaveValue('7');
+    await screen.findByTestId('sleeper-sync-roster-map-9');
+    expect(mockPreviewMatch).toHaveBeenCalledTimes(1);
+    expect(screen.getByTestId('sleeper-sync-roster-map-9')).toHaveValue('7');
     expect(screen.getByTestId('sleeper-sync-auto-matched-9')).toBeInTheDocument();
     expect(screen.getByTestId('sleeper-sync-roster-map-10')).toHaveValue('');
     expect(screen.queryByTestId('sleeper-sync-auto-matched-10')).not.toBeInTheDocument();
@@ -154,7 +156,13 @@ describe('SleeperRosterSyncDialog', () => {
     );
 
     await user.type(screen.getByTestId('sleeper-sync-league-id'), 'league-1');
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(mockPreviewMatch).not.toHaveBeenCalled();
+
     await user.click(screen.getByTestId('sleeper-sync-sync-button'));
+    await waitFor(() => expect(mockPreviewMatch).toHaveBeenCalledTimes(1));
     expect(await screen.findByTestId('sleeper-sync-roster-map-9')).toHaveValue('7');
 
     await user.selectOptions(screen.getByTestId('sleeper-sync-roster-map-10'), '8');
@@ -393,5 +401,51 @@ describe('SleeperRosterSyncDialog', () => {
       jest.advanceTimersByTime(50);
     });
     expect(screen.getByTestId('sleeper-sync-error')).toHaveTextContent('whole-dollar');
+  });
+
+  it('cleans up a pending validation-error announcement on unmount', async () => {
+    jest.useFakeTimers();
+    const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
+    const { unmount } = render(
+      <SleeperRosterSyncDialog
+        draftId={4}
+        teams={TEAMS}
+        initiallyConfigured={true}
+        onClose={jest.fn()}
+      />,
+    );
+    await screen.findByTestId('sleeper-sync-price-3');
+
+    await user.type(screen.getByTestId('sleeper-sync-price-3'), '4.5');
+    await user.click(screen.getByTestId('sleeper-sync-submit'));
+    unmount();
+
+    act(() => {
+      jest.advanceTimersByTime(50);
+    });
+    expect(screen.queryByTestId('mutation-status')).not.toBeInTheDocument();
+  });
+
+  it('cleans up a pending successful-import announcement on unmount', async () => {
+    jest.useFakeTimers();
+    const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
+    const { unmount } = render(
+      <SleeperRosterSyncDialog
+        draftId={4}
+        teams={TEAMS}
+        initiallyConfigured={true}
+        onClose={jest.fn()}
+      />,
+    );
+    await screen.findByTestId('sleeper-sync-price-3');
+
+    await user.type(screen.getByTestId('sleeper-sync-price-3'), '42');
+    await user.click(screen.getByTestId('sleeper-sync-submit'));
+    unmount();
+
+    act(() => {
+      jest.advanceTimersByTime(50);
+    });
+    expect(screen.queryByTestId('mutation-status')).not.toBeInTheDocument();
   });
 });

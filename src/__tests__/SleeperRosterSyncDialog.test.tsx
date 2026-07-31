@@ -1,5 +1,6 @@
 import { render, screen, waitFor, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import type { ReactNode } from 'react';
 import SleeperRosterSyncDialog from '@/components/SleeperRosterSync/SleeperRosterSyncDialog';
 import type { LeagueTeam } from '@/types';
 
@@ -10,6 +11,11 @@ const mockLogCatchUp = jest.fn();
 const mockRefresh = jest.fn();
 
 jest.mock('next/navigation', () => ({ useRouter: () => ({ refresh: mockRefresh }) }));
+jest.mock('@/components/ui/dialog', () => ({
+  Dialog: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+  DialogContent: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+  DialogTitle: ({ children }: { children: ReactNode }) => <h2>{children}</h2>,
+}));
 jest.mock('@/lib/sleeper-roster-actions', () => ({
   previewSleeperRosterSync: (...args: unknown[]) => mockPreview(...args),
   previewSleeperRosterMatch: (...args: unknown[]) => mockPreviewMatch(...args),
@@ -418,7 +424,9 @@ describe('SleeperRosterSyncDialog', () => {
 
     await user.type(screen.getByTestId('sleeper-sync-price-3'), '4.5');
     await user.click(screen.getByTestId('sleeper-sync-submit'));
+    expect(jest.getTimerCount()).toBe(1);
     unmount();
+    expect(jest.getTimerCount()).toBe(0);
 
     act(() => {
       jest.advanceTimersByTime(50);
@@ -441,7 +449,10 @@ describe('SleeperRosterSyncDialog', () => {
 
     await user.type(screen.getByTestId('sleeper-sync-price-3'), '42');
     await user.click(screen.getByTestId('sleeper-sync-submit'));
+    await waitFor(() => expect(mockLogCatchUp).toHaveBeenCalledTimes(1));
+    expect(jest.getTimerCount()).toBe(1);
     unmount();
+    expect(jest.getTimerCount()).toBe(0);
 
     act(() => {
       jest.advanceTimersByTime(50);

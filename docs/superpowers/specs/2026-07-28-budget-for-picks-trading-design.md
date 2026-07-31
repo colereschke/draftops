@@ -142,8 +142,10 @@ pick twice (see M1 fix in Validation).
 ## Ownership Resolution
 
 New module `src/lib/pickOwnership.ts`. A pure-shaped but DB-bound function,
-`resolvePickHolder(tx, draftId, originTeamId, year, round)`, is the single source of truth for "who
-holds this pick right now":
+`resolvePickHolder(client, draftId, originTeamId, year, round)`, is the single source of truth for
+"who holds this pick right now" (`client` is `Prisma.TransactionClient | PrismaClient`, since this is
+called both from inside trade/bid mutation transactions and from `getActiveDraftPlayers`, which is
+not itself transactional):
 
 1. Find the most recent non-deleted `Trade` (by `createdAt`) with a `TradePickAsset` matching
    `(originTeamId, year, round)`. If found, the holder is that trade's `pickTeamId`.
@@ -151,13 +153,16 @@ holds this pick right now":
    round) `Player` row. If found, the holder is that result's `teamId`.
 3. Else, the holder is the origin team.
 
-A batch variant, `resolveAllPickHolders(tx, draftId)`, computes this for every `(originTeamId, year,
-round)` combination that has ever appeared in a `Trade` or a `PKG`/`PICK` `AuctionResult` for the
-draft, in one pass. This scope — only _touched_ picks, never a team's own never-traded,
-never-auctioned picks — is deliberate, not an oversight: it's exactly what "Dynamic Pick Valuation
-Integration" below needs to stay behavior-compatible with the current (pre-trade) computation when no
-trades exist, and untouched own-picks are handled separately for the trade-entry picker (category 1
-below covers them directly from `Player` rows; they never need to go through this function).
+A batch variant, `resolveAllPickHolders(client, draftId)`, computes this for every `(originTeamId,
+year, round)` combination that has ever appeared in a `Trade` or a `PKG`/`PICK` `AuctionResult` for
+the draft, in one pass, and also exposes — for the "Dynamic Pick Valuation Integration" package/round
+grouping below — which acquisition event each resolved round traces to, so callers can tell whether a
+group of rounds shares one event or several without re-deriving it themselves. This scope — only
+_touched_ picks, never a team's own never-traded, never-auctioned picks — is deliberate, not an
+oversight: it's exactly what "Dynamic Pick Valuation Integration" below needs to stay
+behavior-compatible with the current (pre-trade) computation when no trades exist, and untouched
+own-picks are handled separately for the trade-entry picker (category 1 below covers them directly
+from `Player` rows; they never need to go through this function).
 
 Given expected trade volumes (single digits per draft), none of this needs to be incrementally
 materialized; deriving it at read time inside the relevant transaction is simpler and avoids a second
@@ -188,13 +193,15 @@ So the picker is two categories:
    pick; every subsequent trade of the same pick resolves it through the normal trade-log lookup
    (step 1) and no longer needs free-form entry.
 
-**Package roll-up for display only:** `/teams` may display "origin's YEAR package" instead of three
-separate lines when all three rounds currently resolve to the same holder _via the same acquisition
-event_ — either one `PKG`-level `AuctionResult`, or all three still untouched at origin default. If
-the three rounds happen to share a holder through independent events (three separate `individual`-
-mode bids, or a trade that reassembled them one round at a time), they display as three separate
-lines even though the holder matches, since there's no single event a "package" label would
-accurately describe.
+**Same-acquisition-event grouping:** used twice — once for `/teams` display, once for valuation below
+— so it's defined once, here. Three rounds of an `(origin, year)` are a "group" only when all three
+currently resolve to the same holder _via the same single acquisition event_: either one `PKG`-level
+`AuctionResult`, or all three still untouched at origin default. If the three rounds happen to share a
+holder through independent events (three separate `individual`-mode bids, or a trade that reassembled
+them one round at a time), they are **not** a group, even though the holder matches — there's no
+single event a "package" label would accurately describe, and (per Dynamic Pick Valuation
+Integration) no single baseline that correctly values them together. `/teams` displays a group as
+"origin's YEAR package" instead of three separate lines; anything not a group displays as three lines.
 
 ## Budget Effect
 
@@ -209,17 +216,21 @@ New shared module `src/lib/tradeBudget.ts`:
 
 ```ts
 export async function getTradeBudgetDeltaByTeamId(
-  tx: Prisma.TransactionClient,
+  tx: Prisma.TransactionClient | PrismaClient,
   draftId: number,
+  options?: { excludeTradeId?: number },
 ): Promise<Map<number, number>>;
 ```
 
 Sums, per team, `-budgetAmount` for trades where the team is `budgetTeamId` and `+budgetAmount` for
-trades where the team is `pickTeamId`, over non-deleted `Trade` rows for the draft. This is the one
-place the delta is computed; every consumer below calls it (or, for the trade-mutation transaction
-itself, computes the same sum excluding the trade being edited/deleted — see Validation).
+trades where the team is `pickTeamId`, over non-deleted `Trade` rows for the draft. `excludeTradeId`
+lets a trade-mutation transaction ask "what would the delta be without this trade" using the exact
+same function, rather than a second hand-written sum living next to it — this is the one and only
+place the signed arithmetic is implemented. Accepts either a transaction client (bid/trade mutations,
+which run inside `withActiveOwnedDraftMutation`) or the base client (`getActiveDraftPlayers`, which
+is not itself transactional).
 
-Three required call sites, all currently missing:
+Four required call sites, all currently missing:
 
 1. **`computeDraftTeamStats` callers** (`teams/page.tsx`, `budget/page.tsx`,
    `nomination-data/route.ts`) — pass the map as `budgetDeltaByTeamId`. `TeamWithRoster` gains an
@@ -236,7 +247,13 @@ requiredRosterDollars`. Without this, a team that received trade budget stays ca
    `getTradeBudgetDeltaByTeamId`, looked up for `draft.ownerTeamId`); `AuctionSheet.tsx:309` becomes
    `const remaining = ownerBudget + ownerBudgetDelta - mySpent`. `ownerBudget` keeps meaning the
    literal configured budget (so it's still labelable as such in the UI); the delta stays a visible,
-   separate quantity, consistent with the "explainable, not silently shifted" bar above.
+   separate quantity, consistent with the "explainable, not silently shifted" bar above. The header's
+   own "Budget" metric card (`AuctionHeader.tsx`, fed the same `ownerBudget` prop today) needs the same
+   treatment — either display the delta alongside it or fold it in with a label, so the header and the
+   remaining-budget figure never disagree.
+4. **`assertBidLegalInTransaction`'s Sleeper catch-up batch caller** (`sleeper-roster-actions.ts:411`
+   calls it once per row inside one transaction) — fetch `getTradeBudgetDeltaByTeamId` once for the
+   whole batch and pass the relevant team's entry in, rather than re-querying it on every row.
 
 ## Bid Mutation Impact
 
@@ -251,11 +268,27 @@ claim it.
 
 - New `DraftMutationCode`: `PICK_HAS_ACTIVE_TRADES`.
 - `deleteBidRecord`, and `updateBidRecord` when it changes `teamId` on a `PKG`/`PICK` position: before
-  proceeding, check whether any round covered by this result (all 3 for a `PKG` row, the specific one
-  for a `PICK` row) has ever been named by a non-deleted `TradePickAsset`. If so, throw
-  `PICK_HAS_ACTIVE_TRADES` — the operator must unwind the dependent trade(s) first, same pattern as
-  `PICK_ALREADY_RETRADED` below. Price-only updates and restores are unaffected (restoring only adds
-  provenance back, it never removes an assertion a trade depends on).
+  proceeding, for each round covered by this result (all 3 for a `PKG` row, the specific one for a
+  `PICK` row), check whether a non-deleted `TradePickAsset` for that `(originTeamId, year, round)`
+  exists on a `Trade` whose `createdAt` is **after** this `AuctionResult`'s `createdAt`. If so, throw
+  `PICK_HAS_ACTIVE_TRADES`.
+
+  The `createdAt` ordering matters and isn't optional: a trade can only have drawn its holder from
+  this specific win if the win already existed when the trade was created (resolution step 2 falls
+  back to origin default with no win at all, so an earlier trade of the same round must have gotten
+  its holder from origin, not from a win that didn't exist yet). Checking "ever named by any trade,"
+  with no ordering, is wrong — it would permanently lock a win from being corrected the moment any
+  trade for that same `(origin, year, round)` exists at all, even one created before the win and
+  wholly unrelated to it (e.g. the origin traded away their own not-yet-auctioned round 1 first, and
+  the package was only bid on afterward for rounds 2–3; that later win has nothing to do with the
+  earlier trade and must stay editable).
+
+  The operator must unwind the dependent trade(s) first, same pattern as `PICK_ALREADY_RETRADED`
+  below. Price-only updates and restores are unaffected (restoring only adds provenance back, it
+  never removes an assertion a trade depends on). No symmetric check is needed on `createBidRecord`:
+  logging a win after a trade for one of its rounds already exists is legitimate (the operator simply
+  logged events out of order) and resolution handles it correctly — the traded round keeps resolving
+  via the trade, the untraded rounds resolve via the new win.
 
 This is a genuine new cross-module dependency (`bidMutation.ts` importing from `pickOwnership.ts`)
 and is called out explicitly here because it's easy for an implementation plan to miss — the trade
@@ -279,18 +312,44 @@ ts`'s `getActiveDraftPlayers`, which passes it only `players`/`bids`/`startingLi
 `resolvePickHolder`/`resolveAllPickHolders` are DB-bound. The snapshot has to be computed once, async,
 upstream, and passed down as plain data:
 
-1. `getActiveDraftPlayers` (`src/lib/activeDraftPlayers.ts`) calls `resolveAllPickHolders(tx,
-draftId)`, then converts each resolved `(originTeamId, year, round) → holderTeamId` entry into a
-   dollar value and sums by holder: `futureCapitalByHandle: Map<string handle, number>`. The dollar
-   value per entry is the _round's own market baseline_, not an allocated share of whatever was paid
-   for it: if `year === max(Player.futurePickYear)` (the generated year), use that round's actual
-   `PICK`-row `Player.budget` (already correctly scaled to the draft's economy); otherwise use
-   `ROUND_BASELINES[round]` (now exported from `futurePickAssets.ts`) scaled the same way generated
-   rows are (`getBudgetScale`). This sidesteps the package/round decomposition problem entirely —
-   nothing is ever split, each round is valued on its own.
-2. `applyDynamicPickValues` gains a required parameter `futureCapitalByHandle: ReadonlyMap<string,
+1. `getActiveDraftPlayers` (`src/lib/activeDraftPlayers.ts`) calls `resolveAllPickHolders(prisma,
+draftId)`, then groups the resolved `(originTeamId, year, round) → holderTeamId` entries by
+   `(originTeamId, year)` before valuing them, because **a package must be valued as a package when
+   it's still intact, not as a sum of its rounds** — `PACKAGE_BASELINE.budget` (109) is not equal to
+   `ROUND_BASELINES[1] + [2] + [3]` (75+15+5=95, `futurePickAssets.ts:10-15`), so treating a whole,
+   untouched package as three independently-summed rounds would understate it by ~13% relative to
+   today's behavior even with zero trades — silently changing every existing draft's rebuild-signal
+   input the moment this ships.
+
+   For each `(origin, year)`, apply the "same-acquisition-event grouping" test from Ownership
+   Resolution above (defined once, reused here rather than redefined): if it qualifies as a group,
+   value the whole group at that origin/year's `PKG`-row baseline as one number. Otherwise (the group
+   has been split
+   by at least one individual trade or individual-mode win), value each round independently at its
+   own baseline and sum. Baseline source, either way: for `year === max(Player.futurePickYear)` (the
+   currently-generated year), read the actual persisted `Player.budget` off that origin/year's `PKG`
+   row (whole-group case) or `PICK` row (per-round case) — this already reflects whatever scaling or
+   `inferFuturePickBaselines` override this specific draft actually used, which a hardcoded constant
+   can't. For any other (off-book) year, reuse those same currently-generated-year values again
+   (an off-book future year is assumed priced like the most recent generated one); fall back to
+   `ROUND_BASELINES`/`PACKAGE_BASELINE` (now exported from `futurePickAssets.ts`) scaled via
+   `getBudgetScale` only in the degenerate case where the draft has no generated pick rows at all.
+
+   **Accepted consequence, stated explicitly so it isn't mistaken for a bug later:** the moment a
+   package is first split by a single-round trade, valuation switches from the group's 109-equivalent
+   baseline to the sum of whatever rounds remain plus whatever the acquirer now holds — e.g. round 1
+   traded away leaves the original holder's group at rounds 2+3 (15+5=20) and the acquirer's holding
+   at round 1's own value (75); 20+75=95, not 109. This is the same $14 gap the "no correct
+   decomposition" problem always implied; it surfaces once, at the moment of first split, and does
+   not compound on subsequent trades of the same picks.
+
+2. Team IDs need converting to the handles `dynamicPickValues.ts` keys everything on
+   (`bid.teamHandle`, `player.futurePickOriginHandle`). `getActiveDraftPlayers` already loads the
+   draft's teams to build the `bids` list, so this is a lookup against data already in memory, not a
+   new query.
+3. `applyDynamicPickValues` gains a required parameter `futureCapitalByHandle: ReadonlyMap<string,
 number>`, threaded through from its caller in `getActiveDraftPlayers`.
-3. Inside `computeOriginSignals`, delete the `roster.futureCapital += ...` line from the `bids` loop
+4. Inside `computeOriginSignals`, delete the `roster.futureCapital += ...` line from the `bids` loop
    (the `continue` that excludes `PKG`/`PICK` from `playerRoster`/`value`/`vor` stays — only the
    futureCapital accumulation is removed). After the loop, for each origin already present in
    `rosterByOrigin` (i.e., an origin that has bought at least one real player — the pre-existing
@@ -298,14 +357,14 @@ number>`, threaded through from its caller in `getActiveDraftPlayers`.
    so no new origins need to be added here), set `signals.futureCapital =
 futureCapitalByHandle.get(origin) ?? 0`.
 
-This is behavior-preserving when no trades exist: pre-trade, `resolveAllPickHolders` only resolves
-picks that appear in `bids` (step 2 of resolution, since nothing's been traded), which is exactly the
-same set the old accumulation covered — so `futureCapital` computes identically to today for any
-draft with zero trades. Once trades exist, it's simply correct in both directions: a divesting team's
-snapshot no longer includes what it gave away (resolution now points elsewhere for that round), and
-an acquiring team's snapshot includes what it received, whether by trade or by auction, with no
-double-count possible because it's a fresh sum over current holders each time, not an accumulation of
-history.
+This is now genuinely behavior-preserving when no trades exist, including for the package case: a
+team that wins an intact package still resolves as one whole-group event and is valued at the same
+109-equivalent baseline the old accumulation used, not the mismatched 95-equivalent round sum. Once
+trades exist, it's correct in both directions: a divesting team's snapshot no longer includes what it
+gave away (resolution now points elsewhere for that round, breaking the group and re-valuing what's
+left per-round), and an acquiring team's snapshot includes what it received, whether by trade or by
+auction, with no double-count possible because it's a fresh sum over current holders each time, not
+an accumulation of history.
 
 `REBUILD_SIGNAL_WEIGHT` and the rest of the formula are unchanged. The magnitude of the resulting
 price shift (small, per the existing 0.08-weight/`weakRoster`-gated formula) should be re-verified
@@ -331,8 +390,11 @@ trades don't change roster counts, so `rosterCount` is just each team's current 
   `bidMutation.ts`).
 - `PICK_NOT_HELD` — a selected `(originTeamId, year, round)` does not currently resolve to
   `pickTeamId` via `resolvePickHolder`. Hard block.
-- `PICK_ALREADY_RETRADED` — returned when editing or deleting a trade whose `TradePickAsset` was
-  named by a _later_ non-deleted trade. The user must remove the dependent trade first.
+- `PICK_ALREADY_RETRADED` — returned when deleting a trade whose `TradePickAsset` was named by a
+  _later_ non-deleted trade. The user must remove the dependent trade first. Edit can't trigger this:
+  it never touches which picks or teams are involved (see Edit / Delete / Restore), only `restore`
+  needs to re-check it, since restoring re-establishes a pick assertion that may since have been
+  superseded.
 - `PICK_HAS_ACTIVE_TRADES` — see Bid Mutation Impact; returned from `bidMutation.ts`, not
   `tradeMutation.ts`.
 - `TEAM_NOT_FOUND` — reused from the existing bid mutation codes for an invalid `budgetTeamId`/
@@ -395,16 +457,21 @@ below re-validates whichever side(s) can lose money as a result, against the sam
   new `netBudgetDelta` field.
 - Unit: `computeOriginSignals` extension — a trade-acquired pick contributes to `futureCapital`
   exactly once; a trade-divested pick is removed from the divesting team's `futureCapital` and not
-  double-counted anywhere; zero-trade behavior is bit-for-bit identical to the current
-  implementation.
+  double-counted anywhere; a team that wins an intact package with zero trades values identically to
+  today's implementation (the 109-equivalent baseline, not the 95-equivalent round sum); a package
+  split by one traded round values at the documented post-split sum, not the pre-split baseline.
 - Integration (real Postgres): `assertBidLegalInTransaction` respects a positive and a negative trade
-  delta for the same team.
-- Integration: the value-sheet page's `ownerBudget`/`ownerBudgetDelta` wiring reflects a logged trade
-  for the owner's team.
+  delta for the same team, including inside the Sleeper catch-up batch path.
+- Integration: `getTradeBudgetDeltaByTeamId`'s `excludeTradeId` option matches a hand-computed sum
+  excluding that trade, for both the create-time and edit-time call shapes.
+- Integration: the value-sheet page's `ownerBudget`/`ownerBudgetDelta` wiring, and the header's
+  Budget metric, reflect a logged trade for the owner's team.
 - Integration: trade mutation legality — `TRADE_EXCEEDS_BUDGET` (create, edit, and restore paths),
   `PICK_NOT_HELD`, `PICK_ALREADY_RETRADED` (delete and restore), `INVALID_INPUT` for duplicate picks
   in one submission.
-- Integration: `PICK_HAS_ACTIVE_TRADES` blocking a bid delete/reassign that a live trade depends on.
+- Integration: `PICK_HAS_ACTIVE_TRADES` blocking a bid delete/reassign only when a dependent trade was
+  created _after_ the win; a trade created _before_ an unrelated win of the same origin/year does not
+  block that win from being edited or deleted.
 - Integration: full trade create → edit (amount) → delete → restore lifecycle, asserting
   `TradeAuditEvent` rows match the bid-audit shape, and that restore re-validates both
   `PICK_NOT_HELD` and `TRADE_EXCEEDS_BUDGET` against current (not delete-time) state.

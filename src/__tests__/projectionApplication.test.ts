@@ -1,7 +1,4 @@
-import {
-  applyProjectionValuesToDraft,
-  prepareProjectionCandidates,
-} from '@/lib/projectionApplication';
+import { applyProjectionValuesToDraft } from '@/lib/projectionApplication';
 import { ProjectionApplicationFailure } from '@/lib/projectionValueSet';
 
 jest.mock('@/lib/draftLock', () => ({ lockDraftForMutation: jest.fn() }));
@@ -120,48 +117,55 @@ afterEach(() => {
   jest.restoreAllMocks();
 });
 
-it('prepares finite candidate rows from stored projection stats using draft scoring', () => {
-  const candidates = prepareProjectionCandidates({
-    draft: {
-      ...draft,
-      scoringSettings: { ...draft.scoringSettings, passTD: 6 },
+it('stages candidate rows from stored projection stats using draft scoring', async () => {
+  mockDraftFindUnique.mockImplementation(async (args) =>
+    args.select.activeProjectionValueSetId
+      ? { activeProjectionValueSetId: 10 }
+      : {
+          ...draft,
+          scoringSettings: { ...draft.scoringSettings, passTD: 6 },
+        },
+  );
+  mockPlayerFindMany.mockResolvedValue([
+    { id: 1, name: 'Scored QB', pos: 'QB', sleeperId: '10', budget: 255 },
+  ]);
+  mockPlayerProjectionFindMany.mockResolvedValue([
+    {
+      sleeperId: '10',
+      position: 'QB',
+      games: 17,
+      passAtt: 500,
+      passCmp: 300,
+      passYds: 4000,
+      passTd: 20,
+      passInt: 0,
+      passSacks: 30,
+      rushAtt: 0,
+      rushYds: 0,
+      rushTd: 0,
+      targets: 0,
+      receptions: 0,
+      recYds: 0,
+      recTd: 0,
+      baseFantasyPoints: 0,
+      projectionRank: 1,
+      isRookie: false,
     },
-    projectionSourceId: 7,
-    players: [{ id: 1, name: 'Scored QB', pos: 'QB', sleeperId: '10', budget: 255 }],
-    projections: [
-      {
-        sleeperId: '10',
-        position: 'QB',
-        games: 17,
-        passAtt: 500,
-        passCmp: 300,
-        passYds: 4000,
-        passTd: 20,
-        passInt: 0,
-        passSacks: 30,
-        rushAtt: 0,
-        rushYds: 0,
-        rushTd: 0,
-        targets: 0,
-        receptions: 0,
-        recYds: 0,
-        recTd: 0,
-        baseFantasyPoints: 0,
-        projectionRank: 1,
-        isRookie: false,
-      },
+  ]);
+
+  await applyProjectionValuesToDraft(prisma, { draftId: 5 });
+
+  expect(mockDraftPlayerValueCreateMany).toHaveBeenCalledWith({
+    data: [
+      expect.objectContaining({
+        draftId: 5,
+        playerId: 1,
+        projectionSourceId: 7,
+        projectedPoints: 280,
+        fallbackAuctionValue: 255,
+      }),
     ],
   });
-
-  expect(candidates).toEqual([
-    expect.objectContaining({
-      draftId: 5,
-      playerId: 1,
-      projectionSourceId: 7,
-      projectedPoints: 280,
-      fallbackAuctionValue: 255,
-    }),
-  ]);
 });
 
 it('stages and activates the latest stored projection source', async () => {

@@ -197,10 +197,20 @@ it('orders resolved ID and value-row writes in batches before activation and pru
     return resolvedPlayers;
   });
   let playerUpdateCalls = 0;
+  let releaseFirstPlayerUpdateBatch: () => void = () => {};
+  const firstPlayerUpdateBatchSettled = new Promise<void>((resolve) => {
+    releaseFirstPlayerUpdateBatch = resolve;
+  });
+  let signalFirstPlayerUpdateBatchStarted: () => void = () => {};
+  const firstPlayerUpdateBatchStarted = new Promise<void>((resolve) => {
+    signalFirstPlayerUpdateBatchStarted = resolve;
+  });
   mockPlayerUpdate.mockImplementation(async () => {
     playerUpdateCalls += 1;
     if (playerUpdateCalls === 1) events.push('player.update:batch-1');
+    if (playerUpdateCalls === 50) signalFirstPlayerUpdateBatchStarted();
     if (playerUpdateCalls === 51) events.push('player.update:batch-2');
+    if (playerUpdateCalls <= 50) await firstPlayerUpdateBatchSettled;
     return {};
   });
   mockPlayerProjectionFindMany.mockImplementation(async () => {
@@ -226,7 +236,16 @@ it('orders resolved ID and value-row writes in batches before activation and pru
     return [];
   });
 
-  await applyProjectionValuesToDraft(prisma, { draftId: 5, etrMatches, mode: 'staged' });
+  const application = applyProjectionValuesToDraft(prisma, {
+    draftId: 5,
+    etrMatches,
+    mode: 'staged',
+  });
+  await firstPlayerUpdateBatchStarted;
+
+  expect(mockPlayerUpdate).toHaveBeenCalledTimes(50);
+  releaseFirstPlayerUpdateBatch();
+  await application;
 
   expect(events).toEqual([
     'draft.findUnique',
@@ -248,6 +267,8 @@ it('orders resolved ID and value-row writes in batches before activation and pru
   expect(firstPlayerUpdateBatch).toHaveLength(50);
   expect(secondPlayerUpdateBatch).toHaveLength(1);
   expect(mockDraftPlayerValueCreateMany).toHaveBeenCalledTimes(2);
+  expect(mockDraftPlayerValueCreateMany.mock.calls[0][0].data).toHaveLength(50);
+  expect(mockDraftPlayerValueCreateMany.mock.calls[1][0].data).toHaveLength(1);
 });
 
 it('creates a distinct immutable set when reapplying the same source', async () => {
@@ -295,9 +316,14 @@ it('activates inside a caller-owned transaction without opening a nested transac
 it('persists staged rows before rejecting a client without transaction support', async () => {
   const prismaWithoutTransaction = { ...prisma, $transaction: undefined };
 
-  await expect(
-    applyProjectionValuesToDraft(prismaWithoutTransaction, { draftId: 5 }),
-  ).rejects.toMatchObject({
+  let activationError: unknown;
+  try {
+    await applyProjectionValuesToDraft(prismaWithoutTransaction, { draftId: 5 });
+  } catch (error) {
+    activationError = error;
+  }
+
+  expect(activationError).toMatchObject({
     code: 'PERSISTENCE_FAILURE',
     message: expect.stringContaining('transaction-capable'),
   });
@@ -308,6 +334,8 @@ it('persists staged rows before rejecting a client without transaction support',
     expect.stringContaining('Failed to clean'),
     expect.any(Error),
   );
+  const cleanupError = mockConsoleError.mock.calls[0][1];
+  expect(cleanupError).not.toBe(activationError);
 });
 
 it('throws a typed failure when no projection source exists', async () => {
@@ -356,6 +384,7 @@ it('wraps value-set creation failures without attempting cleanup', async () => {
     message: expect.stringContaining('Failed to create a projection value set'),
   });
   expect(mockDraftPlayerValueDeleteMany).not.toHaveBeenCalled();
+  expect(mockValueSetUpdateMany).not.toHaveBeenCalled();
   expect(mockTransaction).not.toHaveBeenCalled();
 });
 
@@ -401,16 +430,118 @@ it('returns activation results when pruning retained rows fails', async () => {
 });
 
 it('writes stored-stat scores and market-shaped values through the public application workflow', async () => {
+  mockDraftFindUnique.mockImplementation(async (args) =>
+    args.select.activeProjectionValueSetId
+      ? { activeProjectionValueSetId: 10 }
+      : {
+          ...draft,
+          scoringSettings: { ...draft.scoringSettings, passTD: 6 },
+        },
+  );
+  mockPlayerFindMany.mockResolvedValue([
+    { id: 1, name: 'Elite QB', pos: 'QB', sleeperId: '10', budget: 300 },
+    { id: 2, name: 'Touchdown QB', pos: 'QB', sleeperId: '20', budget: 200 },
+    { id: 3, name: 'Yardage QB', pos: 'QB', sleeperId: '30', budget: 100 },
+    { id: 4, name: 'Depth Touchdown QB', pos: 'QB', sleeperId: '40', budget: 50 },
+  ]);
+  mockPlayerProjectionFindMany.mockResolvedValue([
+    {
+      sleeperId: '10',
+      position: 'QB',
+      games: 17,
+      passAtt: 520,
+      passCmp: 330,
+      passYds: 4500,
+      passTd: 30,
+      passInt: 0,
+      passSacks: 35,
+      rushAtt: 0,
+      rushYds: 0,
+      rushTd: 0,
+      targets: 0,
+      receptions: 0,
+      recYds: 0,
+      recTd: 0,
+      baseFantasyPoints: 0,
+      projectionRank: 1,
+      isRookie: false,
+    },
+    {
+      sleeperId: '20',
+      position: 'QB',
+      games: 17,
+      passAtt: 520,
+      passCmp: 330,
+      passYds: 4000,
+      passTd: 40,
+      passInt: 0,
+      passSacks: 35,
+      rushAtt: 0,
+      rushYds: 0,
+      rushTd: 0,
+      targets: 0,
+      receptions: 0,
+      recYds: 0,
+      recTd: 0,
+      baseFantasyPoints: 0,
+      projectionRank: 2,
+      isRookie: false,
+    },
+    {
+      sleeperId: '30',
+      position: 'QB',
+      games: 17,
+      passAtt: 520,
+      passCmp: 330,
+      passYds: 4000,
+      passTd: 10,
+      passInt: 0,
+      passSacks: 35,
+      rushAtt: 0,
+      rushYds: 0,
+      rushTd: 0,
+      targets: 0,
+      receptions: 0,
+      recYds: 0,
+      recTd: 0,
+      baseFantasyPoints: 0,
+      projectionRank: 3,
+      isRookie: false,
+    },
+    {
+      sleeperId: '40',
+      position: 'QB',
+      games: 17,
+      passAtt: 520,
+      passCmp: 330,
+      passYds: 0,
+      passTd: 40,
+      passInt: 0,
+      passSacks: 35,
+      rushAtt: 0,
+      rushYds: 0,
+      rushTd: 0,
+      targets: 0,
+      receptions: 0,
+      recYds: 0,
+      recTd: 0,
+      baseFantasyPoints: 0,
+      projectionRank: 4,
+      isRookie: false,
+    },
+  ]);
+
   await applyProjectionValuesToDraft(prisma, { draftId: 5 });
 
   expect(mockDraftPlayerValueCreateMany).toHaveBeenCalledWith({
-    data: [
+    data: expect.arrayContaining([
       expect.objectContaining({
-        projectedPoints: 367,
-        fallbackAuctionValue: 255,
-        activeAuctionValue: 255,
+        playerId: 3,
+        projectedPoints: 220,
+        fallbackAuctionValue: 100,
+        activeAuctionValue: 90,
         valueSource: 'projection_adjusted_market',
       }),
-    ],
+    ]),
   });
 });

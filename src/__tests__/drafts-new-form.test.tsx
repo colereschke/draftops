@@ -32,12 +32,16 @@ jest.mock('@/lib/rankings-actions', () => ({
 }));
 
 beforeEach(() => {
+  mockImportFromSleeper.mockReset();
+  mockGetRankingSummary.mockReset();
+  (createDraft as jest.Mock).mockReset();
+  mockPush.mockReset();
+  mockCaptureClientError.mockReset();
+  mockCreateIncidentId.mockReset();
+
   mockGetRankingSummary.mockResolvedValue(null);
-  (createDraft as jest.Mock).mockClear();
   (createDraft as jest.Mock).mockResolvedValue({ ok: true, data: { draftId: 1 } });
-  mockPush.mockClear();
-  mockCaptureClientError.mockClear();
-  mockCreateIncidentId.mockClear();
+  mockCreateIncidentId.mockReturnValue('client-incident-123');
 });
 
 const MOCK_IMPORT_RESULT: SleeperImportResult = {
@@ -64,6 +68,40 @@ const MOCK_IMPORT_RESULT: SleeperImportResult = {
     sleeperRosterId: i + 1,
   })),
   ownerIndex: 0,
+  warnings: [],
+};
+
+const EIGHT_TEAM_IMPORT_RESULT: SleeperImportResult = {
+  leagueId: '987654321098765432',
+  leagueName: 'Eight-Team Contract League',
+  teamCount: 8,
+  rosterSize: 28,
+  startingLineup: ['WR', 'QB', 'SUPER_FLEX', 'RB', 'TE', 'FLEX', 'WR', 'FLEX'],
+  scoringSettings: {
+    passYdsPerPoint: 20,
+    passTD: 6,
+    passInt: -2,
+    rushAtt: 0.1,
+    rushFD: 0.75,
+    pprRB: 0.5,
+    pprWR: 1.25,
+    pprTE: 1.75,
+    recFD: 0.5,
+    rbFDBonus: 0.25,
+    wrFDBonus: 0.4,
+    teFDBonus: 0.8,
+  },
+  teams: [
+    { handle: 'alpha', displayName: 'Alpha', sleeperRosterId: 101 },
+    { handle: 'bravo', displayName: 'Bravo', sleeperRosterId: 102 },
+    { handle: 'charlie', displayName: 'Charlie', sleeperRosterId: 103 },
+    { handle: 'delta', displayName: 'Delta', sleeperRosterId: 104 },
+    { handle: 'echo', displayName: 'Echo', sleeperRosterId: 105 },
+    { handle: 'foxtrot', displayName: 'Foxtrot', sleeperRosterId: 106 },
+    { handle: 'golf', displayName: 'Golf', sleeperRosterId: 107 },
+    { handle: 'hotel', displayName: 'Hotel', sleeperRosterId: 108 },
+  ],
+  ownerIndex: 3,
   warnings: [],
 };
 
@@ -208,11 +246,7 @@ describe('NewDraftPage — roster settings and lineup', () => {
     render(<NewDraftPage />);
     const input = screen.getByTestId<HTMLInputElement>('team-count-input');
     fireEvent.change(input, { target: { value: '14' } });
-    // Team handle inputs render as plain text inputs inside the roster table;
-    // there are 14 team rows once team count is 14, plus the fixed-count
-    // Yds/point etc. number inputs elsewhere — assert via the roster-size
-    // default-value pattern already used above instead of counting all inputs.
-    expect(screen.getAllByDisplayValue(/^team-\d+$/)).toHaveLength(14);
+    expect(screen.getAllByTestId(/^team-handle-\d+$/)).toHaveLength(14);
   });
 });
 
@@ -415,6 +449,56 @@ describe('NewDraftPage — Sleeper import banner', () => {
     });
   });
 
+  it('preserves imported values and submits the exact eight-team payload', async () => {
+    mockImportFromSleeper.mockResolvedValueOnce({ ok: true, data: EIGHT_TEAM_IMPORT_RESULT });
+    render(<NewDraftPage />);
+    fireEvent.change(screen.getByTestId('sleeper-league-id'), {
+      target: { value: EIGHT_TEAM_IMPORT_RESULT.leagueId },
+    });
+    fireEvent.click(screen.getByTestId('sleeper-import-button'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId<HTMLInputElement>('team-count-input').value).toBe('8');
+      expect(screen.getAllByTestId(/^team-handle-\d+$/)).toHaveLength(8);
+      expect(screen.getByTestId('team-mine-3')).toBeChecked();
+      expect(
+        screen.getAllByTestId<HTMLSelectElement>(/^lineup-slot-/).map((slot) => slot.value),
+      ).toEqual(EIGHT_TEAM_IMPORT_RESULT.startingLineup);
+      expect(screen.getByTestId<HTMLInputElement>('scoring-passYdsPerPoint').value).toBe('20');
+      expect(screen.getByTestId<HTMLInputElement>('scoring-passTD').value).toBe('6');
+      expect(screen.getByTestId<HTMLInputElement>('scoring-passInt').value).toBe('-2');
+      expect(screen.getByTestId<HTMLInputElement>('scoring-rushAtt').value).toBe('0.1');
+      expect(screen.getByTestId<HTMLInputElement>('scoring-rushFD').value).toBe('0.75');
+      expect(screen.getByTestId<HTMLInputElement>('scoring-pprRB').value).toBe('0.5');
+      expect(screen.getByTestId<HTMLInputElement>('scoring-pprWR').value).toBe('1.25');
+      expect(screen.getByTestId<HTMLInputElement>('scoring-pprTE').value).toBe('1.75');
+      expect(screen.getByTestId<HTMLInputElement>('scoring-recFD').value).toBe('0.5');
+      expect(screen.getByTestId<HTMLInputElement>('scoring-rbFDBonus').value).toBe('0.25');
+      expect(screen.getByTestId<HTMLInputElement>('scoring-wrFDBonus').value).toBe('0.4');
+      expect(screen.getByTestId<HTMLInputElement>('scoring-teFDBonus').value).toBe('0.8');
+    });
+
+    fireEvent.submit(screen.getByTestId('new-draft-form'));
+
+    await waitFor(() =>
+      expect(createDraft).toHaveBeenCalledWith({
+        name: 'Eight-Team Contract League',
+        budgetPerTeam: 1000,
+        rosterSize: 28,
+        futurePickAuctionMode: 'packages',
+        targetRoster: { QB: 4, RB: 9, WR: 11, TE: 3 },
+        startingLineup: EIGHT_TEAM_IMPORT_RESULT.startingLineup,
+        scoringSettings: EIGHT_TEAM_IMPORT_RESULT.scoringSettings,
+        teams: EIGHT_TEAM_IMPORT_RESULT.teams.map((team, index) => ({
+          ...team,
+          isMine: index === 3,
+        })),
+        playerSource: 'etr',
+        sleeperLeagueId: EIGHT_TEAM_IMPORT_RESULT.leagueId,
+      }),
+    );
+  });
+
   it('populates the draft name from the imported league name', async () => {
     render(<NewDraftPage />);
     fireEvent.change(screen.getByTestId('sleeper-league-id'), {
@@ -604,8 +688,7 @@ describe('NewDraftPage — createDraft result handling', () => {
   it('blocks submit client-side when team handles collide case-insensitively', () => {
     render(<NewDraftPage />);
     fireEvent.change(screen.getByTestId('draft-name-input'), { target: { value: 'Test Draft' } });
-    const teamHandleInputs = screen.getAllByDisplayValue(/^team-\d+$/);
-    fireEvent.change(teamHandleInputs[1], { target: { value: 'TEAM-1' } });
+    fireEvent.change(screen.getByTestId('team-handle-1'), { target: { value: 'TEAM-1' } });
     fireEvent.submit(screen.getByTestId('new-draft-form'));
     expect(screen.getByTestId('draft-form-error')).toHaveTextContent(/handles must be unique/i);
     expect(createDraft).not.toHaveBeenCalled();

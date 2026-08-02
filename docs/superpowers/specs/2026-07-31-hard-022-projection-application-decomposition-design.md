@@ -19,8 +19,9 @@ interface.
   Sleeper IDs, load projections, calculate rows, create a staging value set, write rows, activate,
   then best-effort prune.
 - Preserve all `ProjectionApplicationFailure` codes/messages and failure wrapping. A failed staged
-  write must leave the previously active value set untouched, mark the new set failed, and remove
-  its partial rows.
+  write leaves the previously active value set untouched and attempts atomic failed-set cleanup.
+  Only successful cleanup guarantees a `FAILED` value set with its partial rows removed; cleanup
+  transaction failure is logged and preserves the original application failure.
 - Preserve intentionally non-fatal pruning: log its failure after successful activation and return
   the successful result.
 - Retain existing application and integration characterization tests. Add tests only where a new
@@ -45,9 +46,10 @@ It must not create a value set, write rows, activate a set, or perform cleanup.
 
 `projectionPersistence.ts` owns durable mutation steps:
 
-- batched resolved-Sleeper-ID updates;
+- resolved-Sleeper-ID updates in sequential batches of 50, with concurrent `player.update` calls
+  inside each batch;
 - staging value-set creation;
-- batched draft-player-value writes;
+- draft-player-value writes in sequential `createMany` batches of 50;
 - activation using the caller-owned transaction or a staged root-client transaction;
 - failed-set cleanup under the staged transaction contract;
 - best-effort pruning after a successful staged activation.
@@ -56,8 +58,8 @@ It must not score projections, calculate VOR/market values, or decide candidate 
 
 `projectionApplication.ts` becomes a thin orchestrator. It loads the draft and data needed for
 preparation, sequences preparation and persistence in their current order, and maintains the
-existing public exports used by scripts and tests. Compatibility re-exports are acceptable during
-the structural move where they prevent unrelated call-site churn.
+complete existing named-export surface through direct exports or re-exports. It must preserve
+every current helper/type import path during this structural change, not only the public entry point.
 
 ## Preserved transaction and failure behavior
 
@@ -71,6 +73,18 @@ directly through it. In staged mode, activation and any failed-set cleanup use t
 transaction-capable root client with the existing 60-second timeout. Staged cleanup failures remain
 logged without hiding the original application failure.
 
+Do not preflight staged transaction capability. Preserve its current activation-time check after
+staging and writes, followed by the current cleanup-time check inside the failure path. This keeps
+the existing durable side effects, logging, and original-error preservation for a client lacking
+`$transaction`.
+
+Preserve three distinct persistence error scopes and their current wrappers: resolved-Sleeper-ID
+updates retain their direct update errors; value-set creation alone wraps its failure as
+`PERSISTENCE_FAILURE` with the existing `Failed to create a projection value set...` message and
+does not attempt cleanup; row writes and activation share the existing failure scope, pass through
+an existing `ProjectionApplicationFailure`, otherwise wrap as `PERSISTENCE_FAILURE` with the
+existing `Failed to persist projection values...` message, then attempt staged cleanup.
+
 Successful staged activation attempts pruning after activation. Pruning errors are logged and do
 not change the returned activation result. Same-source reapplication still creates a distinct
 immutable value set before activation.
@@ -78,12 +92,22 @@ immutable value set before activation.
 ## Testing and verification
 
 Keep the existing focused unit suites for application orchestration and pure joining/value-data
-behavior, plus the PostgreSQL activation integration coverage. Preserve the existing cases for
-latest-source selection, no-source/no-join failures, same-source immutability, caller-owned
-transaction mode, batch-write persistence failure cleanup, and active-set preservation.
+behavior, plus the PostgreSQL activation integration coverage. Before extraction, add only the
+application-level characterization needed to protect moved seams:
 
-Only add application-level characterization if moving a boundary would otherwise leave an invariant
-unproven. Do not add tests that merely render or call a newly extracted helper in isolation.
+- the exact sequential operation order from source/player reads through staged writes, activation,
+  and post-activation prune;
+- batch size 50 and the differing concurrent Sleeper-update versus sequential `createMany` batch
+  behavior;
+- the exact `{ timeout: 60_000 }` transaction option in staged activation and cleanup;
+- generic-versus-typed failure wrapping, original-error cause/message preservation, and separate
+  value-set-creation failure scope;
+- missing-transaction activation timing and its best-effort cleanup/logging behavior;
+- non-fatal prune failure logging after a successful activation;
+- transaction-mode failure behavior without root-client transaction or staged cleanup;
+- a complete candidate value row derived from stored projection stats, not only a pre-scored join.
+
+These remain application-orchestration tests, not direct tests of newly extracted helpers.
 
 Run the focused projection suites after each task, then `pnpm tsc --noEmit`, `pnpm lint`, and the
 full `make check` before final review. Run the full check outside the sandbox because the project

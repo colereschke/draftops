@@ -366,7 +366,7 @@ Source: ETR dynasty rankings CSV (~267 players), normalized ×5 to a $1,000 sour
 
 **Read before touching.** Before making any change in the repo, read the repo's `AGENTS.md`. It contains the stack, layout, conventions, and repo-specific constraints that take precedence over general intuition.
 
-**Don't commit trivial superpowers docs.** Design specs and implementation plans generated during a superpowers workflow should only be committed when the work is non-trivial enough that future-you would want to understand why a design decision was made. For simple, self-evident work, clean up generated spec/plan files at the end of the workflow — don't commit them.
+**Extract decisions, then clean up superpowers docs.** Specs and plans in `docs/superpowers/` are working documents, not permanent records. When a feature or hardening item is merged, in the same pass as any other wrap-up: for non-trivial work (where future-you would otherwise have to reconstruct _why_ a decision was made), add an entry to `docs/DECISIONS.md` — decision, why, alternatives considered — then delete the source spec/plan file(s). For simple, self-evident work, just delete the spec/plan files; no entry needed. Anything ever committed stays recoverable via git history, so deleting after extraction is safe.
 
 **Keep PRs clean.** Don't let extraneous files (scratch notes, generated docs, debug artifacts, unrelated changes) into PRs. This can be overridden if explicitly requested, but the default is a clean diff that contains only what the PR describes.
 

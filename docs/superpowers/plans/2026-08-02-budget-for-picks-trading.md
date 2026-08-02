@@ -233,12 +233,14 @@ describe('new trade mutation codes', () => {
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [ ] **Step 2: Run typecheck to verify it fails**
 
-Run: `pnpm test draftMutation`
-Expected: FAIL — TypeScript error, the four literals aren't assignable to `DraftMutationCode`.
+Jest here runs through `next/jest` (SWC), which strips types without checking them — `pnpm test` would report this test as passing even before the union is updated, since `new DraftMutationFailure('TRADE_NOT_FOUND')` is valid JS regardless of what TypeScript thinks the type is. Use the typecheck as the red signal instead:
 
-- [ ] **Step 3: Add the four codes**
+Run: `pnpm tsc --noEmit`
+Expected: FAIL — the six literals aren't assignable to `DraftMutationCode`.
+
+- [ ] **Step 3: Add the six codes**
 
 In `src/lib/draftMutation.ts`, change:
 
@@ -290,10 +292,10 @@ export type DraftMutationCode =
 
 (`TRADE_NOT_FOUND`/`TRADE_NOT_DELETED` are added alongside the spec's four codes — Tasks 13-15 need them for edit/delete/restore-on-missing-or-not-deleted-trade, matching `BID_NOT_FOUND`/`BID_NOT_DELETED`'s role for bids; the spec's Validation section implies these but doesn't spell them out as their own codes.)
 
-- [ ] **Step 4: Run test to verify it passes**
+- [ ] **Step 4: Run typecheck and the test to verify both pass**
 
-Run: `pnpm test draftMutation`
-Expected: PASS
+Run: `pnpm tsc --noEmit && pnpm test draftMutation`
+Expected: PASS on both.
 
 - [ ] **Step 5: Commit**
 
@@ -372,10 +374,18 @@ and add `netBudgetDelta,` to the returned object, alongside the existing `remain
 Run: `pnpm test computeDraftTeamStats`
 Expected: PASS
 
-- [ ] **Step 6: Run full typecheck**
+- [ ] **Step 6: Run full typecheck — this will fail, fix every hand-built fixture it finds**
+
+A required new field on `TeamStats` breaks every existing test that constructs a `TeamStats`/`TeamWithRoster`-shaped object literal directly instead of deriving it from `computeDraftTeamStats`. This is not a hypothetical "if it fails" — it will. Run:
+
+```bash
+grep -rl "pkgCount" src --include="*.test.ts" --include="*.test.tsx"
+```
+
+(`pkgCount` is another `TeamStats` field, so any hand-built fixture already sets it, making it a reliable way to locate them — this is a starting list, not a guaranteed-complete one; the typecheck run below is the actual source of truth.) As of this plan's writing that command returns at least: `nominationScoring.test.ts`, `OnboardingTargets.test.tsx`, `RosterTracker.test.tsx`, `DossierCard.test.tsx`, `TeamDetailPane.test.tsx`, `NominationHelper.ui.test.tsx`, `NominationHelper.onboarding.test.tsx`, `computeDraftTeamStats.test.ts` (already handled in Step 1), `ThreatBoard.test.tsx`, `components/BudgetPressureView.test.tsx`, `api/nomination-data.test.ts`, `helpers/criticalRouteFixtures.tsx`. Add `netBudgetDelta: 0` to every `TeamStats`/`TeamWithRoster` literal in each.
 
 Run: `pnpm tsc --noEmit`
-Expected: no new errors (any code constructing a `TeamStats`/`TeamWithRoster` object literal directly, rather than through `computeDraftTeamStats`, would now fail — grep for `TeamStats` / `TeamWithRoster` object literals under `src/` if this fails and add `netBudgetDelta: 0` to any found).
+Expected: FAIL initially, listing every file above (and any this list missed). Fix each, then re-run until it passes.
 
 - [ ] **Step 7: Commit**
 
@@ -547,6 +557,9 @@ export async function resolvePickHolder(
       },
     },
     select: { id: true, teamId: true },
+    orderBy: { createdAt: 'desc' }, // deterministic: if both a PKG and a matching PICK row somehow
+    // both have live wins for the same round (e.g. futurePickAuctionMode changed mid-draft), the
+    // most recent one wins, rather than leaving it to whatever order Postgres happens to return
   });
   if (win) {
     return { holderTeamId: win.teamId, eventKind: 'auction', eventId: win.id };
@@ -619,7 +632,33 @@ git commit -m "Add resolvePickHolder and getGeneratedPickYear"
   export function groupResolvedPicks(picks: ResolvedPick[]): PickGroup[];
   ```
 
-- [ ] **Step 1: Write the failing tests**
+- [ ] **Step 1: Extend the shared mock harness, then write the failing tests**
+
+Task 5 declared `jest.mock('@/lib/db', ...)` with only the `findFirst`/`aggregate` methods `resolvePickHolder`/`getGeneratedPickYear` need. `resolveAllPickHolders` also needs `tradePickAsset.findMany`, `auctionResult.findMany`, and `team.findMany`. Update the **same** mock declaration already in the file (don't add a second `jest.mock('@/lib/db', ...)` call — Jest only honors one per module) to:
+
+```ts
+const mockTeamFindFirstOrThrow = jest.fn();
+const mockTradePickAssetFindFirst = jest.fn();
+const mockAuctionResultFindFirst = jest.fn();
+const mockPlayerAggregate = jest.fn();
+const mockTradePickAssetFindMany = jest.fn();
+const mockAuctionResultFindMany = jest.fn();
+const mockTeamFindMany = jest.fn();
+
+jest.mock('@/lib/db', () => ({
+  getPrisma: () => ({
+    team: { findFirstOrThrow: mockTeamFindFirstOrThrow, findMany: mockTeamFindMany },
+    tradePickAsset: {
+      findFirst: mockTradePickAssetFindFirst,
+      findMany: mockTradePickAssetFindMany,
+    },
+    auctionResult: { findFirst: mockAuctionResultFindFirst, findMany: mockAuctionResultFindMany },
+    player: { aggregate: mockPlayerAggregate },
+  }),
+}));
+```
+
+Add `beforeEach(() => jest.clearAllMocks());` if Task 5 didn't already add one at file scope (it should have — verify before duplicating).
 
 ```ts
 describe('resolveAllPickHolders', () => {
@@ -786,6 +825,9 @@ export async function resolveAllPickHolders(
           },
         },
       },
+      orderBy: { createdAt: 'asc' }, // ascending, so the later `auctionByKey.set` for a duplicate
+      // key (see below) deterministically keeps the most recent win, matching resolvePickHolder's
+      // single-row equivalent
     }),
     client.team.findMany({ where: { draftId }, select: { id: true, handle: true } }),
   ]);
@@ -1294,7 +1336,9 @@ git commit -m "Account for trade budget delta in bid legality"
 
 - [ ] **Step 1: Write the failing tests**
 
-Add to `src/__tests__/bidMutation.test.ts`. This requires two more mocks: `mockAuctionFindFirst` already exists (reused); add `mockTradePickAssetFindMany = jest.fn()` and wire `tradePickAsset: { findMany: mockTradePickAssetFindMany }` into `mockTx`, defaulting to `[]` in `beforeEach`.
+Add to `src/__tests__/bidMutation.test.ts`. The implementation (Step 3) makes exactly one query, `tx.tradePickAsset.findFirst`, not `findMany` — add `const mockTradePickAssetFindFirst = jest.fn();` alongside the file's other mock declarations, wire `tradePickAsset: { findFirst: mockTradePickAssetFindFirst }` into `mockTx`, and default it to `null` in `beforeEach` (alongside the existing default mock resolutions) so every pre-existing, non-trade-related test in the file is unaffected.
+
+The guard also calls `tx.player.findFirst` (existing mock `mockPlayerFindFirst`) and `tx.team.findFirst` (existing mock `mockTeamFindFirst`). The file's default `mockPlayerFindFirst` resolves to the `PLAYER` fixture (Josh Allen, QB — no `futurePickOriginHandle`/`futurePickYear`), which would make the guard return early before ever reaching the trade check. Every test below must override it to a pick-shaped player row.
 
 ```ts
 describe('PICK_HAS_ACTIVE_TRADES guard', () => {
@@ -1314,12 +1358,24 @@ describe('PICK_HAS_ACTIVE_TRADES guard', () => {
     deletedAt: null,
     supersededAt: null,
   };
+  const PKG_PLAYER_ROW = {
+    futurePickOriginHandle: 'team-b',
+    futurePickYear: 2027,
+    futurePickRound: null,
+  };
+  const DELETED_SNAPSHOT = { ...PKG_BID, deletedAt: new Date('2026-07-19T12:20:00.000Z') };
+
+  beforeEach(() => {
+    mockAuctionFindFirst.mockResolvedValue(PKG_BID);
+    mockPlayerFindFirst.mockResolvedValue(PKG_PLAYER_ROW);
+    mockQueryRaw.mockResolvedValue([{ now: new Date('2026-07-19T12:20:00.000Z') }]);
+    mockAuctionUpdate.mockResolvedValue(DELETED_SNAPSHOT);
+  });
 
   it('blocks deleting a PKG win when a later trade names one of its rounds', async () => {
-    mockAuctionFindFirst.mockResolvedValue(PKG_BID);
-    mockTradePickAssetFindMany.mockResolvedValue([
-      { futurePickRound: 1, trade: { createdAt: new Date('2026-07-15T00:00:00.000Z') } },
-    ]);
+    // A real query filtering on trade.createdAt > bid.createdAt would find this row;
+    // the mock returns it directly to simulate that outcome.
+    mockTradePickAssetFindFirst.mockResolvedValue({ id: 900 });
 
     const result = await deleteBidRecord({ userId: 'owner-1', draftId: 4, bidId: 55 });
 
@@ -1327,11 +1383,9 @@ describe('PICK_HAS_ACTIVE_TRADES guard', () => {
   });
 
   it('allows deleting a PKG win when the only matching trade predates it', async () => {
-    mockAuctionFindFirst.mockResolvedValue(PKG_BID);
-    mockTradePickAssetFindMany.mockResolvedValue([
-      { futurePickRound: 1, trade: { createdAt: new Date('2026-06-01T00:00:00.000Z') } },
-    ]);
-    mockQueryRaw.mockResolvedValue([{ now: new Date('2026-07-19T12:20:00.000Z') }]);
+    // A real query filtering on trade.createdAt > bid.createdAt would find nothing here,
+    // since the only trade referencing this pick is older than the bid itself.
+    mockTradePickAssetFindFirst.mockResolvedValue(null);
 
     const result = await deleteBidRecord({ userId: 'owner-1', draftId: 4, bidId: 55 });
 
@@ -1339,8 +1393,7 @@ describe('PICK_HAS_ACTIVE_TRADES guard', () => {
   });
 
   it('allows deleting a PKG win when no trade references any of its rounds', async () => {
-    mockAuctionFindFirst.mockResolvedValue(PKG_BID);
-    mockTradePickAssetFindMany.mockResolvedValue([]);
+    mockTradePickAssetFindFirst.mockResolvedValue(null);
 
     const result = await deleteBidRecord({ userId: 'owner-1', draftId: 4, bidId: 55 });
 
@@ -1417,9 +1470,47 @@ if (existingBid.teamId !== input.teamId) {
 - [ ] **Step 4: Run tests to verify they pass**
 
 Run: `pnpm test bidMutation`
-Expected: PASS, including all pre-existing tests (default `mockTradePickAssetFindMany` resolving to `[]` keeps every non-trade-related test unaffected).
+Expected: PASS, including all pre-existing tests (default `mockTradePickAssetFindFirst` resolving to `null` keeps every non-trade-related test unaffected — none of them set a `futurePickOriginHandle`-bearing player, so the guard already returns early for them regardless).
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 5: Add the missing reassign test the spec's testing strategy calls out**
+
+Add one more test to the same `describe` block — the spec explicitly requires coverage of `updateBidRecord`'s reassign path, not just `deleteBidRecord`'s:
+
+```ts
+it('blocks reassigning a PKG win to a different team when a later trade depends on it', async () => {
+  mockTradePickAssetFindFirst.mockResolvedValue({ id: 900 });
+
+  const result = await updateBidRecord({
+    userId: 'owner-1',
+    draftId: 4,
+    bidId: 55,
+    teamId: 11, // different from PKG_BID.teamId (7)
+    price: PKG_BID.price,
+  });
+
+  expect(result).toEqual({ ok: false, code: 'PICK_HAS_ACTIVE_TRADES' });
+});
+
+it('does not run the guard when updateBidRecord keeps the same teamId', async () => {
+  mockTradePickAssetFindFirst.mockResolvedValue({ id: 900 }); // would block if checked
+  mockAuctionUpdate.mockResolvedValue({ ...PKG_BID, price: 120 });
+
+  const result = await updateBidRecord({
+    userId: 'owner-1',
+    draftId: 4,
+    bidId: 55,
+    teamId: PKG_BID.teamId, // unchanged — a price correction, not a reassignment
+    price: 120,
+  });
+
+  expect(result.ok).toBe(true);
+});
+```
+
+Run: `pnpm test bidMutation`
+Expected: PASS
+
+- [ ] **Step 6: Commit**
 
 ```bash
 git add src/lib/bidMutation.ts src/__tests__/bidMutation.test.ts
@@ -1648,7 +1739,17 @@ git commit -m "Add trade audit event helpers"
   ): Promise<DraftMutationResult<{ tradeId: number }>>;
   ```
 
-  Also produces (module-private, used by Tasks 13-15 too): `assertTeamCanAbsorbBudgetChange`.
+  Also produces (`export`ed, not module-private — Tasks 13-15 import it directly): `assertTeamCanAbsorbBudgetChange`.
+
+  **This task's mock harness is shared by Tasks 13, 14, and 15 too** — all four append `describe` blocks to the same `src/__tests__/tradeMutation.test.ts` file, so every mock any of the four mutation functions needs must be declared here, in Task 12, even the ones only Tasks 13-15 use. Getting `mockTransaction`'s shape wrong here is the single most consequential mistake in this task: `withActiveOwnedDraftMutation` (`src/lib/draftMutation.ts`) already builds `{ ok: true, data }` _inside_ the callback it hands to `$transaction`, and returns whatever `$transaction` resolves to, unmodified. The real harness in `src/__tests__/bidMutation.test.ts:107-109` mocks this as a bare pass-through:
+
+  ```ts
+  mockTransaction.mockImplementation((operation: (tx: typeof mockTx) => Promise<unknown>) =>
+    operation(mockTx),
+  );
+  ```
+
+  Do not wrap the result again (e.g. `return { ok: true, data: await fn(mockTx) }`) — that produces `{ ok: true, data: { ok: true, data: {...} } }`, which fails every success-path assertion in this task and Tasks 13-15.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -1656,23 +1757,32 @@ git commit -m "Add trade audit event helpers"
 import { createTradeRecord } from '@/lib/tradeMutation';
 
 const mockTransaction = jest.fn();
+const mockExecuteRaw = jest.fn();
+const mockQueryRaw = jest.fn();
 const mockDraftFindFirst = jest.fn();
 const mockTeamFindFirst = jest.fn();
 const mockTeamFindFirstOrThrow = jest.fn();
 const mockAuctionFindMany = jest.fn();
 const mockAuctionFindFirst = jest.fn();
 const mockTradeFindMany = jest.fn();
+const mockTradeFindFirst = jest.fn(); // used by Tasks 13-15, declared here since the harness is shared
 const mockTradePickAssetFindFirst = jest.fn();
 const mockTradeCreate = jest.fn();
+const mockTradeUpdate = jest.fn(); // used by Tasks 13-15
 const mockTradeAuditCreate = jest.fn();
-const mockExecuteRaw = jest.fn();
 
 const mockTx = {
   $executeRaw: mockExecuteRaw,
+  $queryRaw: mockQueryRaw,
   draft: { findFirst: mockDraftFindFirst },
   team: { findFirst: mockTeamFindFirst, findFirstOrThrow: mockTeamFindFirstOrThrow },
   auctionResult: { findMany: mockAuctionFindMany, findFirst: mockAuctionFindFirst },
-  trade: { findMany: mockTradeFindMany, create: mockTradeCreate },
+  trade: {
+    findMany: mockTradeFindMany,
+    findFirst: mockTradeFindFirst,
+    create: mockTradeCreate,
+    update: mockTradeUpdate,
+  },
   tradePickAsset: { findFirst: mockTradePickAssetFindFirst },
   tradeAuditEvent: { create: mockTradeAuditCreate },
 };
@@ -1700,13 +1810,10 @@ const BASE_INPUT = {
 
 beforeEach(() => {
   jest.clearAllMocks();
-  mockTransaction.mockImplementation(async (fn: (tx: unknown) => unknown) => {
-    try {
-      return { ok: true, data: await fn(mockTx) };
-    } catch (error) {
-      throw error;
-    }
-  });
+  mockTransaction.mockImplementation((operation: (tx: typeof mockTx) => Promise<unknown>) =>
+    operation(mockTx),
+  );
+  mockQueryRaw.mockResolvedValue([{ now: new Date('2026-08-02T00:00:00.000Z') }]);
   mockDraftFindFirst.mockResolvedValue(ACTIVE_DRAFT);
   mockTeamFindFirst.mockImplementation(({ where }: { where: { id: number } }) =>
     Promise.resolve({ id: where.id, budget: 1000 }),
@@ -1715,6 +1822,7 @@ beforeEach(() => {
   mockAuctionFindMany.mockResolvedValue([]);
   mockAuctionFindFirst.mockResolvedValue(null);
   mockTradeFindMany.mockResolvedValue([]);
+  mockTradeFindFirst.mockResolvedValue(null); // Tasks 13-15 override per test
   mockTradePickAssetFindFirst.mockResolvedValue(null); // no trade yet -> resolves to origin default
   mockTradeCreate.mockResolvedValue({
     id: 501,
@@ -1728,6 +1836,7 @@ beforeEach(() => {
     deletedAt: null,
     pickAssets: [{ id: 1, originTeamId: 9, futurePickYear: 2028, futurePickRound: 1 }],
   });
+  mockTradeUpdate.mockResolvedValue(undefined); // Tasks 13-15 override per test
 });
 
 describe('createTradeRecord', () => {
@@ -1894,6 +2003,13 @@ export async function createTradeRecord(
   if (input.budgetTeamId === input.pickTeamId) return { ok: false, code: 'TEAM_NOT_FOUND' };
 
   return withActiveOwnedDraftMutation(input.userId, input.draftId, async (tx, draft) => {
+    // Note on why there's no separate "year must be after the generated year for off-book entries"
+    // check here: `resolvePickHolder` resolves ANY (origin, year, round) correctly regardless of
+    // whether the year happens to match the currently-generated pool or not — it isn't a distinct
+    // code path, just a different outcome at step 2 vs step 3. `hasValidCreateInput` already rejects
+    // non-positive/non-integer years. The client-side "after the generated year" constraint (Task 21)
+    // exists to keep the picker's two categories visually unambiguous, not because the mutation would
+    // behave incorrectly without it — so no additional server check is needed, and none is added here.
     await assertPicksCurrentlyHeldBy(tx, draft.id, input.pickTeamId, input.picks);
     await assertTeamCanAbsorbBudgetChange(tx, draft, input.budgetTeamId, -input.budgetAmount);
 
@@ -1972,7 +2088,7 @@ git commit -m "Add createTradeRecord"
 
 - [ ] **Step 1: Write the failing tests**
 
-Add to `src/__tests__/tradeMutation.test.ts`. Add `mockTradeFindFirst = jest.fn()` and `mockTradeUpdate = jest.fn()` to the shared mocks, wired into `mockTx.trade`.
+Add to `src/__tests__/tradeMutation.test.ts`, inside the same `describe`/`beforeEach` structure Task 12 set up (`mockTradeFindFirst`/`mockTradeUpdate` are already declared and wired there — do not redeclare them).
 
 ```ts
 const EXISTING_TRADE = {
@@ -2143,7 +2259,7 @@ git commit -m "Add updateTradeRecord"
 
 - [ ] **Step 1: Write the failing tests**
 
-Add to `src/__tests__/tradeMutation.test.ts`. Add `mockTradePickAssetFindFirstForRetrade = jest.fn()` — actually reuse `mockTradePickAssetFindFirst` already declared for Task 12's `resolvePickHolder` calls, but delete uses a _different_ query shape (checking for a later trade on this trade's own picks, not resolving a holder). Add a second mock: `mockTradePickAssetFindMany = jest.fn()` wired into `mockTx.tradePickAsset` alongside the existing `findFirst`, plus `mockTradeFindUnique = jest.fn()` if the implementation needs the trade's own pick list (see Step 3 — implementation reads `existing.pickAssets` via `include`, so `mockTradeFindFirst`'s resolved value needs a `pickAssets` array).
+Add to `src/__tests__/tradeMutation.test.ts`. The implementation (Step 3) calls `tx.tradePickAsset.findFirst` once per pick — the same mock (`mockTradePickAssetFindFirst`) Task 12 already declared and wired for `resolvePickHolder`'s calls, reused here for a different query shape. No new mocks need declaring for this task; `mockTradeFindFirst`'s resolved value just needs a `pickAssets` array this time, since the implementation reads `existing.pickAssets` via `include`.
 
 ```ts
 const EXISTING_TRADE_WITH_PICKS = {
@@ -2154,9 +2270,11 @@ const EXISTING_TRADE_WITH_PICKS = {
 describe('deleteTradeRecord', () => {
   beforeEach(() => {
     mockTradeFindFirst.mockResolvedValue(EXISTING_TRADE_WITH_PICKS);
-    mockTradePickAssetFindMany.mockResolvedValue([]); // no later trade re-trades this pick
-    mockExecuteRaw.mockResolvedValue(1);
-    mockQueryRaw.mockResolvedValue([{ now: new Date('2026-08-02T00:00:00.000Z') }]);
+    mockTradePickAssetFindFirst.mockResolvedValue(null); // no later trade re-trades this pick
+    mockTradeUpdate.mockResolvedValue({
+      ...EXISTING_TRADE,
+      deletedAt: new Date('2026-08-02T00:00:00.000Z'),
+    });
   });
 
   it('soft-deletes when pickTeam remains legal and nothing re-traded the picks', async () => {
@@ -2168,9 +2286,7 @@ describe('deleteTradeRecord', () => {
   });
 
   it('rejects with PICK_ALREADY_RETRADED when a later trade names one of its picks', async () => {
-    mockTradePickAssetFindMany.mockResolvedValue([
-      { originTeamId: 9, futurePickYear: 2028, futurePickRound: 1 },
-    ]);
+    mockTradePickAssetFindFirst.mockResolvedValue({ id: 900 }); // a later trade references this pick
     const result = await deleteTradeRecord({ userId: 'owner-1', draftId: 4, tradeId: 501 });
     expect(result).toEqual({ ok: false, code: 'PICK_ALREADY_RETRADED' });
   });
@@ -2449,7 +2565,7 @@ git commit -m "Add restoreTradeRecord"
 **Files:**
 
 - Modify: `src/lib/actions.ts`
-- Test: `src/__tests__/actions.test.ts` (existing pattern for `logBid` etc. — if no such file exists, create `src/__tests__/tradeActions.test.ts` following the same mock-`auth`/mock-mutation-module structure)
+- Test: `src/__tests__/actions.test.ts` — this file already exists (it has the `logBid`/`updateBid`/`deleteBid`/`restoreBid` tests). Add the trade action tests to it; do not create a separate `tradeActions.test.ts`.
 
 **Interfaces:**
 
@@ -2486,32 +2602,25 @@ git commit -m "Add restoreTradeRecord"
 
 - [ ] **Step 1: Write the failing tests**
 
-Create `src/__tests__/tradeActions.test.ts`:
+Open `src/__tests__/actions.test.ts` first and read its existing `jest.mock(...)` calls in full — it already mocks `@/auth`, `next/cache`, `@/lib/db`, and `@/lib/bidMutation` for the existing `logBid`/`updateBid`/`deleteBid`/`restoreBid` tests (importing `@/lib/actions` pulls in all of those transitively, including `@/lib/db`, even though this feature's own actions never call `getPrisma()` directly — match the file's existing mock set exactly rather than reconstructing a partial one). Add a `jest.mock('@/lib/tradeMutation', ...)` block alongside the existing ones, and add the trade-specific mocks and tests to the same file, reusing its existing `mockAuth`/`mockRevalidatePath` declarations rather than redeclaring them:
 
 ```ts
-import { deleteTrade, logTrade, restoreTrade, updateTrade } from '@/lib/actions';
-
-const mockAuth = jest.fn();
 const mockCreateTradeRecord = jest.fn();
 const mockUpdateTradeRecord = jest.fn();
 const mockDeleteTradeRecord = jest.fn();
 const mockRestoreTradeRecord = jest.fn();
-const mockRevalidatePath = jest.fn();
 
-jest.mock('@/auth', () => ({ auth: () => mockAuth() }));
-jest.mock('next/cache', () => ({ revalidatePath: (path: string) => mockRevalidatePath(path) }));
 jest.mock('@/lib/tradeMutation', () => ({
   createTradeRecord: (...args: unknown[]) => mockCreateTradeRecord(...args),
   updateTradeRecord: (...args: unknown[]) => mockUpdateTradeRecord(...args),
   deleteTradeRecord: (...args: unknown[]) => mockDeleteTradeRecord(...args),
   restoreTradeRecord: (...args: unknown[]) => mockRestoreTradeRecord(...args),
 }));
+```
 
-beforeEach(() => {
-  jest.clearAllMocks();
-  mockAuth.mockResolvedValue({ user: { id: 'owner-1' } });
-});
+The rest of this task assumes the file's existing `beforeEach` already resolves its `mockAuth` to an authenticated session and clears mocks — add `mockCreateTradeRecord`/etc. to that same reset if the existing one uses `jest.clearAllMocks()` (it should).
 
+```ts
 describe('logTrade', () => {
   it('creates a trade and revalidates the teams page', async () => {
     mockCreateTradeRecord.mockResolvedValue({ ok: true, data: { tradeId: 501 } });
@@ -2554,7 +2663,7 @@ describe('deleteTrade', () => {
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `pnpm test tradeActions`
+Run: `pnpm test actions`
 Expected: FAIL — `logTrade`/`updateTrade`/`deleteTrade`/`restoreTrade` not exported from `@/lib/actions`.
 
 - [ ] **Step 3: Add the four server actions**
@@ -2649,15 +2758,15 @@ export async function restoreTrade(data: {
 }
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [ ] **Step 4: Run tests to verify they pass, including every pre-existing test in the file**
 
-Run: `pnpm test tradeActions`
-Expected: PASS
+Run: `pnpm test actions`
+Expected: PASS — both the new trade-action tests and the pre-existing `logBid`/`updateBid`/`deleteBid`/`restoreBid` tests in the same file.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/lib/actions.ts src/__tests__/tradeActions.test.ts
+git add src/lib/actions.ts src/__tests__/actions.test.ts
 git commit -m "Add trade server actions"
 ```
 
@@ -2669,7 +2778,7 @@ git commit -m "Add trade server actions"
 
 - Modify: `src/lib/sleeper-roster-actions.ts` (around line 411, inside the batch loop calling `createBidInTransaction`)
 - Modify: `src/lib/bidMutation.ts` (`assertBidLegalInTransaction` needs an optional pre-fetched delta to avoid re-querying per row)
-- Test: `src/__tests__/bidMutation.test.ts`, `src/__tests__/sleeperRosterActions.test.ts` (existing — extend)
+- Test: `src/__tests__/bidMutation.test.ts` (new assertion added below); `src/__tests__/sleeper-roster-actions.test.ts` re-run unmodified as a regression check (see Step 5) — this task doesn't add new cases to it
 
 **Interfaces:**
 
@@ -2797,8 +2906,8 @@ await createBidInTransaction(
 
 - [ ] **Step 5: Run tests to verify they pass**
 
-Run: `pnpm test bidMutation sleeperRosterActions`
-Expected: PASS, including all pre-existing tests (the parameter is optional, so every call site not yet updated keeps behaving exactly as Task 9 left it).
+Run: `pnpm test bidMutation sleeper-roster-actions`
+Expected: PASS, including all pre-existing tests (the parameter is optional, so every call site not yet updated keeps behaving exactly as Task 9 left it). This task doesn't add new assertions to `sleeper-roster-actions.test.ts` itself — the change there is a pure threading of an already-tested value (`getTradeBudgetDeltaByTeamId`, covered in Task 7) through an existing call, so re-running its current suite unmodified is the correct verification.
 
 - [ ] **Step 6: Run full typecheck**
 
@@ -3197,11 +3306,23 @@ function getOrCreateRoster(
 }
 ```
 
-- [ ] **Step 8: Update every existing call site in the test file**
+- [ ] **Step 8: Update every existing call site in the test file — one of them is not mechanical**
 
-Every existing `applyDynamicPickValues(...)` call in `src/__tests__/dynamicPickValues.test.ts` needs a `futureCapitalByHandle` field added to its input object — for tests that predate trading and don't care about this signal, pass `new Map()` (zero capital for every origin, matching the old code's behavior when no `PKG`/`PICK` wins exist in `bids` for that origin). Grep the file for `applyDynamicPickValues({` and add `futureCapitalByHandle: new Map(),` to each, except the two new tests from Step 5, which pass real maps.
+There are 7 existing `applyDynamicPickValues({` calls in `src/__tests__/dynamicPickValues.test.ts` (lines 53, 86, 127, 176, 215, 280, 328 as of this plan's writing — re-locate by grep, since Step 5 already added two more above them). 6 of the 7 predate trading and don't care about this signal — add `futureCapitalByHandle: new Map(),` to each (zero capital for every origin, matching the old code's behavior when no `PKG`/`PICK` wins exist in `bids` for that origin).
 
-- [ ] **Step 9: Wire `activeDraftPlayers.ts`**
+**The 7th, `'treats future capital as a rebuild amplifier only when the roster is weak'` (~line 141), is not one of the 6.** Read it first: it constructs a `bids` array containing `{ player: 'extra pick', teamHandle: 'weak', price: ... }` where `'extra pick'` is a `PICK`-position player with `budget: 75`, specifically so the _old_ accumulation path (`roster.futureCapital += player.baseBudget ?? player.budget`) gives team `'weak'` exactly 75 of capital, and asserts `weak`'s adjusted value is `other-weak`'s plus 1 as a result. Passing `new Map()` here zeroes that out and the assertion fails. Fix it by passing the equivalent value directly instead of relying on accumulation:
+
+```ts
+futureCapitalByHandle: new Map([['weak', 75]]),
+```
+
+Leave the rest of that test (its `bids`/`players` fixtures, its assertions) unchanged — only the new required field changes, and only for this one call site.
+
+**One more thing this test surfaces, worth a real decision, not a fixture patch:** the `'extra pick'` fixture row has no `futurePickOriginHandle`/`futurePickYear`/`futurePickAssetKind` — it's a legacy static row (`isStaticFuturePickRow` in `futurePickAssets.ts`). The spec's non-goals already exclude _trading_ such rows, but says nothing about the valuation signal. Under the new snapshot model, `resolveAllPickHolders` structurally cannot see legacy rows (they're filtered by `futurePickAssetKind: { in: ['package', 'pick'] }`, which legacy rows never set), so any real draft still carrying them would silently lose their contribution to `futureCapital` — not a regression in this test (which passes the map by hand), but a real behavior change for any live draft with pre-generator pick rows. Extend the spec's existing legacy-row non-goal to state this explicitly: legacy static `PKG`/`PICK` rows are excluded from the dynamic-valuation `futureCapital` signal under this feature, matching their existing exclusion from trading — this is a scope decision, not a bug, but it needs to be a stated one. Add a line to `docs/superpowers/specs/2026-07-28-budget-for-picks-trading-design.md`'s Non-goals section noting this before implementing this task.
+
+- [ ] **Step 9: Wire `activeDraftPlayers.ts`, keeping the added queries parallelized**
+
+`getActiveDraftPlayers` is on the hottest read path in the app (value sheet, `/teams`, `/budget`, `/nominate`, and the 30-second-polling `nomination-data` route all call it). This task adds four queries; fold them into the existing `Promise.all` batches rather than awaiting them serially — `getGeneratedPickYear` and `resolveAllPickHolders` depend on nothing the first batch produces, so they join it directly, and the two second-stage lookups (`draftValues`, `baselines`) depend on different pieces of the first batch's output and don't depend on each other, so they run in their own parallel batch:
 
 ```ts
 import { getPrisma } from '@/lib/db';
@@ -3232,36 +3353,41 @@ export async function getActiveDraftPlayers({
   futurePickAuctionMode,
   bids,
 }: GetActiveDraftPlayersInput): Promise<Player[]> {
-  const [players, draft, teams] = await Promise.all([
+  const [players, draft, teams, generatedPickYear, resolvedPicks] = await Promise.all([
     getPrisma().player.findMany({ where: { draftId }, orderBy: { sfRank: 'asc' } }),
     getPrisma().draft.findUnique({
       where: { id: draftId },
       select: { activeProjectionValueSetId: true, playerValueSourceBudget: true },
     }),
     getPrisma().team.findMany({ where: { draftId }, select: { id: true, handle: true } }),
+    getGeneratedPickYear(getPrisma(), draftId),
+    resolveAllPickHolders(getPrisma(), draftId),
   ]);
-  const draftValues = draft?.activeProjectionValueSetId
-    ? await getPrisma().draftPlayerValue.findMany({
-        where: { draftId, valueSetId: draft.activeProjectionValueSetId },
-        select: {
-          playerId: true,
-          projectedPoints: true,
-          replacementPoints: true,
-          vor: true,
-          projectionAuctionValue: true,
-          fallbackAuctionValue: true,
-          activeAuctionValue: true,
-          valueSource: true,
-        },
-      })
-    : [];
 
-  const generatedPickYear = await getGeneratedPickYear(getPrisma(), draftId);
-  const resolvedPicks = await resolveAllPickHolders(getPrisma(), draftId);
-  const baselines =
+  const [draftValues, baselines] = await Promise.all([
+    draft?.activeProjectionValueSetId
+      ? getPrisma().draftPlayerValue.findMany({
+          where: { draftId, valueSetId: draft.activeProjectionValueSetId },
+          select: {
+            playerId: true,
+            projectedPoints: true,
+            replacementPoints: true,
+            vor: true,
+            projectionAuctionValue: true,
+            fallbackAuctionValue: true,
+            activeAuctionValue: true,
+            valueSource: true,
+          },
+        })
+      : Promise.resolve([]),
     generatedPickYear === null
-      ? { packageBaselineByOrigin: new Map(), roundBaselineByOriginRound: new Map() }
-      : await loadGeneratedYearBaselines(getPrisma(), draftId, generatedPickYear, teams);
+      ? Promise.resolve({
+          packageBaselineByOrigin: new Map(),
+          roundBaselineByOriginRound: new Map(),
+        })
+      : loadGeneratedYearBaselines(getPrisma(), draftId, generatedPickYear, teams),
+  ]);
+
   const futureCapitalByHandle = computeFutureCapitalByHandle({
     resolvedPicks,
     teamHandleById: new Map(teams.map((team) => [team.id, team.handle])),
@@ -3283,20 +3409,85 @@ export async function getActiveDraftPlayers({
 }
 ```
 
-- [ ] **Step 10: Run tests to verify they pass**
+- [ ] **Step 10: Update the existing `activeDraftPlayers.test.ts` — it exists and every test in it breaks without this step**
 
-Run: `pnpm test dynamicPickValues pickCapital`
+`src/__tests__/activeDraftPlayers.test.ts` already exists (6 tests) and mocks `@/lib/db` with only `draft.findUnique`, `player.findMany`, `draftPlayerValue.findMany`. Step 9's rewrite calls three more methods this mock doesn't provide (`team.findMany`, `player.aggregate` via `getGeneratedPickYear`, `tradePickAsset.findMany`/`auctionResult.findMany` via `resolveAllPickHolders`), so all 6 existing tests would throw a "not a function" error without this update.
+
+Change the file's `jest.mock('@/lib/db', ...)` factory from:
+
+```ts
+const mockPlayerFindMany = jest.fn();
+const mockDraftPlayerValueFindMany = jest.fn();
+const mockDraftFindUnique = jest.fn();
+
+jest.mock('@/lib/db', () => ({
+  getPrisma: () => ({
+    draft: { findUnique: (...args: unknown[]) => mockDraftFindUnique(...args) },
+    player: { findMany: (...args: unknown[]) => mockPlayerFindMany(...args) },
+    draftPlayerValue: {
+      findMany: (...args: unknown[]) => mockDraftPlayerValueFindMany(...args),
+    },
+  }),
+}));
+```
+
+to:
+
+```ts
+const mockPlayerFindMany = jest.fn();
+const mockPlayerAggregate = jest.fn();
+const mockDraftPlayerValueFindMany = jest.fn();
+const mockDraftFindUnique = jest.fn();
+const mockTeamFindMany = jest.fn();
+const mockTradePickAssetFindMany = jest.fn();
+const mockAuctionResultFindMany = jest.fn();
+
+jest.mock('@/lib/db', () => ({
+  getPrisma: () => ({
+    draft: { findUnique: (...args: unknown[]) => mockDraftFindUnique(...args) },
+    player: {
+      findMany: (...args: unknown[]) => mockPlayerFindMany(...args),
+      aggregate: (...args: unknown[]) => mockPlayerAggregate(...args),
+    },
+    draftPlayerValue: {
+      findMany: (...args: unknown[]) => mockDraftPlayerValueFindMany(...args),
+    },
+    team: { findMany: (...args: unknown[]) => mockTeamFindMany(...args) },
+    tradePickAsset: { findMany: (...args: unknown[]) => mockTradePickAssetFindMany(...args) },
+    auctionResult: { findMany: (...args: unknown[]) => mockAuctionResultFindMany(...args) },
+  }),
+}));
+```
+
+And add defaults to the existing `beforeEach`:
+
+```ts
+beforeEach(() => {
+  jest.clearAllMocks();
+  mockDraftFindUnique.mockResolvedValue({ activeProjectionValueSetId: 11 });
+  mockTeamFindMany.mockResolvedValue([]);
+  mockPlayerAggregate.mockResolvedValue({ _max: { futurePickYear: null } });
+  mockTradePickAssetFindMany.mockResolvedValue([]);
+  mockAuctionResultFindMany.mockResolvedValue([]);
+});
+```
+
+With these defaults, `resolveAllPickHolders`/`resolveAllPickHolders`-derived `futureCapitalByHandle` computes to an empty map for every existing test (no trades, no auction-won pick rows queried this way — note this is independent of the `bids` parameter each test already passes directly), which is the same zero-capital state those tests' assertions were already written against. **None of the file's 6 existing test bodies or assertions need to change** — only the mock factory and `beforeEach` defaults above.
+
+- [ ] **Step 11: Run tests to verify they pass**
+
+Run: `pnpm test dynamicPickValues pickCapital activeDraftPlayers`
 Expected: PASS
 
-- [ ] **Step 11: Run full typecheck and lint**
+- [ ] **Step 12: Run full typecheck and lint**
 
 Run: `pnpm tsc --noEmit && pnpm lint`
-Expected: no new errors. `activeDraftPlayers.ts` has no existing unit test file (it's exercised via integration/page tests) — if `pnpm tsc --noEmit` reveals other callers of `applyDynamicPickValues` outside the test file, update them the same way as Step 8.
+Expected: no new errors. If `pnpm tsc --noEmit` reveals other callers of `applyDynamicPickValues` outside the two test files touched in this task, update them the same way as Step 8.
 
-- [ ] **Step 12: Commit**
+- [ ] **Step 13: Commit**
 
 ```bash
-git add src/lib/pickCapital.ts src/lib/dynamicPickValues.ts src/lib/activeDraftPlayers.ts src/__tests__/pickCapital.test.ts src/__tests__/dynamicPickValues.test.ts
+git add src/lib/pickCapital.ts src/lib/dynamicPickValues.ts src/lib/activeDraftPlayers.ts src/__tests__/pickCapital.test.ts src/__tests__/dynamicPickValues.test.ts src/__tests__/activeDraftPlayers.test.ts docs/superpowers/specs/2026-07-28-budget-for-picks-trading-design.md
 git commit -m "Replace incremental futureCapital accumulation with a current-holdings snapshot"
 ```
 
@@ -3447,10 +3638,21 @@ to:
 
 Run `make dev`, open a draft's value sheet as its owner, log a trade for the owner's team via `/teams` (once Task 21 ships — until then, create one directly with `pnpm prisma studio` for verification purposes), and confirm the header's Budget metric and the remaining-budget figure both reflect it. Kill the dev server when done (`Kill background dev servers when done` — global rule).
 
-- [ ] **Step 7: Run typecheck and existing component tests**
+- [ ] **Step 7: Update every existing test that constructs these props directly**
 
-Run: `pnpm tsc --noEmit && pnpm test AuctionSheet AuctionHeader`
-Expected: no new errors; every existing test rendering `<AuctionSheet>`/`<AuctionHeader>` directly (not through the page) now needs `ownerBudgetDelta={0}` added to its props — grep `src/components/AuctionSheet/**/*.test.tsx` for `<AuctionSheet` / `<AuctionHeader` render calls and add the prop to each so they keep passing.
+Component tests live in `src/__tests__/`, not co-located under `src/components/AuctionSheet/`. Adding a **required** `ownerBudgetDelta` prop breaks every existing render or fixture that supplies `ownerBudget` without it. As of this plan's writing, that's six files — re-verify by grepping for `ownerBudget` (both `ownerBudget=` JSX props and `ownerBudget:` object-literal fixtures, since at least one of them builds props as a plain object rather than JSX) before assuming this list is exhaustive:
+
+- `src/__tests__/AuctionSheet.claimed.test.tsx`
+- `src/__tests__/AuctionSheet.urlSync.test.tsx`
+- `src/__tests__/AuctionSheet.onboarding.test.tsx`
+- `src/__tests__/OnboardingTargets.test.tsx`
+- `src/__tests__/AuctionHeader.test.tsx` (11 separate `<AuctionHeader>` renders in this one file — add the prop to each)
+- `src/__tests__/helpers/criticalRouteFixtures.tsx` (a shared fixture object, `ownerBudget: 1000` at the time of writing — this one feeds `criticalRouteLandmarks.test.tsx` and `criticalRouteAccessibility.test.tsx` indirectly, so fixing it here fixes both without touching those two files directly)
+
+Add `ownerBudgetDelta: 0` (object-literal fixtures) or `ownerBudgetDelta={0}` (JSX renders) everywhere `ownerBudget` already appears in each of these files.
+
+Run: `pnpm tsc --noEmit && pnpm test AuctionSheet AuctionHeader OnboardingTargets criticalRouteLandmarks criticalRouteAccessibility`
+Expected: no new errors, all PASS.
 
 - [ ] **Step 8: Commit**
 
@@ -3610,24 +3812,34 @@ git commit -m "Add getTradeablePicksForTeam"
 
 ## Task 21: `TradeModal` — trade-entry UI
 
+**This task was substantially redesigned after review.** The first draft only supported picks from the currently-generated year (checkboxes sourced from Task 20's `getTradeablePicksForTeam`) and never implemented the off-book "add a pick" row the spec requires — which is the scenario the whole feature exists for (a 2028 pick, or any pick under `futurePickAuctionMode: NONE`). It also had a direction control that couldn't actually be changed (a `setBudgetTeamId` that nothing ever called) and two TypeScript compile errors. All four are fixed below.
+
 **Files:**
 
 - Create: `src/components/TradeModal/TradeModal.tsx`
 - Create: `src/components/TradeModal/index.ts`
 - Modify: `src/components/RosterTracker/DossierCard.tsx` (adds the "Log Trade" entry point)
 - Modify: `src/app/draft/[draftId]/teams/page.tsx` (loads picker data + team list, passes down)
+- Modify: `src/lib/tradePicker.ts` (exposes `getGeneratedPickYear` alongside the picks, so the modal knows where "off-book" starts)
 - Test: `src/components/TradeModal/__tests__/TradeModal.test.tsx`
 
 **Interfaces:**
 
-- Consumes: `logTrade` server action (Task 16), `getTradeablePicksForTeam`/`KnownPickOption` (Task 20), `LeagueTeam` (existing `@/types`).
+- Consumes: `logTrade` server action (Task 16), `getTradeablePicksForTeam`/`KnownPickOption` (Task 20), `getGeneratedPickYear` (Task 5), `LeagueTeam` (existing `@/types`).
 - Produces:
 
   ```ts
+  export interface ManualPickEntry {
+    originTeamId: number;
+    futurePickYear: number;
+    futurePickRound: 1 | 2 | 3;
+  }
+
   export interface TradeModalProps {
     draftId: number;
     teams: LeagueTeam[];
-    initialBudgetTeamId: number;
+    initialTeamId: number;
+    generatedPickYear: number | null;
     tradeablePicksByTeamId: Record<number, KnownPickOption[]>;
     isOpen: boolean;
     onClose: () => void;
@@ -3637,7 +3849,11 @@ git commit -m "Add getTradeablePicksForTeam"
 
   `DossierCardProps` gains `onLogTrade: (teamId: number) => void`.
 
-- [ ] **Step 1: Write the failing component test**
+- [ ] **Step 1: Add `getGeneratedPickYear` to the picker page-data call**
+
+In `src/lib/tradePicker.ts`, `getTradeablePicksForTeam` already calls `getGeneratedPickYear` internally but doesn't expose it — the caller (`teams/page.tsx`) needs it separately to pass into `TradeModal`. No change to `tradePicker.ts` itself is needed for this — `teams/page.tsx` (Step 7 below) calls `getGeneratedPickYear` directly, once, alongside its existing per-team `getTradeablePicksForTeam` calls.
+
+- [ ] **Step 2: Write the failing component tests**
 
 ```tsx
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
@@ -3655,13 +3871,13 @@ const TEAMS = [
 const PICKS_BY_TEAM = {
   7: [],
   9: [
-    { originTeamId: 9, originHandle: 'team-b', futurePickYear: 2028, futurePickRound: 1 as const },
+    { originTeamId: 9, originHandle: 'team-b', futurePickYear: 2027, futurePickRound: 1 as const },
   ],
 };
 
 beforeEach(() => jest.clearAllMocks());
 
-it('submits a trade with the selected counterparty, amount, and checked pick', async () => {
+it('submits a trade with a checked known pick, initiating team as budget-sender by default', async () => {
   mockLogTrade.mockResolvedValue({ ok: true, data: { tradeId: 501 } });
   const onClose = jest.fn();
 
@@ -3669,17 +3885,18 @@ it('submits a trade with the selected counterparty, amount, and checked pick', a
     <TradeModal
       draftId={4}
       teams={TEAMS}
-      initialBudgetTeamId={7}
+      initialTeamId={7}
+      generatedPickYear={2027}
       tradeablePicksByTeamId={PICKS_BY_TEAM}
       isOpen
       onClose={onClose}
     />,
   );
 
-  fireEvent.change(screen.getByLabelText(/counterparty/i), { target: { value: '9' } });
-  fireEvent.change(screen.getByLabelText(/budget amount/i), { target: { value: '80' } });
-  fireEvent.click(screen.getByLabelText(/team-b 2028 round 1/i));
-  fireEvent.click(screen.getByRole('button', { name: /log trade/i }));
+  fireEvent.change(screen.getByTestId('trade-counterparty-select'), { target: { value: '9' } });
+  fireEvent.change(screen.getByTestId('trade-budget-amount-input'), { target: { value: '80' } });
+  fireEvent.click(screen.getByTestId('trade-pick-checkbox-9:2027:1'));
+  fireEvent.click(screen.getByTestId('trade-submit-button'));
 
   await waitFor(() =>
     expect(mockLogTrade).toHaveBeenCalledWith({
@@ -3687,107 +3904,248 @@ it('submits a trade with the selected counterparty, amount, and checked pick', a
       pickTeamId: 9,
       budgetAmount: 80,
       notes: undefined,
-      picks: [{ originTeamId: 9, futurePickYear: 2028, futurePickRound: 1 }],
+      picks: [{ originTeamId: 9, futurePickYear: 2027, futurePickRound: 1 }],
       draftId: 4,
     }),
   );
   await waitFor(() => expect(onClose).toHaveBeenCalled());
 });
 
-it('disables submit until at least one pick is checked', () => {
+it('swaps direction so the initiating team sends picks instead of budget', async () => {
+  mockLogTrade.mockResolvedValue({ ok: true, data: { tradeId: 502 } });
+
   render(
     <TradeModal
       draftId={4}
       teams={TEAMS}
-      initialBudgetTeamId={7}
+      initialTeamId={9}
+      generatedPickYear={2027}
       tradeablePicksByTeamId={PICKS_BY_TEAM}
       isOpen
       onClose={jest.fn()}
     />,
   );
-  fireEvent.change(screen.getByLabelText(/counterparty/i), { target: { value: '9' } });
-  fireEvent.change(screen.getByLabelText(/budget amount/i), { target: { value: '80' } });
-  expect(screen.getByRole('button', { name: /log trade/i })).toBeDisabled();
+
+  fireEvent.click(screen.getByTestId('trade-role-picks-radio')); // initiating team (9) sends picks
+  fireEvent.change(screen.getByTestId('trade-counterparty-select'), { target: { value: '7' } });
+  fireEvent.change(screen.getByTestId('trade-budget-amount-input'), { target: { value: '50' } });
+  fireEvent.click(screen.getByTestId('trade-pick-checkbox-9:2027:1'));
+  fireEvent.click(screen.getByTestId('trade-submit-button'));
+
+  await waitFor(() =>
+    expect(mockLogTrade).toHaveBeenCalledWith(
+      expect.objectContaining({ budgetTeamId: 7, pickTeamId: 9 }),
+    ),
+  );
+});
+
+it('adds an off-book pick for a year beyond the generated one and submits it', async () => {
+  mockLogTrade.mockResolvedValue({ ok: true, data: { tradeId: 503 } });
+
+  render(
+    <TradeModal
+      draftId={4}
+      teams={TEAMS}
+      initialTeamId={7}
+      generatedPickYear={2027}
+      tradeablePicksByTeamId={{ 7: [], 9: [] }}
+      isOpen
+      onClose={jest.fn()}
+    />,
+  );
+
+  fireEvent.change(screen.getByTestId('trade-counterparty-select'), { target: { value: '9' } });
+  fireEvent.change(screen.getByTestId('trade-budget-amount-input'), { target: { value: '80' } });
+  fireEvent.change(screen.getByTestId('trade-manual-origin-select'), { target: { value: '9' } });
+  fireEvent.change(screen.getByTestId('trade-manual-year-input'), { target: { value: '2028' } });
+  fireEvent.change(screen.getByTestId('trade-manual-round-select'), { target: { value: '1' } });
+  fireEvent.click(screen.getByTestId('trade-manual-add-button'));
+  fireEvent.click(screen.getByTestId('trade-submit-button'));
+
+  await waitFor(() =>
+    expect(mockLogTrade).toHaveBeenCalledWith(
+      expect.objectContaining({
+        picks: [{ originTeamId: 9, futurePickYear: 2028, futurePickRound: 1 }],
+      }),
+    ),
+  );
+});
+
+it('rejects an off-book year that is not after the generated year', () => {
+  render(
+    <TradeModal
+      draftId={4}
+      teams={TEAMS}
+      initialTeamId={7}
+      generatedPickYear={2027}
+      tradeablePicksByTeamId={{ 7: [], 9: [] }}
+      isOpen
+      onClose={jest.fn()}
+    />,
+  );
+
+  fireEvent.change(screen.getByTestId('trade-counterparty-select'), { target: { value: '9' } });
+  fireEvent.change(screen.getByTestId('trade-manual-origin-select'), { target: { value: '9' } });
+  fireEvent.change(screen.getByTestId('trade-manual-year-input'), { target: { value: '2027' } }); // not after 2027
+  fireEvent.change(screen.getByTestId('trade-manual-round-select'), { target: { value: '1' } });
+
+  expect(screen.getByTestId('trade-manual-add-button')).toBeDisabled();
+});
+
+it('disables submit until at least one pick is selected', () => {
+  render(
+    <TradeModal
+      draftId={4}
+      teams={TEAMS}
+      initialTeamId={7}
+      generatedPickYear={2027}
+      tradeablePicksByTeamId={PICKS_BY_TEAM}
+      isOpen
+      onClose={jest.fn()}
+    />,
+  );
+  fireEvent.change(screen.getByTestId('trade-counterparty-select'), { target: { value: '9' } });
+  fireEvent.change(screen.getByTestId('trade-budget-amount-input'), { target: { value: '80' } });
+  expect(screen.getByTestId('trade-submit-button')).toBeDisabled();
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [ ] **Step 3: Run tests to verify they fail**
 
 Run: `pnpm test TradeModal`
 Expected: FAIL — `src/components/TradeModal/TradeModal.tsx` doesn't exist.
 
-- [ ] **Step 3: Implement `TradeModal.tsx`**
+- [ ] **Step 4: Implement `TradeModal.tsx`**
 
 ```tsx
 'use client';
 
-import { useMemo, useState, useTransition } from 'react';
+import { useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import { logTrade } from '@/lib/actions';
 import MutationStatus from '@/components/MutationStatus';
 import type { LeagueTeam } from '@/types';
 import type { KnownPickOption } from '@/lib/tradePicker';
 
+export interface ManualPickEntry {
+  originTeamId: number;
+  futurePickYear: number;
+  futurePickRound: 1 | 2 | 3;
+}
+
 export interface TradeModalProps {
   draftId: number;
   teams: LeagueTeam[];
-  initialBudgetTeamId: number;
+  initialTeamId: number;
+  generatedPickYear: number | null;
   tradeablePicksByTeamId: Record<number, KnownPickOption[]>;
   isOpen: boolean;
   onClose: () => void;
 }
 
-function pickKey(pick: KnownPickOption): string {
+type InitiatingRole = 'budget' | 'pick';
+
+function knownPickKey(pick: KnownPickOption): string {
+  return `${pick.originTeamId}:${pick.futurePickYear}:${pick.futurePickRound}`;
+}
+
+function manualPickKey(pick: ManualPickEntry): string {
   return `${pick.originTeamId}:${pick.futurePickYear}:${pick.futurePickRound}`;
 }
 
 export default function TradeModal({
   draftId,
   teams,
-  initialBudgetTeamId,
+  initialTeamId,
+  generatedPickYear,
   tradeablePicksByTeamId,
   isOpen,
   onClose,
 }: TradeModalProps) {
-  const [budgetTeamId, setBudgetTeamId] = useState(initialBudgetTeamId);
-  const [pickTeamId, setPickTeamId] = useState<number | null>(null);
+  const [initiatingRole, setInitiatingRole] = useState<InitiatingRole>('budget');
+  const [counterpartyTeamId, setCounterpartyTeamId] = useState<number | null>(null);
   const [budgetAmount, setBudgetAmount] = useState('');
-  const [checkedKeys, setCheckedKeys] = useState<Set<string>>(new Set());
+  const [checkedKnownKeys, setCheckedKnownKeys] = useState<Set<string>>(new Set());
+  const [manualPicks, setManualPicks] = useState<ManualPickEntry[]>([]);
+  const [manualOriginTeamId, setManualOriginTeamId] = useState<number | ''>('');
+  const [manualYear, setManualYear] = useState('');
+  const [manualRound, setManualRound] = useState<1 | 2 | 3>(1);
   const [statusMessage, setStatusMessage] = useState('');
+  const [errorMessage, setErrorMessage] = useState('');
   const [isPending, startTransition] = useTransition();
+  const dialogRef = useRef<HTMLDivElement>(null);
 
-  const pickOptions = pickTeamId !== null ? (tradeablePicksByTeamId[pickTeamId] ?? []) : [];
+  useEffect(() => {
+    if (isOpen) dialogRef.current?.focus();
+  }, [isOpen]);
+
+  function handleKeyDown(event: React.KeyboardEvent) {
+    if (event.key === 'Escape') onClose();
+  }
+
+  const budgetTeamId = initiatingRole === 'budget' ? initialTeamId : counterpartyTeamId;
+  const pickTeamId = initiatingRole === 'budget' ? counterpartyTeamId : initialTeamId;
+
+  const counterpartyOptions = useMemo(
+    () => teams.filter((team) => team.id !== initialTeamId),
+    [teams, initialTeamId],
+  );
+  const knownPickOptions = pickTeamId !== null ? (tradeablePicksByTeamId[pickTeamId] ?? []) : [];
+
   const parsedAmount = Number(budgetAmount);
   const isAmountValid = Number.isInteger(parsedAmount) && parsedAmount > 0;
+  const totalSelectedPicks = checkedKnownKeys.size + manualPicks.length;
   const canSubmit =
     !isPending &&
     pickTeamId !== null &&
+    budgetTeamId !== null &&
     budgetTeamId !== pickTeamId &&
     isAmountValid &&
-    checkedKeys.size > 0;
+    totalSelectedPicks > 0;
 
-  const counterpartyOptions = useMemo(
-    () => teams.filter((team) => team.id !== budgetTeamId),
-    [teams, budgetTeamId],
-  );
+  const parsedManualYear = Number(manualYear);
+  const canAddManualPick =
+    manualOriginTeamId !== '' &&
+    Number.isInteger(parsedManualYear) &&
+    (generatedPickYear === null || parsedManualYear > generatedPickYear) &&
+    parsedManualYear > 0;
 
   if (!isOpen) return null;
 
-  function toggleCheck(pick: KnownPickOption) {
-    setCheckedKeys((prev) => {
+  function toggleKnownPick(pick: KnownPickOption) {
+    setCheckedKnownKeys((prev) => {
       const next = new Set(prev);
-      const key = pickKey(pick);
+      const key = knownPickKey(pick);
       if (next.has(key)) next.delete(key);
       else next.add(key);
       return next;
     });
   }
 
+  function addManualPick() {
+    if (!canAddManualPick || manualOriginTeamId === '') return;
+    const entry: ManualPickEntry = {
+      originTeamId: manualOriginTeamId,
+      futurePickYear: parsedManualYear,
+      futurePickRound: manualRound,
+    };
+    setManualPicks((prev) =>
+      prev.some((existing) => manualPickKey(existing) === manualPickKey(entry))
+        ? prev
+        : [...prev, entry],
+    );
+    setManualYear('');
+  }
+
+  function removeManualPick(key: string) {
+    setManualPicks((prev) => prev.filter((pick) => manualPickKey(pick) !== key));
+  }
+
   function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
-    if (!canSubmit || pickTeamId === null) return;
+    if (!canSubmit || pickTeamId === null || budgetTeamId === null) return;
 
-    const picks = pickOptions
-      .filter((pick) => checkedKeys.has(pickKey(pick)))
+    const knownPicks = knownPickOptions
+      .filter((pick) => checkedKnownKeys.has(knownPickKey(pick)))
       .map((pick) => ({
         originTeamId: pick.originTeamId,
         futurePickYear: pick.futurePickYear,
@@ -3800,28 +4158,79 @@ export default function TradeModal({
         pickTeamId,
         budgetAmount: parsedAmount,
         notes: undefined,
-        picks,
+        picks: [...knownPicks, ...manualPicks],
         draftId,
       });
       if (result.ok) {
         setStatusMessage('Trade logged.');
+        setErrorMessage('');
         onClose();
       } else {
         setStatusMessage(`Could not log trade: ${result.code}`);
+        setErrorMessage(result.code);
       }
     });
   }
 
+  const initialTeamHandle = teams.find((team) => team.id === initialTeamId)?.handle ?? '';
+
   return (
-    <div role="dialog" aria-modal="true" aria-label="Log trade">
+    <div
+      ref={dialogRef}
+      role="dialog"
+      aria-modal="true"
+      aria-label="Log trade"
+      data-testid="trade-modal"
+      tabIndex={-1}
+      onKeyDown={handleKeyDown}
+    >
+      {errorMessage && (
+        <p data-testid="trade-modal-error" role="alert">
+          Could not log trade: {errorMessage}
+        </p>
+      )}
       <form onSubmit={handleSubmit}>
+        <fieldset>
+          <legend>{initialTeamHandle} is</legend>
+          <label>
+            <input
+              type="radio"
+              name="trade-initiating-role"
+              checked={initiatingRole === 'budget'}
+              onChange={() => {
+                setInitiatingRole('budget');
+                setCheckedKnownKeys(new Set());
+                setManualPicks([]);
+              }}
+              data-testid="trade-role-budget-radio"
+            />
+            sending budget, receiving picks
+          </label>
+          <label>
+            <input
+              type="radio"
+              name="trade-initiating-role"
+              checked={initiatingRole === 'pick'}
+              onChange={() => {
+                setInitiatingRole('pick');
+                setCheckedKnownKeys(new Set());
+                setManualPicks([]);
+              }}
+              data-testid="trade-role-picks-radio"
+            />
+            sending picks, receiving budget
+          </label>
+        </fieldset>
+
         <label htmlFor="trade-counterparty">Counterparty</label>
         <select
           id="trade-counterparty"
-          value={pickTeamId ?? ''}
+          data-testid="trade-counterparty-select"
+          value={counterpartyTeamId ?? ''}
           onChange={(event) => {
-            setPickTeamId(Number(event.target.value));
-            setCheckedKeys(new Set());
+            setCounterpartyTeamId(Number(event.target.value));
+            setCheckedKnownKeys(new Set());
+            setManualPicks([]);
           }}
         >
           <option value="" disabled>
@@ -3837,6 +4246,7 @@ export default function TradeModal({
         <label htmlFor="trade-budget-amount">Budget amount</label>
         <input
           id="trade-budget-amount"
+          data-testid="trade-budget-amount-input"
           type="number"
           min={1}
           step={1}
@@ -3845,24 +4255,104 @@ export default function TradeModal({
         />
 
         <fieldset>
-          <legend>Picks {teams.find((t) => t.id === pickTeamId)?.handle ?? ''} sends</legend>
-          {pickOptions.map((pick) => (
-            <label key={pickKey(pick)}>
+          <legend>
+            Picks {teams.find((t) => t.id === pickTeamId)?.handle ?? 'the pick-side team'} sends
+          </legend>
+          {knownPickOptions.map((pick) => (
+            <label key={knownPickKey(pick)}>
               <input
                 type="checkbox"
-                checked={checkedKeys.has(pickKey(pick))}
-                onChange={() => toggleCheck(pick)}
-                aria-label={`${pick.originHandle} ${pick.futurePickYear} round ${pick.futurePickRound}`}
+                data-testid={`trade-pick-checkbox-${knownPickKey(pick)}`}
+                checked={checkedKnownKeys.has(knownPickKey(pick))}
+                onChange={() => toggleKnownPick(pick)}
               />
               {pick.originHandle} {pick.futurePickYear} round {pick.futurePickRound}
             </label>
           ))}
+
+          <div>
+            <span id="trade-manual-pick-label">
+              Add a future pick (year after {generatedPickYear ?? 'the current pool'})
+            </span>
+            <label htmlFor="trade-manual-origin">Origin team</label>
+            <select
+              id="trade-manual-origin"
+              data-testid="trade-manual-origin-select"
+              aria-describedby="trade-manual-pick-label"
+              value={manualOriginTeamId}
+              onChange={(event) => setManualOriginTeamId(Number(event.target.value))}
+            >
+              <option value="" disabled>
+                Select a team
+              </option>
+              {teams.map((team) => (
+                <option key={team.id} value={team.id}>
+                  {team.displayName ?? team.handle}
+                </option>
+              ))}
+            </select>
+            <label htmlFor="trade-manual-year">Year</label>
+            <input
+              id="trade-manual-year"
+              data-testid="trade-manual-year-input"
+              type="number"
+              min={(generatedPickYear ?? 0) + 1}
+              step={1}
+              value={manualYear}
+              onChange={(event) => setManualYear(event.target.value)}
+            />
+            <label htmlFor="trade-manual-round">Round</label>
+            <select
+              id="trade-manual-round"
+              data-testid="trade-manual-round-select"
+              value={manualRound}
+              onChange={(event) => setManualRound(Number(event.target.value) as 1 | 2 | 3)}
+            >
+              <option value={1}>1st</option>
+              <option value={2}>2nd</option>
+              <option value={3}>3rd</option>
+            </select>
+            <button
+              type="button"
+              data-testid="trade-manual-add-button"
+              disabled={!canAddManualPick}
+              onClick={addManualPick}
+            >
+              Add pick
+            </button>
+          </div>
+
+          {manualPicks.length > 0 && (
+            <ul>
+              {manualPicks.map((pick) => {
+                const key = manualPickKey(pick);
+                const originHandle = teams.find((t) => t.id === pick.originTeamId)?.handle ?? '';
+                return (
+                  <li key={key}>
+                    {originHandle} {pick.futurePickYear} round {pick.futurePickRound}
+                    <button
+                      type="button"
+                      data-testid={`trade-manual-remove-${key}`}
+                      onClick={() => removeManualPick(key)}
+                    >
+                      Remove
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
         </fieldset>
 
-        <button type="submit" disabled={!canSubmit}>
+        <button type="submit" data-testid="trade-submit-button" disabled={!canSubmit}>
           Log trade
         </button>
-        <button type="button" onClick={onClose} disabled={isPending}>
+        <button
+          type="button"
+          data-testid="trade-cancel-button"
+          onClick={onClose}
+          disabled={isPending}
+        >
           Cancel
         </button>
       </form>
@@ -3872,69 +4362,89 @@ export default function TradeModal({
 }
 ```
 
-- [ ] **Step 4: Export from `index.ts`**
+- [ ] **Step 5: Export from `index.ts`**
 
 ```ts
 export { default } from './TradeModal';
-export type { TradeModalProps } from './TradeModal';
+export type { TradeModalProps, ManualPickEntry } from './TradeModal';
 ```
 
-- [ ] **Step 5: Wire the "Log Trade" entry point into `DossierCard.tsx`**
+- [ ] **Step 6: Wire the "Log Trade" entry point into `DossierCard.tsx`**
 
-Add `onLogTrade: (teamId: number) => void;` to `DossierCardProps`, accept it in the destructured props, and render a button (matching whatever existing action-button styling `DossierCard.tsx` already uses elsewhere in the file — read the file to match its existing `<Button>`/`<Toggle>` import and usage before adding a new one):
+Add `onLogTrade: (teamId: number) => void;` to `DossierCardProps` and accept it in the destructured props. Read the file first: `DossierCard`'s card face is a `role="button"` element with its own `onClick`/`onKeyDown` spanning the whole card (toggling the roster detail view). **Do not nest the Log Trade button inside that element** — a button inside a `role="button"` container is both an accessibility violation (nested interactive controls) and a functional bug (clicking it also fires the card's own toggle handler). Place it as a sibling, in whatever footer/action row exists outside that element's closing tag, and stop the click from bubbling as defense-in-depth in case a future edit moves it inside anyway:
 
 ```tsx
-<Button size="touch" onClick={() => onLogTrade(team.id)}>
+<button
+  type="button"
+  data-testid={`dossier-log-trade-${team.id}`}
+  onClick={(event) => {
+    event.stopPropagation();
+    onLogTrade(team.id);
+  }}
+>
   Log Trade
-</Button>
+</button>
 ```
 
-- [ ] **Step 6: Wire modal state and picker data into `teams/page.tsx`**
+(match this to whichever existing button primitive the rest of the file already imports for its own action buttons, once you've confirmed what that is by reading the file — don't introduce a second one.)
+
+- [ ] **Step 7: Wire modal state and picker data into `teams/page.tsx`**
 
 `teams/page.tsx` is a server component; the modal-open state has to live in a client wrapper. Add a new client component `src/components/RosterTracker/RosterTrackerWithTradeModal.tsx` (or, if `RosterTracker` is already a client component per its existing `'use client'` directive — check the file first — add the state directly there instead of introducing a wrapper) holding `openTradeTeamId: number | null` state, rendering `<TradeModal>` when non-null, and passing `onLogTrade={setOpenTradeTeamId}` down to each `DossierCard`.
 
-In `src/app/draft/[draftId]/teams/page.tsx`, load picker data for every team and pass it down:
+In `src/app/draft/[draftId]/teams/page.tsx`, load picker data and the generated-year boundary for every team and pass them down:
 
 ```ts
 import { getTradeablePicksForTeam } from '@/lib/tradePicker';
+import { getGeneratedPickYear } from '@/lib/pickOwnership';
 
 // ...after `const teams = computeDraftTeamStats(...)`:
-const tradeablePicksByTeamId = Object.fromEntries(
-  await Promise.all(
-    rawTeams.map(async (team) => [
-      team.id,
-      await getTradeablePicksForTeam(getPrisma(), draftId, team.id),
-    ]),
+const [generatedPickYear, tradeablePicksEntries] = await Promise.all([
+  getGeneratedPickYear(getPrisma(), draftId),
+  Promise.all(
+    rawTeams.map(
+      async (
+        team,
+      ): Promise<readonly [number, Awaited<ReturnType<typeof getTradeablePicksForTeam>>]> => [
+        team.id,
+        await getTradeablePicksForTeam(getPrisma(), draftId, team.id),
+      ],
+    ),
   ),
-);
+]);
+const tradeablePicksByTeamId = Object.fromEntries(tradeablePicksEntries);
 ```
 
-Pass `tradeablePicksByTeamId` and a `teams` list shaped as `LeagueTeam[]` (id/handle/displayName) into `<RosterTracker>`.
+(the explicit `readonly [number, ...]` return-type annotation on the mapped callback is required — without it, `Object.fromEntries` infers the array as `(number | KnownPickOption[])[]` and TypeScript rejects it.)
 
-- [ ] **Step 7: Run tests to verify they pass**
+`RosterTrackerProps.teams` already exists and is `TeamWithRoster[]` — passing a second, differently-shaped `teams` prop for the trade UI would collide with it. Name the new prop `tradeTeams: LeagueTeam[]` instead when threading it (and `generatedPickYear`, `tradeablePicksByTeamId`) into `<RosterTracker>`.
+
+- [ ] **Step 8: Run tests to verify they pass**
 
 Run: `pnpm test TradeModal`
 Expected: PASS
 
-- [ ] **Step 8: Run full typecheck and lint**
+- [ ] **Step 9: Run full typecheck and lint**
 
 Run: `pnpm tsc --noEmit && pnpm lint`
-Expected: no new errors.
+Expected: no new errors — this will catch the `setBudgetTeamId`-style unused-variable class of bug if any remain, since ESLint errors (not just warns) on unused vars in this repo.
 
-- [ ] **Step 9: Manual verification**
+- [ ] **Step 10: Manual verification**
 
-Run `make dev`, open `/draft/[draftId]/teams`, click "Log Trade" on a team card, submit a trade, confirm it appears and the team's remaining budget updates. Kill the dev server when done.
+Run `make dev`, open `/draft/[draftId]/teams`, click "Log Trade" on a team card. Confirm: (a) a known-year pick can be checked and submitted, (b) the direction radio actually changes who sends budget vs. picks, (c) an off-book pick (a year after the generated one) can be added via the manual row and submitted, and (d) entering a year that is not after the generated year disables the Add button. Confirm the team's remaining budget updates after submit. Kill the dev server when done.
 
-- [ ] **Step 10: Commit**
+- [ ] **Step 11: Commit**
 
 ```bash
 git add src/components/TradeModal src/components/RosterTracker src/app/draft/\[draftId\]/teams/page.tsx
-git commit -m "Add trade-entry modal and Log Trade entry point"
+git commit -m "Add trade-entry modal with direction control and off-book pick entry"
 ```
 
 ---
 
 ## Task 22: Trade history / ledger list on `/teams`
+
+**Revised after review** to fix three real gaps: error feedback was announced only through a visually-hidden `aria-live` region (invisible to sighted users, and the original test passed despite this because the text was still technically in the DOM); there was no UI for `updateTrade` at all, despite it being one of the four mutations Task 13 built; and "Restore" was rendered forever on a soft-deleted trade even though `restoreTradeRecord` enforces a 30-minute window, so it would sit there as a dead, always-clickable control after that.
 
 **Files:**
 
@@ -3962,16 +4472,17 @@ git commit -m "Add trade-entry modal and Log Trade entry point"
   export interface TradeHistoryListProps {
     draftId: number;
     trades: TradeHistoryEntry[];
+    nowMs?: number; // injectable for tests; defaults to Date.now()
   }
   export default function TradeHistoryList(props: TradeHistoryListProps): JSX.Element;
   ```
 
-- [ ] **Step 1: Write the failing component test**
+- [ ] **Step 1: Write the failing component tests**
 
 ```tsx
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import TradeHistoryList from '@/components/TradeHistory/TradeHistoryList';
-import { deleteTrade } from '@/lib/actions';
+import { deleteTrade, restoreTrade, updateTrade } from '@/lib/actions';
 
 jest.mock('@/lib/actions', () => ({
   deleteTrade: jest.fn(),
@@ -3979,6 +4490,8 @@ jest.mock('@/lib/actions', () => ({
   updateTrade: jest.fn(),
 }));
 const mockDeleteTrade = deleteTrade as jest.Mock;
+const mockUpdateTrade = updateTrade as jest.Mock;
+const mockRestoreTrade = restoreTrade as jest.Mock;
 
 const TRADE: import('@/components/TradeHistory/TradeHistoryList').TradeHistoryEntry = {
   id: 501,
@@ -3989,43 +4502,88 @@ const TRADE: import('@/components/TradeHistory/TradeHistoryList').TradeHistoryEn
   createdAt: '2026-08-01T00:00:00.000Z',
   deletedAt: null,
 };
+const NOW = new Date('2026-08-01T00:05:00.000Z').getTime(); // 5 minutes after createdAt
+
+beforeEach(() => jest.clearAllMocks());
 
 it('deletes a trade when Remove is clicked and confirmed', async () => {
   mockDeleteTrade.mockResolvedValue({ ok: true, data: null });
-  render(<TradeHistoryList draftId={4} trades={[TRADE]} />);
+  render(<TradeHistoryList draftId={4} trades={[TRADE]} nowMs={NOW} />);
 
-  fireEvent.click(screen.getByRole('button', { name: /remove/i }));
-  fireEvent.click(screen.getByRole('button', { name: /confirm remove/i }));
+  fireEvent.click(screen.getByTestId('trade-history-remove-501'));
+  fireEvent.click(screen.getByTestId('trade-history-confirm-remove-501'));
 
   await waitFor(() => expect(mockDeleteTrade).toHaveBeenCalledWith({ id: 501, draftId: 4 }));
 });
 
-it('shows an error and does not remove the row when delete fails', async () => {
+it('shows a visible error, not just an sr-only one, when delete fails', async () => {
   mockDeleteTrade.mockResolvedValue({ ok: false, code: 'PICK_ALREADY_RETRADED' });
-  render(<TradeHistoryList draftId={4} trades={[TRADE]} />);
+  render(<TradeHistoryList draftId={4} trades={[TRADE]} nowMs={NOW} />);
 
-  fireEvent.click(screen.getByRole('button', { name: /remove/i }));
-  fireEvent.click(screen.getByRole('button', { name: /confirm remove/i }));
+  fireEvent.click(screen.getByTestId('trade-history-remove-501'));
+  fireEvent.click(screen.getByTestId('trade-history-confirm-remove-501'));
 
-  await waitFor(() => screen.getByText(/PICK_ALREADY_RETRADED/i));
+  const visibleError = await screen.findByTestId('trade-history-error-501');
+  expect(visibleError).toHaveTextContent(/PICK_ALREADY_RETRADED/i);
+  expect(visibleError.className).not.toMatch(/sr-only/);
+});
+
+it('edits the budget amount via the edit affordance', async () => {
+  mockUpdateTrade.mockResolvedValue({ ok: true, data: { tradeId: 501 } });
+  render(<TradeHistoryList draftId={4} trades={[TRADE]} nowMs={NOW} />);
+
+  fireEvent.click(screen.getByTestId('trade-history-edit-501'));
+  fireEvent.change(screen.getByTestId('trade-history-edit-amount-501'), {
+    target: { value: '60' },
+  });
+  fireEvent.click(screen.getByTestId('trade-history-save-501'));
+
+  await waitFor(() =>
+    expect(mockUpdateTrade).toHaveBeenCalledWith({ id: 501, budgetAmount: 60, draftId: 4 }),
+  );
+});
+
+it('offers Restore inside the 30-minute window', () => {
+  render(
+    <TradeHistoryList
+      draftId={4}
+      trades={[{ ...TRADE, deletedAt: '2026-08-01T00:05:00.000Z' }]}
+      nowMs={new Date('2026-08-01T00:15:00.000Z').getTime()} // 10 min after deletion
+    />,
+  );
+  expect(screen.getByTestId('trade-history-restore-501')).not.toBeDisabled();
+});
+
+it('hides Restore once the 30-minute window has passed', () => {
+  render(
+    <TradeHistoryList
+      draftId={4}
+      trades={[{ ...TRADE, deletedAt: '2026-08-01T00:05:00.000Z' }]}
+      nowMs={new Date('2026-08-01T00:40:00.000Z').getTime()} // 35 min after deletion
+    />,
+  );
+  expect(screen.queryByTestId('trade-history-restore-501')).not.toBeInTheDocument();
+  expect(screen.getByTestId('trade-history-expired-501')).toBeInTheDocument();
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [ ] **Step 2: Run tests to verify they fail**
 
 Run: `pnpm test TradeHistoryList`
 Expected: FAIL — `src/components/TradeHistory/TradeHistoryList.tsx` doesn't exist.
 
 - [ ] **Step 3: Implement `TradeHistoryList.tsx`**
 
-Two-step Remove/Confirm-Remove guard, matching `BidModal`'s existing destructive-action pattern (HARD-010):
+Two-step Remove/Confirm-Remove guard, matching `BidModal`'s existing destructive-action pattern (HARD-010). Errors render both a visible message (per-row, plain text) and go through `MutationStatus` for the `aria-live` announcement — the two are not redundant, they serve sighted and screen-reader users respectively, and both are needed:
 
 ```tsx
 'use client';
 
 import { useState, useTransition } from 'react';
-import { deleteTrade, restoreTrade } from '@/lib/actions';
+import { deleteTrade, restoreTrade, updateTrade } from '@/lib/actions';
 import MutationStatus from '@/components/MutationStatus';
+
+const RESTORE_WINDOW_MS = 30 * 60 * 1000;
 
 export interface TradeHistoryEntry {
   id: number;
@@ -4040,17 +4598,37 @@ export interface TradeHistoryEntry {
 export interface TradeHistoryListProps {
   draftId: number;
   trades: TradeHistoryEntry[];
+  nowMs?: number;
 }
 
-export default function TradeHistoryList({ draftId, trades }: TradeHistoryListProps) {
+export default function TradeHistoryList({ draftId, trades, nowMs }: TradeHistoryListProps) {
+  const now = nowMs ?? Date.now();
   const [confirmingId, setConfirmingId] = useState<number | null>(null);
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editAmount, setEditAmount] = useState('');
+  const [errorByTradeId, setErrorByTradeId] = useState<Record<number, string>>({});
   const [statusMessage, setStatusMessage] = useState('');
   const [isPending, startTransition] = useTransition();
+
+  function setRowError(tradeId: number, message: string | null) {
+    setErrorByTradeId((prev) => {
+      const next = { ...prev };
+      if (message === null) delete next[tradeId];
+      else next[tradeId] = message;
+      return next;
+    });
+  }
 
   function handleDelete(tradeId: number) {
     startTransition(async () => {
       const result = await deleteTrade({ id: tradeId, draftId });
-      setStatusMessage(result.ok ? 'Trade removed.' : `Could not remove trade: ${result.code}`);
+      if (result.ok) {
+        setStatusMessage('Trade removed.');
+        setRowError(tradeId, null);
+      } else {
+        setStatusMessage(`Could not remove trade: ${result.code}`);
+        setRowError(tradeId, result.code);
+      }
       setConfirmingId(null);
     });
   }
@@ -4058,46 +4636,144 @@ export default function TradeHistoryList({ draftId, trades }: TradeHistoryListPr
   function handleRestore(tradeId: number) {
     startTransition(async () => {
       const result = await restoreTrade({ id: tradeId, draftId });
-      setStatusMessage(result.ok ? 'Trade restored.' : `Could not restore trade: ${result.code}`);
+      if (result.ok) {
+        setStatusMessage('Trade restored.');
+        setRowError(tradeId, null);
+      } else {
+        setStatusMessage(`Could not restore trade: ${result.code}`);
+        setRowError(tradeId, result.code);
+      }
+    });
+  }
+
+  function startEdit(trade: TradeHistoryEntry) {
+    setEditingId(trade.id);
+    setEditAmount(String(trade.budgetAmount));
+  }
+
+  function handleSaveEdit(tradeId: number) {
+    const parsedAmount = Number(editAmount);
+    if (!Number.isInteger(parsedAmount) || parsedAmount <= 0) {
+      setRowError(tradeId, 'INVALID_INPUT');
+      return;
+    }
+    startTransition(async () => {
+      const result = await updateTrade({ id: tradeId, budgetAmount: parsedAmount, draftId });
+      if (result.ok) {
+        setStatusMessage('Trade updated.');
+        setRowError(tradeId, null);
+        setEditingId(null);
+      } else {
+        setStatusMessage(`Could not update trade: ${result.code}`);
+        setRowError(tradeId, result.code);
+      }
     });
   }
 
   return (
     <div>
       <ul>
-        {trades.map((trade) => (
-          <li key={trade.id}>
-            <span>
-              {trade.budgetTeamHandle} sent ${trade.budgetAmount} to {trade.pickTeamHandle} for{' '}
-              {trade.picks
-                .map(
-                  (pick) =>
-                    `${pick.originHandle} ${pick.futurePickYear} round ${pick.futurePickRound}`,
-                )
-                .join(', ')}
-            </span>
-            {trade.deletedAt === null ? (
-              confirmingId === trade.id ? (
+        {trades.map((trade) => {
+          const isDeleted = trade.deletedAt !== null;
+          const restoreExpired =
+            isDeleted && now - new Date(trade.deletedAt as string).getTime() > RESTORE_WINDOW_MS;
+
+          return (
+            <li key={trade.id}>
+              <span>
+                {trade.budgetTeamHandle} sent ${trade.budgetAmount} to {trade.pickTeamHandle} for{' '}
+                {trade.picks
+                  .map(
+                    (pick) =>
+                      `${pick.originHandle} ${pick.futurePickYear} round ${pick.futurePickRound}`,
+                  )
+                  .join(', ')}
+              </span>
+
+              {editingId === trade.id && (
+                <span>
+                  <label htmlFor={`trade-history-edit-amount-${trade.id}`}>New amount</label>
+                  <input
+                    id={`trade-history-edit-amount-${trade.id}`}
+                    data-testid={`trade-history-edit-amount-${trade.id}`}
+                    type="number"
+                    min={1}
+                    step={1}
+                    value={editAmount}
+                    onChange={(event) => setEditAmount(event.target.value)}
+                  />
+                  <button
+                    disabled={isPending}
+                    data-testid={`trade-history-save-${trade.id}`}
+                    onClick={() => handleSaveEdit(trade.id)}
+                  >
+                    Save
+                  </button>
+                  <button disabled={isPending} onClick={() => setEditingId(null)}>
+                    Cancel
+                  </button>
+                </span>
+              )}
+
+              {!isDeleted && editingId !== trade.id && (
                 <>
-                  <button disabled={isPending} onClick={() => handleDelete(trade.id)}>
-                    Confirm Remove
-                  </button>
-                  <button disabled={isPending} onClick={() => setConfirmingId(null)}>
-                    Keep
-                  </button>
+                  {confirmingId === trade.id ? (
+                    <>
+                      <button
+                        disabled={isPending}
+                        data-testid={`trade-history-confirm-remove-${trade.id}`}
+                        onClick={() => handleDelete(trade.id)}
+                      >
+                        Confirm Remove
+                      </button>
+                      <button disabled={isPending} onClick={() => setConfirmingId(null)}>
+                        Keep
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <button
+                        disabled={isPending}
+                        data-testid={`trade-history-edit-${trade.id}`}
+                        onClick={() => startEdit(trade)}
+                      >
+                        Edit
+                      </button>
+                      <button
+                        disabled={isPending}
+                        data-testid={`trade-history-remove-${trade.id}`}
+                        onClick={() => setConfirmingId(trade.id)}
+                      >
+                        Remove
+                      </button>
+                    </>
+                  )}
                 </>
-              ) : (
-                <button disabled={isPending} onClick={() => setConfirmingId(trade.id)}>
-                  Remove
-                </button>
-              )
-            ) : (
-              <button disabled={isPending} onClick={() => handleRestore(trade.id)}>
-                Restore
-              </button>
-            )}
-          </li>
-        ))}
+              )}
+
+              {isDeleted &&
+                (restoreExpired ? (
+                  <span data-testid={`trade-history-expired-${trade.id}`}>
+                    Removed — too late to restore
+                  </span>
+                ) : (
+                  <button
+                    disabled={isPending}
+                    data-testid={`trade-history-restore-${trade.id}`}
+                    onClick={() => handleRestore(trade.id)}
+                  >
+                    Restore
+                  </button>
+                ))}
+
+              {errorByTradeId[trade.id] && (
+                <p data-testid={`trade-history-error-${trade.id}`} role="alert">
+                  {errorByTradeId[trade.id]}
+                </p>
+              )}
+            </li>
+          );
+        })}
       </ul>
       <MutationStatus message={statusMessage} />
     </div>
@@ -4139,7 +4815,7 @@ const tradeHistory: TradeHistoryEntry[] = rawTrades.map((trade) => ({
 }));
 ```
 
-Render `<TradeHistoryList draftId={draftId} trades={tradeHistory} />` on the page, below `<RosterTracker>`.
+Render `<TradeHistoryList draftId={draftId} trades={tradeHistory} />` on the page, below `<RosterTracker>`. Do not pass `nowMs` from the page — that prop exists only so tests can pin "now" deterministically; production always uses the real clock via the default.
 
 - [ ] **Step 6: Run tests to verify they pass**
 
@@ -4153,13 +4829,13 @@ Expected: no new errors.
 
 - [ ] **Step 8: Manual verification**
 
-Run `make dev`, log a trade, confirm it appears in the history list, remove it and confirm the Remove/Confirm Remove guard and the pick's ownership reverting are both correct, then restore it within the window. Kill the dev server when done.
+Run `make dev`, log a trade, confirm it appears in the history list. Edit its amount and confirm the new amount is reflected on `/teams`/`/budget`. Remove it and confirm the Remove/Confirm Remove guard, the visible (not just screen-reader-only) error text on a forced failure, and the pick's ownership reverting are all correct. Restore it within the window, then verify (by backdating a test row, or by inspecting the code path rather than waiting 30 real minutes) that Restore disappears and an "too late to restore" message appears after the window. Kill the dev server when done.
 
 - [ ] **Step 9: Commit**
 
 ```bash
 git add src/components/TradeHistory src/app/draft/\[draftId\]/teams/page.tsx
-git commit -m "Add trade history list with edit/delete/restore"
+git commit -m "Add trade history list with visible errors, edit, and expiring restore"
 ```
 
 ## Task 23: Final verification

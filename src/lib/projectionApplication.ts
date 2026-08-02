@@ -1,185 +1,43 @@
 import {
-  DEFAULT_SCORING_SETTINGS,
-  DEFAULT_TARGET_ROSTER,
-  type Position,
-  type ScoringSettings,
-} from '@/types';
-import {
-  calculateProjectionMarketValues,
-  type ProjectionMarketValueOutput,
-} from '@/lib/projectionMarketValue';
-import { calculateProjectedPoints, type ProjectionStats } from '@/lib/projectionScoring';
-import { calculateProjectionValues, type ProjectionValueInput } from '@/lib/projectionVor';
-import {
   activateProjectionValueSet,
   markProjectionValueSetFailed,
   ProjectionApplicationFailure,
   pruneProjectionValueSetRows,
 } from '@/lib/projectionValueSet';
-import { toStartingLineup } from '@/lib/startingLineup';
+import {
+  chunk,
+  getLatestProjectionSourceId,
+  getSleeperIdUpdates,
+  prepareProjectionCandidates,
+  resolvePlayerSleeperIds,
+} from '@/lib/projectionPreparation';
+import type {
+  ApplyProjectionValuesOptions,
+  ApplyProjectionValuesResult,
+  ProjectionApplyPrisma,
+} from '@/lib/projectionApplicationTypes';
 
-export type VorPosition = 'QB' | 'RB' | 'WR' | 'TE';
-
-export interface PlayerJoinRow {
-  id: number;
-  name: string;
-  pos: string;
-  sleeperId: string | null;
-  budget: number;
-}
-
-export interface ResolvedPlayerJoinRow extends PlayerJoinRow {
-  shouldUpdateSleeperId: boolean;
-}
-
-export interface SleeperIdUpdate {
-  id: number;
-  sleeperId: string;
-}
-
-export interface ProjectionJoinRow {
-  sleeperId: string;
-  position: VorPosition;
-  projectedPoints: number;
-  baselineProjectedPoints: number;
-  isRookie: boolean;
-}
-
-export interface JoinedProjectionRow {
-  playerId: number;
-  sleeperId: string;
-  position: VorPosition;
-  projectedPoints: number;
-  baselineProjectedPoints: number;
-  fallbackAuctionValue: number;
-  isRookie: boolean;
-}
-
-export interface DraftPlayerValueDeleteWhere {
-  draftId: number;
-  projectionSourceId: number;
-  playerId?: { notIn: number[] };
-}
-
-interface DraftPlayerValueData {
-  projectedPoints: number;
-  replacementPoints: number | null;
-  vor: number | null;
-  projectionAuctionValue: number | null;
-  fallbackAuctionValue: number;
-  activeAuctionValue: number;
-  valueSource: string;
-}
-
-interface DraftPlayerValueWrite extends DraftPlayerValueData {
-  draftId: number;
-  playerId: number;
-  projectionSourceId: number;
-  valueSetId: number;
-}
-
-interface StoredProjectionRow {
-  sleeperId: string;
-  position: string;
-  games: number;
-  passAtt: number;
-  passCmp: number;
-  passYds: number;
-  passTd: number;
-  passInt: number;
-  passSacks: number;
-  rushAtt: number;
-  rushYds: number;
-  rushTd: number;
-  targets: number;
-  receptions: number;
-  recYds: number;
-  recTd: number;
-  baseFantasyPoints: number;
-  projectionRank: number | null;
-  isRookie: boolean;
-}
-
-export interface ProjectionApplyPrisma {
-  draft: {
-    findUnique(args: {
-      where: { id: number };
-      select: {
-        id: true;
-        teamCount: true;
-        rosterSize: true;
-        budget: true;
-        startingLineup: true;
-        scoringSettings: true;
-        targetRoster: true;
-      };
-    }): Promise<{
-      id: number;
-      teamCount: number;
-      rosterSize: number;
-      budget: number;
-      startingLineup: unknown;
-      scoringSettings: unknown;
-      targetRoster: unknown;
-    } | null>;
-    update(args: {
-      where: { id: number };
-      data: { activeProjectionValueSetId: number };
-    }): Promise<unknown>;
-  };
-  projectionSource: {
-    findFirst(args: {
-      orderBy: Array<{ projectionDate?: 'desc' } | { updatedAt?: 'desc' } | { id?: 'desc' }>;
-    }): Promise<{ id: number } | null>;
-  };
-  player: {
-    findMany(args: {
-      where: { draftId: number };
-      select: { id: true; name: true; pos: true; sleeperId: true; budget: true };
-    }): Promise<PlayerJoinRow[]>;
-    update(args: { where: { id: number }; data: { sleeperId: string } }): Promise<unknown>;
-  };
-  playerProjection: {
-    findMany(args: { where: { projectionSourceId: number } }): Promise<StoredProjectionRow[]>;
-  };
-  draftProjectionValueSet: {
-    create(args: {
-      data: {
-        draftId: number;
-        projectionSourceId: number;
-        status: 'STAGING';
-        expectedPlayerCount: number;
-      };
-      select: { id: true };
-    }): Promise<{ id: number }>;
-    findUnique: (...args: never[]) => Promise<unknown>;
-    findMany: (...args: never[]) => Promise<unknown>;
-    updateMany: (...args: never[]) => Promise<unknown>;
-  };
-  draftPlayerValue: {
-    createMany(args: { data: DraftPlayerValueWrite[] }): Promise<{ count: number }>;
-    deleteMany: (...args: never[]) => Promise<unknown>;
-    count: (...args: never[]) => Promise<number>;
-  };
-  $transaction?<T>(
-    operation: (tx: ProjectionApplyPrisma) => Promise<T>,
-    options?: { timeout: number },
-  ): Promise<T>;
-}
-
-export interface ApplyProjectionValuesOptions {
-  draftId: number;
-  projectionSourceId?: number;
-  etrMatches?: Map<string, string>;
-  mode?: 'staged' | 'transaction';
-}
-
-export interface ApplyProjectionValuesResult {
-  valueSetId: number;
-  projectionSourceId: number;
-  appliedCount: number;
-  activatedAt: Date;
-}
+export {
+  buildDraftPlayerValueData,
+  buildStaleDraftPlayerValueDeleteWhere,
+  getLatestProjectionSourceId,
+  getSleeperIdUpdates,
+  joinPlayersToProjectionRows,
+  prepareProjectionCandidates,
+  resolvePlayerSleeperIds,
+} from '@/lib/projectionPreparation';
+export type {
+  ApplyProjectionValuesOptions,
+  ApplyProjectionValuesResult,
+  DraftPlayerValueDeleteWhere,
+  JoinedProjectionRow,
+  PlayerJoinRow,
+  ProjectionApplyPrisma,
+  ProjectionJoinRow,
+  ResolvedPlayerJoinRow,
+  SleeperIdUpdate,
+  VorPosition,
+} from '@/lib/projectionApplicationTypes';
 
 const WRITE_BATCH_SIZE = 50;
 const WRITE_TRANSACTION_TIMEOUT_MS = 60_000;
@@ -208,7 +66,6 @@ export async function applyProjectionValuesToDraft(
     throw new ProjectionApplicationFailure('NO_PROJECTION_SOURCE', 'No projection source found');
   }
 
-  const scoringSettings = toScoringSettings(draft.scoringSettings);
   const players = await prisma.player.findMany({
     where: { draftId: draft.id },
     select: { id: true, name: true, pos: true, sleeperId: true, budget: true },
@@ -229,64 +86,12 @@ export async function applyProjectionValuesToDraft(
   const projections = await prisma.playerProjection.findMany({
     where: { projectionSourceId },
   });
-  const joined = joinPlayersToStoredProjectionRows(
-    playersWithSleeperIds,
+  const candidateRows = prepareProjectionCandidates({
+    draft,
+    projectionSourceId,
+    players: playersWithSleeperIds,
     projections,
-    scoringSettings,
-  );
-  if (joined.length === 0) {
-    throw new ProjectionApplicationFailure(
-      'NO_JOINED_PLAYERS',
-      `No projection values could be applied to draft ${draft.id}`,
-    );
-  }
-
-  const projectionInputs: ProjectionValueInput[] = joined.map((row) => ({
-    sleeperId: row.sleeperId,
-    name: String(row.playerId),
-    position: row.position,
-    projectedPoints: row.projectedPoints,
-    fallbackAuctionValue: row.fallbackAuctionValue,
-    isRookie: row.isRookie,
-  }));
-  const values = calculateProjectionValues({
-    players: projectionInputs,
-    teamCount: draft.teamCount,
-    rosterSize: draft.rosterSize,
-    budget: draft.budget,
-    startingLineup: toStartingLineup(draft.startingLineup),
-    targetRoster: toTargetRoster(draft.targetRoster),
-    scoringSettings,
   });
-  const valuesBySleeperId = new Map(values.map((value) => [value.sleeperId, value]));
-  const marketValues = calculateProjectionMarketValues({
-    players: joined.map((row) => ({
-      sleeperId: row.sleeperId,
-      name: String(row.playerId),
-      position: row.position,
-      projectedPoints: row.projectedPoints,
-      baselineProjectedPoints: row.baselineProjectedPoints,
-      fallbackAuctionValue: row.fallbackAuctionValue,
-      isRookie: row.isRookie,
-    })),
-  });
-  const marketValuesBySleeperId = new Map(marketValues.map((value) => [value.sleeperId, value]));
-
-  const candidateRows = joined.flatMap((row) => {
-    const value = valuesBySleeperId.get(row.sleeperId);
-    const marketValue = marketValuesBySleeperId.get(row.sleeperId);
-    if (!value || !marketValue) return [];
-    const data = buildDraftPlayerValueData(row, value, marketValue);
-    return [{ draftId: draft.id, playerId: row.playerId, projectionSourceId, ...data }];
-  });
-
-  if (candidateRows.length === 0) {
-    throw new ProjectionApplicationFailure(
-      'NO_JOINED_PLAYERS',
-      `No projection values could be applied to draft ${draft.id}`,
-    );
-  }
-  assertFiniteCandidateRows(candidateRows);
 
   let valueSet: { id: number };
   try {
@@ -378,179 +183,4 @@ function requireProjectionTransaction(
     );
   }
   return prisma.$transaction.bind(prisma);
-}
-
-function assertFiniteCandidateRows(rows: Array<Omit<DraftPlayerValueWrite, 'valueSetId'>>): void {
-  for (const row of rows) {
-    const numericValues = [
-      row.projectedPoints,
-      row.replacementPoints,
-      row.vor,
-      row.projectionAuctionValue,
-      row.fallbackAuctionValue,
-      row.activeAuctionValue,
-    ].filter((value): value is number => value !== null);
-    if (numericValues.some((value) => !Number.isFinite(value))) {
-      throw new ProjectionApplicationFailure(
-        'INVALID_CALCULATION',
-        `Projection calculation produced an invalid value for player ${row.playerId}`,
-      );
-    }
-  }
-}
-
-async function getLatestProjectionSourceId(prisma: ProjectionApplyPrisma): Promise<number | null> {
-  const source = await prisma.projectionSource.findFirst({
-    orderBy: [{ projectionDate: 'desc' }, { updatedAt: 'desc' }, { id: 'desc' }],
-  });
-  return source?.id ?? null;
-}
-
-export function resolvePlayerSleeperIds(
-  players: PlayerJoinRow[],
-  etrMatches: Map<string, string>,
-): ResolvedPlayerJoinRow[] {
-  return players.map((player) => {
-    const resolvedSleeperId = player.sleeperId ?? etrMatches.get(player.name) ?? null;
-    return {
-      ...player,
-      sleeperId: resolvedSleeperId,
-      shouldUpdateSleeperId: player.sleeperId !== resolvedSleeperId && resolvedSleeperId !== null,
-    };
-  });
-}
-
-export function getSleeperIdUpdates(players: ResolvedPlayerJoinRow[]): SleeperIdUpdate[] {
-  return players.flatMap((player) =>
-    player.shouldUpdateSleeperId && player.sleeperId
-      ? [{ id: player.id, sleeperId: player.sleeperId }]
-      : [],
-  );
-}
-
-export function joinPlayersToProjectionRows(
-  players: PlayerJoinRow[],
-  projections: ProjectionJoinRow[],
-): JoinedProjectionRow[] {
-  const projectionsBySleeperId = new Map(
-    projections.map((projection) => [projection.sleeperId, projection]),
-  );
-
-  return players.flatMap((player) => {
-    if (!player.sleeperId) return [];
-    const projection = projectionsBySleeperId.get(player.sleeperId);
-    if (!projection) return [];
-    return [
-      {
-        playerId: player.id,
-        sleeperId: player.sleeperId,
-        position: projection.position,
-        projectedPoints: projection.projectedPoints,
-        baselineProjectedPoints: projection.baselineProjectedPoints,
-        fallbackAuctionValue: player.budget,
-        isRookie: projection.isRookie,
-      },
-    ];
-  });
-}
-
-function joinPlayersToStoredProjectionRows(
-  players: PlayerJoinRow[],
-  projections: StoredProjectionRow[],
-  scoring: ScoringSettings,
-): JoinedProjectionRow[] {
-  const projectionRows = projections.flatMap((projection): ProjectionJoinRow[] => {
-    const position = toVorPosition(projection.position);
-    if (!position) return [];
-    const stats = toProjectionStats({ ...projection, position });
-    return [
-      {
-        sleeperId: projection.sleeperId,
-        position,
-        projectedPoints: calculateProjectedPoints(stats, scoring),
-        baselineProjectedPoints: calculateProjectedPoints(stats, DEFAULT_SCORING_SETTINGS),
-        isRookie: projection.isRookie,
-      },
-    ];
-  });
-
-  return joinPlayersToProjectionRows(players, projectionRows);
-}
-
-function toProjectionStats(row: StoredProjectionRow & { position: VorPosition }): ProjectionStats {
-  return {
-    sleeperId: row.sleeperId,
-    position: row.position,
-    games: row.games,
-    passAtt: row.passAtt,
-    passCmp: row.passCmp,
-    passYds: row.passYds,
-    passTd: row.passTd,
-    passInt: row.passInt,
-    passSacks: row.passSacks,
-    rushAtt: row.rushAtt,
-    rushYds: row.rushYds,
-    rushTd: row.rushTd,
-    targets: row.targets,
-    receptions: row.receptions,
-    recYds: row.recYds,
-    recTd: row.recTd,
-  };
-}
-
-export function buildDraftPlayerValueData(
-  row: JoinedProjectionRow,
-  value: {
-    replacementPoints: number | null;
-    vor: number | null;
-    projectionAuctionValue: number | null;
-  },
-  marketValue: ProjectionMarketValueOutput,
-): DraftPlayerValueData {
-  return {
-    projectedPoints: row.projectedPoints,
-    replacementPoints: value.replacementPoints,
-    vor: value.vor,
-    projectionAuctionValue: value.projectionAuctionValue,
-    fallbackAuctionValue: row.fallbackAuctionValue,
-    activeAuctionValue: marketValue.activeAuctionValue,
-    valueSource: marketValue.valueSource,
-  };
-}
-
-export function buildStaleDraftPlayerValueDeleteWhere(
-  draftId: number,
-  projectionSourceId: number,
-  joined: JoinedProjectionRow[],
-): DraftPlayerValueDeleteWhere {
-  const currentPlayerIds = joined.map((row) => row.playerId);
-  if (currentPlayerIds.length === 0) {
-    return { draftId, projectionSourceId };
-  }
-  return { draftId, projectionSourceId, playerId: { notIn: currentPlayerIds } };
-}
-
-function toVorPosition(position: string): VorPosition | null {
-  if (position === 'QB' || position === 'RB' || position === 'WR' || position === 'TE') {
-    return position;
-  }
-  return null;
-}
-
-function toScoringSettings(value: unknown): ScoringSettings {
-  if (value === null || typeof value !== 'object') return { ...DEFAULT_SCORING_SETTINGS };
-  return { ...DEFAULT_SCORING_SETTINGS, ...(value as Partial<ScoringSettings>) };
-}
-
-function toTargetRoster(value: unknown): Partial<Record<Position, number>> {
-  if (value === null || typeof value !== 'object') return DEFAULT_TARGET_ROSTER;
-  return value as Partial<Record<Position, number>>;
-}
-
-function chunk<T>(items: T[], size: number): T[][] {
-  const batches: T[][] = [];
-  for (let index = 0; index < items.length; index += size) {
-    batches.push(items.slice(index, index + size));
-  }
-  return batches;
 }

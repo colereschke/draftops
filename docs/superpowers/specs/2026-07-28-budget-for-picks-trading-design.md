@@ -148,7 +148,8 @@ called both from inside trade/bid mutation transactions and from `getActiveDraft
 not itself transactional):
 
 1. Find the most recent non-deleted `Trade` (by `createdAt`) with a `TradePickAsset` matching
-   `(originTeamId, year, round)`. If found, the holder is that trade's `pickTeamId`.
+   `(originTeamId, year, round)`. If found, the holder is that trade's `budgetTeamId` — the team that
+   sent budget in exchange for the pick, per the field definitions above.
 2. Else, find a non-deleted `AuctionResult` for the matching `PKG` (whole package) or `PICK` (single
    round) `Player` row. If found, the holder is that result's `teamId`.
 3. Else, the holder is the origin team.

@@ -143,7 +143,7 @@ git commit -m "Add Trade, TradePickAsset, TradeAuditEvent models"
 
 **Interfaces:**
 
-- Produces: `export const PACKAGE_BASELINE: PickBaseline` and `export const ROUND_BASELINES: Record<1 | 2 | 3, PickBaseline>` (both currently module-private `const`). `PickBaseline` interface (already exported at line 17-21) is unchanged.
+- Produces: `export const PACKAGE_BASELINE: { budget: number; ceiling: number; floor: number }` and `export const ROUND_BASELINES: Record<1 | 2 | 3, { budget: number; ceiling: number; floor: number }>` (both currently module-private `const`, using this same inline object type — there is no separate `PickBaseline` named type in this file to reuse).
 - Consumes: nothing new.
 
 - [ ] **Step 1: Write the failing test**
@@ -304,6 +304,8 @@ git add src/lib/draftMutation.ts src/__tests__/draftMutation.test.ts
 git commit -m "Add trade-related DraftMutationCode values"
 ```
 
+---
+
 ## Task 4: `netBudgetDelta` on team stats output
 
 **Files:**
@@ -434,16 +436,17 @@ git commit -m "Expose netBudgetDelta from computeDraftTeamStats"
 
 ```ts
 import { getPrisma } from '@/lib/db';
+import { DraftMutationFailure } from '@/lib/draftMutation';
 import { getGeneratedPickYear, resolvePickHolder } from '@/lib/pickOwnership';
 
-const mockTeamFindFirstOrThrow = jest.fn();
+const mockTeamFindFirst = jest.fn();
 const mockTradePickAssetFindFirst = jest.fn();
 const mockAuctionResultFindFirst = jest.fn();
 const mockPlayerAggregate = jest.fn();
 
 jest.mock('@/lib/db', () => ({
   getPrisma: () => ({
-    team: { findFirstOrThrow: mockTeamFindFirstOrThrow },
+    team: { findFirst: mockTeamFindFirst },
     tradePickAsset: { findFirst: mockTradePickAssetFindFirst },
     auctionResult: { findFirst: mockAuctionResultFindFirst },
     player: { aggregate: mockPlayerAggregate },
@@ -456,18 +459,20 @@ beforeEach(() => jest.clearAllMocks());
 
 describe('resolvePickHolder', () => {
   it('resolves via the most recent trade when one exists', async () => {
+    // budgetTeamId is the holder after a trade — that team sent budget and received the pick.
+    // pickTeamId is the seller (the pre-trade holder), which is what PICK_NOT_HELD checks against.
     mockTradePickAssetFindFirst.mockResolvedValue({
       tradeId: 42,
-      trade: { pickTeamId: 9 },
+      trade: { budgetTeamId: 9 },
     });
     const result = await resolvePickHolder(client, 1, 3, 2027, 1);
     expect(result).toEqual({ holderTeamId: 9, eventKind: 'trade', eventId: 42 });
-    expect(mockTeamFindFirstOrThrow).not.toHaveBeenCalled();
+    expect(mockTeamFindFirst).not.toHaveBeenCalled();
   });
 
   it('falls back to the auction win when no trade exists', async () => {
     mockTradePickAssetFindFirst.mockResolvedValue(null);
-    mockTeamFindFirstOrThrow.mockResolvedValue({ handle: 'origin-team' });
+    mockTeamFindFirst.mockResolvedValue({ handle: 'origin-team' });
     mockAuctionResultFindFirst.mockResolvedValue({ id: 501, teamId: 6 });
     const result = await resolvePickHolder(client, 1, 3, 2027, 1);
     expect(result).toEqual({ holderTeamId: 6, eventKind: 'auction', eventId: 501 });
@@ -475,10 +480,23 @@ describe('resolvePickHolder', () => {
 
   it('falls back to the origin team when neither exists', async () => {
     mockTradePickAssetFindFirst.mockResolvedValue(null);
-    mockTeamFindFirstOrThrow.mockResolvedValue({ handle: 'origin-team' });
+    mockTeamFindFirst.mockResolvedValue({ handle: 'origin-team' });
     mockAuctionResultFindFirst.mockResolvedValue(null);
     const result = await resolvePickHolder(client, 1, 3, 2027, 1);
     expect(result).toEqual({ holderTeamId: 3, eventKind: 'default', eventId: null });
+  });
+
+  it('rejects with TEAM_NOT_FOUND for a stale or invalid originTeamId, instead of a raw Prisma error', async () => {
+    // A caller can pass a stale/hand-crafted originTeamId (e.g. a manually-entered off-book pick
+    // referencing a team that was somehow removed). `findFirstOrThrow` would throw a raw Prisma
+    // P2025 here, which callers up the stack don't know how to map to a `DraftMutationResult` —
+    // an explicit `findFirst` + `DraftMutationFailure` keeps this in the typed error vocabulary.
+    mockTradePickAssetFindFirst.mockResolvedValue(null);
+    mockTeamFindFirst.mockResolvedValue(null);
+    await expect(resolvePickHolder(client, 1, 999, 2027, 1)).rejects.toThrow(DraftMutationFailure);
+    await expect(resolvePickHolder(client, 1, 999, 2027, 1)).rejects.toMatchObject({
+      code: 'TEAM_NOT_FOUND',
+    });
   });
 });
 
@@ -504,6 +522,7 @@ Expected: FAIL — `src/lib/pickOwnership.ts` doesn't exist.
 
 ```ts
 import type { Prisma, PrismaClient } from '@prisma/client';
+import { DraftMutationFailure } from '@/lib/draftMutation';
 
 type PrismaClientLike = Prisma.TransactionClient | PrismaClient;
 
@@ -531,20 +550,27 @@ export async function resolvePickHolder(
       trade: { deletedAt: null },
     },
     orderBy: { trade: { createdAt: 'desc' } },
-    select: { tradeId: true, trade: { select: { pickTeamId: true } } },
+    select: { tradeId: true, trade: { select: { budgetTeamId: true } } },
   });
   if (latestTrade) {
+    // budgetTeamId sent budget and received the pick — it's the new holder. pickTeamId (the
+    // seller) is only relevant to PICK_NOT_HELD, which checks who held the pick BEFORE this trade.
     return {
-      holderTeamId: latestTrade.trade.pickTeamId,
+      holderTeamId: latestTrade.trade.budgetTeamId,
       eventKind: 'trade',
       eventId: latestTrade.tradeId,
     };
   }
 
-  const origin = await client.team.findFirstOrThrow({
+  // findFirst + an explicit throw, not findFirstOrThrow — a stale or hand-crafted originTeamId
+  // (e.g. a manually-entered off-book pick) should surface as a typed DraftMutationFailure that
+  // callers already know how to handle, not a raw Prisma P2025 that propagates as an unhandled
+  // rejection past withActiveOwnedDraftMutation's DraftMutationFailure-only catch.
+  const origin = await client.team.findFirst({
     where: { id: originTeamId, draftId },
     select: { handle: true },
   });
+  if (!origin) throw new DraftMutationFailure('TEAM_NOT_FOUND');
 
   const win = await client.auctionResult.findFirst({
     where: {
@@ -637,7 +663,7 @@ git commit -m "Add resolvePickHolder and getGeneratedPickYear"
 Task 5 declared `jest.mock('@/lib/db', ...)` with only the `findFirst`/`aggregate` methods `resolvePickHolder`/`getGeneratedPickYear` need. `resolveAllPickHolders` also needs `tradePickAsset.findMany`, `auctionResult.findMany`, and `team.findMany`. Update the **same** mock declaration already in the file (don't add a second `jest.mock('@/lib/db', ...)` call — Jest only honors one per module) to:
 
 ```ts
-const mockTeamFindFirstOrThrow = jest.fn();
+const mockTeamFindFirst = jest.fn();
 const mockTradePickAssetFindFirst = jest.fn();
 const mockAuctionResultFindFirst = jest.fn();
 const mockPlayerAggregate = jest.fn();
@@ -647,7 +673,7 @@ const mockTeamFindMany = jest.fn();
 
 jest.mock('@/lib/db', () => ({
   getPrisma: () => ({
-    team: { findFirstOrThrow: mockTeamFindFirstOrThrow, findMany: mockTeamFindMany },
+    team: { findFirst: mockTeamFindFirst, findMany: mockTeamFindMany },
     tradePickAsset: {
       findFirst: mockTradePickAssetFindFirst,
       findMany: mockTradePickAssetFindMany,
@@ -670,7 +696,8 @@ describe('resolveAllPickHolders', () => {
         futurePickYear: 2027,
         futurePickRound: 1,
         tradeId: 42,
-        trade: { pickTeamId: 9, createdAt: new Date('2026-08-01T00:00:00Z') },
+        // budgetTeamId (9) is the holder — it sent budget and received the pick.
+        trade: { budgetTeamId: 9, createdAt: new Date('2026-08-01T00:00:00Z') },
       },
     ]);
     // auction: origin 3's whole 2027 package won by team 6 (covers rounds 1,2,3)
@@ -804,7 +831,7 @@ export async function resolveAllPickHolders(
         futurePickYear: true,
         futurePickRound: true,
         tradeId: true,
-        trade: { select: { pickTeamId: true, createdAt: true } },
+        trade: { select: { budgetTeamId: true, createdAt: true } },
       },
     }),
     client.auctionResult.findMany({
@@ -848,7 +875,8 @@ export async function resolveAllPickHolders(
       originTeamId: asset.originTeamId,
       futurePickYear: asset.futurePickYear,
       futurePickRound: round,
-      holderTeamId: asset.trade.pickTeamId,
+      // budgetTeamId is the new holder — it sent budget and received the pick.
+      holderTeamId: asset.trade.budgetTeamId,
       eventKind: 'trade',
       eventId: asset.tradeId,
     });
@@ -1049,6 +1077,8 @@ git add src/lib/tradeBudget.ts src/__tests__/tradeBudget.test.ts
 git commit -m "Add getTradeBudgetDeltaByTeamId"
 ```
 
+---
+
 ## Task 8: Wire `budgetDeltaByTeamId` into `computeDraftTeamStats` callers
 
 **Files:**
@@ -1078,6 +1108,14 @@ describe('trade budget delta reaches computeDraftTeamStats', () => {
   let teamBId: number;
 
   afterAll(async () => {
+    // If the `it` block throws before `draftId` is assigned, `draftId` stays `undefined` — and
+    // Prisma treats a `where` field set to `undefined` as "no filter on this field", which would
+    // turn `deleteMany({ where: { draftId } })` into "delete every trade/team row in the database."
+    // Guard against that instead of trusting the assignment always happened.
+    if (draftId === undefined) {
+      await disconnectPrisma();
+      return;
+    }
     await getPrisma().trade.deleteMany({ where: { draftId } });
     await getPrisma().team.deleteMany({ where: { draftId } });
     await getPrisma().draft.delete({ where: { id: draftId } });
@@ -1159,15 +1197,36 @@ Same change in `src/app/draft/[draftId]/budget/page.tsx`: add the import, comput
 
 Same change in `src/app/api/draft/[draftId]/nomination-data/route.ts`: add the import, compute `budgetDeltaByTeamId` before the `computeDraftTeamStats` call (currently at line 49, using `draft.id`), and pass it through.
 
-- [ ] **Step 6: Run test to verify it passes and typecheck**
+- [ ] **Step 6: Fix `src/__tests__/api/nomination-data.test.ts`'s mock client — it will otherwise throw**
 
-Run: `pnpm test:integration -- tradeBudgetDelta && pnpm tsc --noEmit`
-Expected: PASS, no new type errors.
+Step 5's change makes the route call `getTradeBudgetDeltaByTeamId(getPrisma(), draft.id)`, which internally calls `getPrisma().trade.findMany`. `src/__tests__/api/nomination-data.test.ts`'s `jest.mock('@/lib/db', ...)` (lines 30-36) provides only `team.findMany`, `playerWatchlist.findMany`, and `nominatedPlayer.findMany` — every test in that file will throw `TypeError: Cannot read properties of undefined (reading 'findMany')` once this task lands.
 
-- [ ] **Step 7: Commit**
+Add a `mockTradeFindMany` to the mock:
+
+```ts
+const mockTradeFindMany = jest.fn();
+
+jest.mock('@/lib/db', () => ({
+  getPrisma: () => ({
+    team: { findMany: (...args: unknown[]) => mockTeamFindMany(...args) },
+    playerWatchlist: { findMany: (...args: unknown[]) => mockWatchlistFindMany(...args) },
+    nominatedPlayer: { findMany: (...args: unknown[]) => mockNominatedFindMany(...args) },
+    trade: { findMany: (...args: unknown[]) => mockTradeFindMany(...args) },
+  }),
+}));
+```
+
+Add `mockTradeFindMany.mockResolvedValue([]);` to the file's `beforeEach` block alongside its other default mock resolutions, so every existing test keeps a zero trade delta by default.
+
+- [ ] **Step 7: Run the full unit suite for the touched file, the integration test, and typecheck**
+
+Run: `pnpm test nomination-data && pnpm test:integration -- tradeBudgetDelta && pnpm tsc --noEmit`
+Expected: PASS, no new type errors. (Running the unit suite here — not just the integration test — matters: the integration test alone doesn't touch `nomination-data.test.ts`, so it would silently pass while the real unit suite failed until Task 23's final `make check`.)
+
+- [ ] **Step 8: Commit**
 
 ```bash
-git add src/app/draft/\[draftId\]/teams/page.tsx src/app/draft/\[draftId\]/budget/page.tsx src/app/api/draft/\[draftId\]/nomination-data/route.ts src/__tests__/integration/tradeBudgetDelta.postgres.test.ts
+git add src/app/draft/\[draftId\]/teams/page.tsx src/app/draft/\[draftId\]/budget/page.tsx src/app/api/draft/\[draftId\]/nomination-data/route.ts src/__tests__/api/nomination-data.test.ts src/__tests__/integration/tradeBudgetDelta.postgres.test.ts
 git commit -m "Wire trade budget delta into computeDraftTeamStats callers"
 ```
 
@@ -1308,15 +1367,46 @@ return { teamId: team.id };
 
 At the top of `src/__tests__/bidMutation.test.ts`, add `const mockTradeFindMany = jest.fn();` alongside the other mock declarations, add `trade: { findMany: mockTradeFindMany }` to `mockTx`, and in `beforeEach`, add `mockTradeFindMany.mockResolvedValue([]);` alongside the other default mock resolutions (so pre-existing tests that don't care about trades keep passing with a zero delta).
 
-- [ ] **Step 5: Run tests to verify they pass**
+- [ ] **Step 5: Fix `src/__tests__/sleeper-roster-actions.test.ts`'s mock client — it will otherwise throw**
 
-Run: `pnpm test bidMutation`
-Expected: PASS, including all pre-existing tests in the file.
+`src/lib/sleeper-roster-actions.ts` calls `createBidInTransaction`, which now (via `assertBidLegalInTransaction`) calls `tx.trade.findMany` inside every transaction. That file's own `transactionClient()` factory (`src/__tests__/sleeper-roster-actions.test.ts:92-110`) has no `trade` key at all, so every test that reaches a bid creation — at minimum the ones around lines 287, 336, 347, 367, 408, 467 — will throw `TypeError: Cannot read properties of undefined (reading 'findMany')` once this task's change lands, even though this task never touches that file directly.
 
-- [ ] **Step 6: Commit**
+Add a `trade` key to `transactionClient()`:
+
+```ts
+function transactionClient() {
+  return {
+    team: {
+      findMany: mockTeamFindMany,
+      findFirst: mockTeamFindFirst,
+      updateMany: mockTeamUpdateMany,
+      update: mockTeamUpdate,
+    },
+    draft: { update: mockDraftUpdate },
+    player: { findMany: mockPlayerFindMany },
+    auctionResult: {
+      findMany: mockAuctionFindMany,
+      create: mockAuctionCreate,
+      createManyAndReturn: mockAuctionCreateManyAndReturn,
+    },
+    trade: { findMany: mockTradeFindMany },
+    bidAuditEvent: { create: mockBidAuditCreate },
+    nominatedPlayer: { deleteMany: mockNominationDeleteMany },
+  };
+}
+```
+
+Declare `const mockTradeFindMany = jest.fn();` alongside the file's other top-level mock declarations, and add `mockTradeFindMany.mockResolvedValue([]);` to the `beforeEach` block (around line 119, next to `mockAuctionFindMany.mockResolvedValue([]);`) so every existing test keeps a zero trade delta by default.
+
+- [ ] **Step 6: Run tests to verify they pass**
+
+Run: `pnpm test bidMutation sleeper-roster-actions`
+Expected: PASS, including all pre-existing tests in both files.
+
+- [ ] **Step 7: Commit**
 
 ```bash
-git add src/lib/bidMutation.ts src/__tests__/bidMutation.test.ts
+git add src/lib/bidMutation.ts src/__tests__/bidMutation.test.ts src/__tests__/sleeper-roster-actions.test.ts
 git commit -m "Account for trade budget delta in bid legality"
 ```
 
@@ -1705,6 +1795,8 @@ git add src/lib/tradeAudit.ts src/__tests__/tradeAudit.test.ts
 git commit -m "Add trade audit event helpers"
 ```
 
+---
+
 ## Task 12: `tradeMutation.ts` — `createTradeRecord`
 
 **Files:**
@@ -1760,8 +1852,7 @@ const mockTransaction = jest.fn();
 const mockExecuteRaw = jest.fn();
 const mockQueryRaw = jest.fn();
 const mockDraftFindFirst = jest.fn();
-const mockTeamFindFirst = jest.fn();
-const mockTeamFindFirstOrThrow = jest.fn();
+const mockTeamFindFirst = jest.fn(); // serves both the budget-legality lookup and resolvePickHolder's origin-team lookup — both now call `team.findFirst`, since Task 5 fixed resolvePickHolder to use `findFirst` + an explicit `TEAM_NOT_FOUND` throw instead of `findFirstOrThrow`
 const mockAuctionFindMany = jest.fn();
 const mockAuctionFindFirst = jest.fn();
 const mockTradeFindMany = jest.fn();
@@ -1775,7 +1866,7 @@ const mockTx = {
   $executeRaw: mockExecuteRaw,
   $queryRaw: mockQueryRaw,
   draft: { findFirst: mockDraftFindFirst },
-  team: { findFirst: mockTeamFindFirst, findFirstOrThrow: mockTeamFindFirstOrThrow },
+  team: { findFirst: mockTeamFindFirst },
   auctionResult: { findMany: mockAuctionFindMany, findFirst: mockAuctionFindFirst },
   trade: {
     findMany: mockTradeFindMany,
@@ -1815,10 +1906,11 @@ beforeEach(() => {
   );
   mockQueryRaw.mockResolvedValue([{ now: new Date('2026-08-02T00:00:00.000Z') }]);
   mockDraftFindFirst.mockResolvedValue(ACTIVE_DRAFT);
+  // Includes both `budget` (for assertTeamCanAbsorbBudgetChange) and `handle` (for
+  // resolvePickHolder's origin-team lookup) — the same mock now backs both call sites.
   mockTeamFindFirst.mockImplementation(({ where }: { where: { id: number } }) =>
-    Promise.resolve({ id: where.id, budget: 1000 }),
+    Promise.resolve({ id: where.id, budget: 1000, handle: 'origin-team' }),
   );
-  mockTeamFindFirstOrThrow.mockResolvedValue({ handle: 'origin-team' });
   mockAuctionFindMany.mockResolvedValue([]);
   mockAuctionFindFirst.mockResolvedValue(null);
   mockTradeFindMany.mockResolvedValue([]);
@@ -2058,6 +2150,8 @@ git add src/lib/tradeMutation.ts src/__tests__/tradeMutation.test.ts
 git commit -m "Add createTradeRecord"
 ```
 
+---
+
 ## Task 13: `tradeMutation.ts` — `updateTradeRecord`
 
 **Files:**
@@ -2145,6 +2239,21 @@ describe('updateTradeRecord', () => {
     });
     expect(result).toEqual({ ok: false, code: 'TRADE_NOT_FOUND' });
   });
+
+  it('preserves existing notes when the caller updates only the amount', async () => {
+    mockTradeFindFirst.mockResolvedValue({ ...EXISTING_TRADE, notes: 'Pre-deadline swap' });
+    const result = await updateTradeRecord({
+      userId: 'owner-1',
+      draftId: 4,
+      tradeId: 501,
+      budgetAmount: 60,
+      // notes intentionally omitted — this is the shape TradeHistoryList's amount-only edit sends
+    });
+    expect(result).toEqual({ ok: true, data: { tradeId: 501 } });
+    expect(mockTradeUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ notes: 'Pre-deadline swap' }) }),
+    );
+  });
 });
 ```
 
@@ -2202,7 +2311,11 @@ export async function updateTradeRecord(
 
     const updated = await tx.trade.update({
       where: { id: existing.id },
-      data: { budgetAmount: input.budgetAmount, notes: input.notes ?? null },
+      // `input.notes` is optional — the UI's amount-only edit flow doesn't always resend notes, and
+      // `?? null` here would silently wipe them on every amount correction. Falling back to the
+      // existing value means "notes omitted" preserves them, while an explicit `''` (deliberately
+      // clearing them) still passes through, since `??` only substitutes on `null`/`undefined`.
+      data: { budgetAmount: input.budgetAmount, notes: input.notes ?? existing.notes },
     });
 
     await createTradeAuditEvent(tx, {
@@ -2414,7 +2527,7 @@ git commit -m "Add deleteTradeRecord"
 
 **Interfaces:**
 
-- Consumes: `assertTeamCanAbsorbBudgetChange` (Task 12), `assertPicksCurrentlyHeldBy`-equivalent check (reimplemented against `pickTeamId` per pick — restore must re-check `PICK_NOT_HELD`, not reuse a stale approval).
+- Consumes: `assertTeamCanAbsorbBudgetChange` (Task 12), `assertPicksCurrentlyHeldBy` (Task 12) and `assertNoLaterTradeRetradesAnyPick` (Task 14) — restore must re-check both `PICK_NOT_HELD` and `PICK_ALREADY_RETRADED`, not reuse a stale approval, per spec's "only `restore` needs to re-check it" (spec line 396-398).
 - Produces:
 
   ```ts
@@ -2459,11 +2572,20 @@ describe('restoreTradeRecord', () => {
     expect(result).toEqual({ ok: false, code: 'RESTORE_WINDOW_EXPIRED' });
   });
 
-  it('rejects with PICK_NOT_HELD when the pick resolves elsewhere since deletion', async () => {
-    mockTradePickAssetFindFirst.mockResolvedValue({
-      tradeId: 900,
-      trade: { pickTeamId: 12 }, // someone else picked it up via a different trade after this one was deleted
-    });
+  it('rejects with PICK_ALREADY_RETRADED when a later active trade re-trades one of the picks', async () => {
+    // assertNoLaterTradeRetradesAnyPick runs first and only checks truthiness of the result, so a
+    // minimal `{ id: 900 }` is enough regardless of its actual select shape.
+    mockTradePickAssetFindFirst.mockResolvedValue({ id: 900 });
+    const result = await restoreTradeRecord({ userId: 'owner-1', draftId: 4, tradeId: 501 });
+    expect(result).toEqual({ ok: false, code: 'PICK_ALREADY_RETRADED' });
+  });
+
+  it('rejects with PICK_NOT_HELD when the pick was won at auction by a different team since deletion', async () => {
+    // No later trade re-trades it (assertNoLaterTradeRetradesAnyPick passes), but it was won
+    // outright at auction by team 20 in the meantime — team 9 (this trade's pickTeamId) no longer
+    // holds it, so restoring must still fail, just with the more specific PICK_NOT_HELD code.
+    mockTradePickAssetFindFirst.mockResolvedValue(null);
+    mockAuctionFindFirst.mockResolvedValue({ id: 777, teamId: 20 });
     const result = await restoreTradeRecord({ userId: 'owner-1', draftId: 4, tradeId: 501 });
     expect(result).toEqual({ ok: false, code: 'PICK_NOT_HELD' });
   });
@@ -2512,6 +2634,18 @@ export async function restoreTradeRecord(
       throw new DraftMutationFailure('RESTORE_WINDOW_EXPIRED');
     }
 
+    // Restore re-establishes a pick assertion that may since have been superseded — re-check both
+    // failure modes, not just PICK_NOT_HELD, so a later active re-trade surfaces its specific code.
+    await assertNoLaterTradeRetradesAnyPick(
+      tx,
+      draft.id,
+      trade,
+      trade.pickAssets.map((asset) => ({
+        originTeamId: asset.originTeamId,
+        futurePickYear: asset.futurePickYear,
+        futurePickRound: asset.futurePickRound,
+      })),
+    );
     await assertPicksCurrentlyHeldBy(
       tx,
       draft.id,
@@ -2560,6 +2694,8 @@ git add src/lib/tradeMutation.ts src/__tests__/tradeMutation.test.ts
 git commit -m "Add restoreTradeRecord"
 ```
 
+---
+
 ## Task 16: Server actions — `logTrade`, `updateTrade`, `deleteTrade`, `restoreTrade`
 
 **Files:**
@@ -2602,7 +2738,7 @@ git commit -m "Add restoreTradeRecord"
 
 - [ ] **Step 1: Write the failing tests**
 
-Open `src/__tests__/actions.test.ts` first and read its existing `jest.mock(...)` calls in full — it already mocks `@/auth`, `next/cache`, `@/lib/db`, and `@/lib/bidMutation` for the existing `logBid`/`updateBid`/`deleteBid`/`restoreBid` tests (importing `@/lib/actions` pulls in all of those transitively, including `@/lib/db`, even though this feature's own actions never call `getPrisma()` directly — match the file's existing mock set exactly rather than reconstructing a partial one). Add a `jest.mock('@/lib/tradeMutation', ...)` block alongside the existing ones, and add the trade-specific mocks and tests to the same file, reusing its existing `mockAuth`/`mockRevalidatePath` declarations rather than redeclaring them:
+Open `src/__tests__/actions.test.ts` first and read its existing `jest.mock(...)` calls in full — it already mocks `@/auth`, `next/cache`, `@/lib/db`, and `@/lib/bidMutation` for the existing `logBid`/`updateBid`/`deleteBid`/`restoreBid` tests (importing `@/lib/actions` pulls in all of those transitively, including `@/lib/db`, even though this feature's own actions never call `getPrisma()` directly — match the file's existing mock set exactly rather than reconstructing a partial one). The file's top-level `import { logBid, updateBid, deleteBid, restoreBid } from '@/lib/actions';` also needs `logTrade, updateTrade, deleteTrade, restoreTrade` added to that same named-import list — the test bodies below reference all four by name. Add a `jest.mock('@/lib/tradeMutation', ...)` block alongside the existing ones, and add the trade-specific mocks and tests to the same file, reusing its existing `mockAuth`/`mockRevalidatePath` declarations rather than redeclaring them:
 
 ```ts
 const mockCreateTradeRecord = jest.fn();
@@ -2778,7 +2914,7 @@ git commit -m "Add trade server actions"
 
 - Modify: `src/lib/sleeper-roster-actions.ts` (around line 411, inside the batch loop calling `createBidInTransaction`)
 - Modify: `src/lib/bidMutation.ts` (`assertBidLegalInTransaction` needs an optional pre-fetched delta to avoid re-querying per row)
-- Test: `src/__tests__/bidMutation.test.ts` (new assertion added below); `src/__tests__/sleeper-roster-actions.test.ts` re-run unmodified as a regression check (see Step 5) — this task doesn't add new cases to it
+- Test: `src/__tests__/bidMutation.test.ts` (new assertion added below); `src/__tests__/sleeper-roster-actions.test.ts` re-run unmodified as a regression check (see Step 5) — this task doesn't add new cases to it. Its `transactionClient()` factory already has a `trade` mock key from Task 9 Step 5; this task doesn't need to touch it again, since a prefetched map bypasses `tx.trade.findMany` entirely for these calls.
 
 **Interfaces:**
 
@@ -2920,6 +3056,8 @@ Expected: no new errors.
 git add src/lib/bidMutation.ts src/lib/sleeper-roster-actions.ts src/__tests__/bidMutation.test.ts
 git commit -m "Avoid re-querying budget delta per row in Sleeper catch-up batch"
 ```
+
+---
 
 ## Task 18: `futureCapitalByHandle` — grouping-aware valuation and `dynamicPickValues.ts` rewiring
 
@@ -3357,7 +3495,7 @@ export async function getActiveDraftPlayers({
     getPrisma().player.findMany({ where: { draftId }, orderBy: { sfRank: 'asc' } }),
     getPrisma().draft.findUnique({
       where: { id: draftId },
-      select: { activeProjectionValueSetId: true, playerValueSourceBudget: true },
+      select: { activeProjectionValueSetId: true, playerValueSourceBudget: true, budget: true },
     }),
     getPrisma().team.findMany({ where: { draftId }, select: { id: true, handle: true } }),
     getGeneratedPickYear(getPrisma(), draftId),
@@ -3392,9 +3530,17 @@ export async function getActiveDraftPlayers({
     resolvedPicks,
     teamHandleById: new Map(teams.map((team) => [team.id, team.handle])),
     baselines,
+    // PACKAGE_BASELINE/ROUND_BASELINES (used only in the no-generated-year-data fallback branch
+    // inside computeFutureCapitalByHandle) are denominated in the $1,000 ranking-source economy,
+    // same as PKG_VALUES — matching CLAUDE.md's documented fallback-value scaling formula
+    // (`Draft.budget / Draft.playerValueSourceBudget`), not `DEFAULT_RANKING_SOURCE_BUDGET`, which
+    // is only the *default* source budget when a draft doesn't record its own. The previous version
+    // of this call divided `playerValueSourceBudget` by `DEFAULT_RANKING_SOURCE_BUDGET` and never
+    // looked at `draft.budget` at all — correct only by coincidence for the common $1,000-source,
+    // $1,000-draft case, and silently wrong for any other draft budget.
     fallbackScale: getBudgetScale(
-      DEFAULT_RANKING_SOURCE_BUDGET,
       draft?.playerValueSourceBudget ?? DEFAULT_RANKING_SOURCE_BUDGET,
+      draft?.budget ?? DEFAULT_RANKING_SOURCE_BUDGET,
     ),
   });
 
@@ -3491,6 +3637,8 @@ git add src/lib/pickCapital.ts src/lib/dynamicPickValues.ts src/lib/activeDraftP
 git commit -m "Replace incremental futureCapital accumulation with a current-holdings snapshot"
 ```
 
+---
+
 ## Task 19: `ownerBudgetDelta` — value-sheet budget tracker and header
 
 **Files:**
@@ -3517,8 +3665,21 @@ describe('owner budget delta available for the value sheet', () => {
   let draftId: number;
 
   afterAll(async () => {
+    // `Draft.ownerTeamId` FKs to `Team` with `onDelete: Restrict` — this test sets it (line below),
+    // so it must be nulled before the team can be deleted, matching the existing convention in
+    // `bidRecovery.postgres.test.ts`/`draft-integrity.postgres.test.ts`/`draft-creation.postgres.test.ts`.
+    // Guard `draftId === undefined` (the `it` block throwing before assignment) — a `deleteMany`
+    // `where` with an `undefined` field means "no filter on this field," which would otherwise
+    // delete every trade/team row in the database instead of just this test's rows.
+    if (draftId === undefined) {
+      await disconnectPrisma();
+      return;
+    }
     await getPrisma().trade.deleteMany({ where: { draftId } });
-    await getPrisma().team.deleteMany({ where: { draftId } });
+    await Promise.all([
+      getPrisma().draft.update({ where: { id: draftId }, data: { ownerTeamId: null } }),
+      getPrisma().team.deleteMany({ where: { draftId } }),
+    ]);
     await getPrisma().draft.delete({ where: { id: draftId } });
     await disconnectPrisma();
   });
@@ -3661,6 +3822,8 @@ git add src/app/draft/\[draftId\]/page.tsx src/components/AuctionSheet/AuctionSh
 git commit -m "Reflect trade budget delta in the value sheet's own budget tracker"
 ```
 
+---
+
 ## Task 20: `tradePicker.ts` — tradeable-picks data loader
 
 **Files:**
@@ -3686,14 +3849,24 @@ git commit -m "Reflect trade budget delta in the value sheet's own budget tracke
     draftId: number,
     pickTeamId: number,
   ): Promise<KnownPickOption[]>;
+
+  export async function getTradeablePicksForAllTeams(
+    client: Prisma.TransactionClient | PrismaClient,
+    draftId: number,
+  ): Promise<{
+    generatedPickYear: number | null;
+    tradeablePicksByTeamId: Record<number, KnownPickOption[]>;
+  }>;
   ```
 
   Per the brainstorming decision that the trade-entry picker never shows a "package" concept — every option is a single round, even when a team happens to hold all three rounds of one origin/year together (that grouping only applies to `/teams` display and valuation, Task 18, never to this picker).
 
+  `getTradeablePicksForAllTeams` exists because `/teams` (Task 21) needs every team's tradeable-picks list at once to populate `TradeModal`'s picker for whichever card the operator clicks. Calling `getTradeablePicksForTeam` once per team would run `resolveAllPickHolders` (itself 3 queries) once per team — for 12 teams, roughly 24-36 redundant queries returning the same underlying data every time. `getTradeablePicksForAllTeams` resolves everything once and buckets it by holder in memory instead.
+
 - [ ] **Step 1: Write the failing tests**
 
 ```ts
-import { getTradeablePicksForTeam } from '@/lib/tradePicker';
+import { getTradeablePicksForAllTeams, getTradeablePicksForTeam } from '@/lib/tradePicker';
 
 const mockGetGeneratedPickYear = jest.fn();
 const mockResolveAllPickHolders = jest.fn();
@@ -3736,6 +3909,46 @@ describe('getTradeablePicksForTeam', () => {
       { originTeamId: 9, originHandle: 'origin-team', futurePickYear: 2027, futurePickRound: 2 },
       { originTeamId: 9, originHandle: 'origin-team', futurePickYear: 2027, futurePickRound: 3 },
     ]);
+  });
+});
+
+describe('getTradeablePicksForAllTeams', () => {
+  it('returns an empty map when no future-pick year has been generated', async () => {
+    mockGetGeneratedPickYear.mockResolvedValue(null);
+    const result = await getTradeablePicksForAllTeams(client, 1);
+    expect(result).toEqual({ generatedPickYear: null, tradeablePicksByTeamId: {} });
+  });
+
+  it('buckets every team’s untouched and traded-for picks in a single pass', async () => {
+    mockGetGeneratedPickYear.mockResolvedValue(2027);
+    mockTeamFindMany.mockResolvedValue([
+      { id: 9, handle: 'origin-team' },
+      { id: 6, handle: 'other-team' },
+    ]);
+    mockResolveAllPickHolders.mockResolvedValue([
+      {
+        originTeamId: 9,
+        futurePickYear: 2027,
+        futurePickRound: 1,
+        holderTeamId: 6,
+        eventKind: 'trade',
+        eventId: 1,
+      },
+    ]);
+
+    const result = await getTradeablePicksForAllTeams(client, 1);
+
+    expect(result.generatedPickYear).toBe(2027);
+    expect(result.tradeablePicksByTeamId[9]).toEqual([
+      { originTeamId: 9, originHandle: 'origin-team', futurePickYear: 2027, futurePickRound: 2 },
+      { originTeamId: 9, originHandle: 'origin-team', futurePickYear: 2027, futurePickRound: 3 },
+    ]);
+    expect(result.tradeablePicksByTeamId[6]).toEqual([
+      { originTeamId: 9, originHandle: 'origin-team', futurePickYear: 2027, futurePickRound: 1 },
+    ]);
+    // team.findMany and resolveAllPickHolders each run exactly once, not once per team.
+    expect(mockTeamFindMany).toHaveBeenCalledTimes(1);
+    expect(mockResolveAllPickHolders).toHaveBeenCalledTimes(1);
   });
 });
 ```
@@ -3794,6 +4007,43 @@ export async function getTradeablePicksForTeam(
   }
   return options;
 }
+
+export async function getTradeablePicksForAllTeams(
+  client: PrismaClientLike,
+  draftId: number,
+): Promise<{
+  generatedPickYear: number | null;
+  tradeablePicksByTeamId: Record<number, KnownPickOption[]>;
+}> {
+  const generatedPickYear = await getGeneratedPickYear(client, draftId);
+  if (generatedPickYear === null) return { generatedPickYear: null, tradeablePicksByTeamId: {} };
+
+  const [teams, resolvedPicks] = await Promise.all([
+    client.team.findMany({ where: { draftId }, select: { id: true, handle: true } }),
+    resolveAllPickHolders(client, draftId),
+  ]);
+  const teamHandleById = new Map(teams.map((team) => [team.id, team.handle]));
+  const touchedHolderByKey = new Map(
+    resolvedPicks
+      .filter((pick) => pick.futurePickYear === generatedPickYear)
+      .map((pick) => [`${pick.originTeamId}:${pick.futurePickRound}`, pick.holderTeamId]),
+  );
+
+  const tradeablePicksByTeamId: Record<number, KnownPickOption[]> = {};
+  for (const team of teams) tradeablePicksByTeamId[team.id] = [];
+  for (const team of teams) {
+    for (const round of [1, 2, 3] as const) {
+      const holderTeamId = touchedHolderByKey.get(`${team.id}:${round}`) ?? team.id;
+      tradeablePicksByTeamId[holderTeamId]?.push({
+        originTeamId: team.id,
+        originHandle: teamHandleById.get(team.id) ?? '',
+        futurePickYear: generatedPickYear,
+        futurePickRound: round,
+      });
+    }
+  }
+  return { generatedPickYear, tradeablePicksByTeamId };
+}
 ```
 
 - [ ] **Step 4: Run tests to verify they pass**
@@ -3805,7 +4055,7 @@ Expected: PASS
 
 ```bash
 git add src/lib/tradePicker.ts src/__tests__/tradePicker.test.ts
-git commit -m "Add getTradeablePicksForTeam"
+git commit -m "Add getTradeablePicksForTeam and getTradeablePicksForAllTeams"
 ```
 
 ---
@@ -3819,13 +4069,17 @@ git commit -m "Add getTradeablePicksForTeam"
 - Create: `src/components/TradeModal/TradeModal.tsx`
 - Create: `src/components/TradeModal/index.ts`
 - Modify: `src/components/RosterTracker/DossierCard.tsx` (adds the "Log Trade" entry point)
+- Modify: `src/components/RosterTracker/DossierFace.tsx` (renders `team.netBudgetDelta` when nonzero — see Step 6a; this is the only place in the UI that surfaces _why_ a team's remaining budget moved, per the spec's motivating example)
+- Modify: `src/components/RosterTracker/RosterTracker.tsx` (adds `draftId`, `tradeTeams`, `generatedPickYear`, `tradeablePicksByTeamId` props and the modal-open state; see Step 7)
 - Modify: `src/app/draft/[draftId]/teams/page.tsx` (loads picker data + team list, passes down)
-- Modify: `src/lib/tradePicker.ts` (exposes `getGeneratedPickYear` alongside the picks, so the modal knows where "off-book" starts)
-- Test: `src/components/TradeModal/__tests__/TradeModal.test.tsx`
+- Test: `src/__tests__/TradeModal.test.tsx` (co-located under `src/__tests__/`, per this plan's Global Constraints — not `src/components/TradeModal/__tests__/`)
+- Test: `src/__tests__/DossierCard.test.tsx` (existing — update every render call for the new required `onLogTrade` prop; see Step 6)
+- Test: `src/__tests__/RosterTracker.test.tsx` (existing — update every render call for the new required props; see Step 7)
+- Test: `src/__tests__/helpers/criticalRouteFixtures.tsx` (existing — `rosterTrackerProps()` needs the new required fields so `criticalRouteLandmarks.test.tsx` and `criticalRouteAccessibility.test.tsx`, which spread it, keep passing; see Step 7)
 
 **Interfaces:**
 
-- Consumes: `logTrade` server action (Task 16), `getTradeablePicksForTeam`/`KnownPickOption` (Task 20), `getGeneratedPickYear` (Task 5), `LeagueTeam` (existing `@/types`).
+- Consumes: `logTrade` server action (Task 16), `getTradeablePicksForAllTeams`/`KnownPickOption` (Task 20), `LeagueTeam` (existing `@/types`).
 - Produces:
 
   ```ts
@@ -3849,9 +4103,9 @@ git commit -m "Add getTradeablePicksForTeam"
 
   `DossierCardProps` gains `onLogTrade: (teamId: number) => void`.
 
-- [ ] **Step 1: Add `getGeneratedPickYear` to the picker page-data call**
+- [ ] **Step 1: Use Task 20's `getTradeablePicksForAllTeams` for the page-data call**
 
-In `src/lib/tradePicker.ts`, `getTradeablePicksForTeam` already calls `getGeneratedPickYear` internally but doesn't expose it — the caller (`teams/page.tsx`) needs it separately to pass into `TradeModal`. No change to `tradePicker.ts` itself is needed for this — `teams/page.tsx` (Step 7 below) calls `getGeneratedPickYear` directly, once, alongside its existing per-team `getTradeablePicksForTeam` calls.
+No further change to `tradePicker.ts` is needed here — Task 20 already added `getTradeablePicksForAllTeams`, which resolves the generated-year boundary and every team's tradeable picks in one pass (avoiding the N+1 that a naive per-team loop over `getTradeablePicksForTeam` would cause across 12 teams). `teams/page.tsx` (Step 7 below) calls it once.
 
 - [ ] **Step 2: Write the failing component tests**
 
@@ -3862,6 +4116,9 @@ import { logTrade } from '@/lib/actions';
 
 jest.mock('@/lib/actions', () => ({ logTrade: jest.fn() }));
 const mockLogTrade = logTrade as jest.Mock;
+
+const mockRouterRefresh = jest.fn();
+jest.mock('next/navigation', () => ({ useRouter: () => ({ refresh: mockRouterRefresh }) }));
 
 const TEAMS = [
   { id: 7, handle: 'team-a', displayName: 'Team A' },
@@ -3909,6 +4166,37 @@ it('submits a trade with a checked known pick, initiating team as budget-sender 
     }),
   );
   await waitFor(() => expect(onClose).toHaveBeenCalled());
+  expect(mockRouterRefresh).toHaveBeenCalled();
+});
+
+it('shows a mapped error message and refreshes without closing when the mutation is rejected', async () => {
+  mockLogTrade.mockResolvedValue({ ok: false, code: 'TRADE_EXCEEDS_BUDGET' });
+  const onClose = jest.fn();
+
+  render(
+    <TradeModal
+      draftId={4}
+      teams={TEAMS}
+      initialTeamId={7}
+      generatedPickYear={2027}
+      tradeablePicksByTeamId={PICKS_BY_TEAM}
+      isOpen
+      onClose={onClose}
+    />,
+  );
+
+  fireEvent.change(screen.getByTestId('trade-counterparty-select'), { target: { value: '9' } });
+  fireEvent.change(screen.getByTestId('trade-budget-amount-input'), { target: { value: '80' } });
+  fireEvent.click(screen.getByTestId('trade-pick-checkbox-9:2027:1'));
+  fireEvent.click(screen.getByTestId('trade-submit-button'));
+
+  await waitFor(() =>
+    expect(screen.getByTestId('trade-modal-error')).toHaveTextContent(
+      'This trade would leave a team without enough budget for its roster.',
+    ),
+  );
+  expect(onClose).not.toHaveBeenCalled();
+  expect(mockRouterRefresh).toHaveBeenCalled();
 });
 
 it('swaps direction so the initiating team sends picks instead of budget', async () => {
@@ -4017,14 +4305,28 @@ Expected: FAIL — `src/components/TradeModal/TradeModal.tsx` doesn't exist.
 
 - [ ] **Step 4: Implement `TradeModal.tsx`**
 
+Matches the repo's established HARD-010 mutation pattern (`src/components/BidHistory/BidHistoryPanel.tsx`): `try/catch` inside `startTransition`, `router.refresh()` on every outcome (success, failure, and thrown error alike — the spec requires this so `/teams`, `/budget`, and the value sheet all reflect the new trade immediately), and a `DraftMutationCode`→message mapper instead of rendering the raw code.
+
 ```tsx
 'use client';
 
 import { useEffect, useMemo, useRef, useState, useTransition } from 'react';
+import { useRouter } from 'next/navigation';
 import { logTrade } from '@/lib/actions';
 import MutationStatus from '@/components/MutationStatus';
 import type { LeagueTeam } from '@/types';
 import type { KnownPickOption } from '@/lib/tradePicker';
+
+function getTradeFailureMessage(code: string): string {
+  const messages: Record<string, string> = {
+    INVALID_INPUT: 'Check the counterparty, amount, and at least one selected pick.',
+    TEAM_NOT_FOUND: 'One of the selected teams could not be found. Refresh and try again.',
+    TRADE_EXCEEDS_BUDGET: 'This trade would leave a team without enough budget for its roster.',
+    PICK_NOT_HELD: 'The pick-side team no longer holds one of the selected picks.',
+    DRAFT_COMPLETE: 'This draft is complete and cannot be changed.',
+  };
+  return messages[code] ?? 'Unable to log this trade. Refresh and try again.';
+}
 
 export interface ManualPickEntry {
   originTeamId: number;
@@ -4069,10 +4371,10 @@ export default function TradeModal({
   const [manualOriginTeamId, setManualOriginTeamId] = useState<number | ''>('');
   const [manualYear, setManualYear] = useState('');
   const [manualRound, setManualRound] = useState<1 | 2 | 3>(1);
-  const [statusMessage, setStatusMessage] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
   const [isPending, startTransition] = useTransition();
   const dialogRef = useRef<HTMLDivElement>(null);
+  const router = useRouter();
 
   useEffect(() => {
     if (isOpen) dialogRef.current?.focus();
@@ -4153,21 +4455,27 @@ export default function TradeModal({
       }));
 
     startTransition(async () => {
-      const result = await logTrade({
-        budgetTeamId,
-        pickTeamId,
-        budgetAmount: parsedAmount,
-        notes: undefined,
-        picks: [...knownPicks, ...manualPicks],
-        draftId,
-      });
-      if (result.ok) {
-        setStatusMessage('Trade logged.');
-        setErrorMessage('');
-        onClose();
-      } else {
-        setStatusMessage(`Could not log trade: ${result.code}`);
-        setErrorMessage(result.code);
+      try {
+        const result = await logTrade({
+          budgetTeamId,
+          pickTeamId,
+          budgetAmount: parsedAmount,
+          notes: undefined,
+          picks: [...knownPicks, ...manualPicks],
+          draftId,
+        });
+        if (result.ok) {
+          // The parent unmounts this modal on close, so there's no one left to read
+          // `statusMessage` — skip setting it and just refresh + close.
+          router.refresh();
+          onClose();
+          return;
+        }
+        setErrorMessage(getTradeFailureMessage(result.code));
+        router.refresh();
+      } catch {
+        setErrorMessage('Unable to log this trade. Refresh and try again.');
+        router.refresh();
       }
     });
   }
@@ -4186,7 +4494,7 @@ export default function TradeModal({
     >
       {errorMessage && (
         <p data-testid="trade-modal-error" role="alert">
-          Could not log trade: {errorMessage}
+          {errorMessage}
         </p>
       )}
       <form onSubmit={handleSubmit}>
@@ -4356,7 +4664,7 @@ export default function TradeModal({
           Cancel
         </button>
       </form>
-      <MutationStatus message={statusMessage} />
+      <MutationStatus message={errorMessage} />
     </div>
   );
 }
@@ -4388,41 +4696,184 @@ Add `onLogTrade: (teamId: number) => void;` to `DossierCardProps` and accept it 
 
 (match this to whichever existing button primitive the rest of the file already imports for its own action buttons, once you've confirmed what that is by reading the file — don't introduce a second one.)
 
-- [ ] **Step 7: Wire modal state and picker data into `teams/page.tsx`**
+Fix `src/__tests__/DossierCard.test.tsx`: every one of its `<DossierCard>` render calls will fail to typecheck once `onLogTrade` becomes required. The file already declares `const noop = () => {};` (line 83) and every render call ends with an `onToggle={...}` line. Add `onLogTrade={noop}` immediately after every `onToggle={...}` line:
 
-`teams/page.tsx` is a server component; the modal-open state has to live in a client wrapper. Add a new client component `src/components/RosterTracker/RosterTrackerWithTradeModal.tsx` (or, if `RosterTracker` is already a client component per its existing `'use client'` directive — check the file first — add the state directly there instead of introducing a wrapper) holding `openTradeTeamId: number | null` state, rendering `<TradeModal>` when non-null, and passing `onLogTrade={setOpenTradeTeamId}` down to each `DossierCard`.
-
-In `src/app/draft/[draftId]/teams/page.tsx`, load picker data and the generated-year boundary for every team and pass them down:
-
-```ts
-import { getTradeablePicksForTeam } from '@/lib/tradePicker';
-import { getGeneratedPickYear } from '@/lib/pickOwnership';
-
-// ...after `const teams = computeDraftTeamStats(...)`:
-const [generatedPickYear, tradeablePicksEntries] = await Promise.all([
-  getGeneratedPickYear(getPrisma(), draftId),
-  Promise.all(
-    rawTeams.map(
-      async (
-        team,
-      ): Promise<readonly [number, Awaited<ReturnType<typeof getTradeablePicksForTeam>>]> => [
-        team.id,
-        await getTradeablePicksForTeam(getPrisma(), draftId, team.id),
-      ],
-    ),
-  ),
-]);
-const tradeablePicksByTeamId = Object.fromEntries(tradeablePicksEntries);
+```bash
+perl -pi -e 's/(\s*)onToggle=\{(noop|onToggle)\}/$1onToggle={$2}$1onLogTrade={noop}/' src/__tests__/DossierCard.test.tsx
 ```
 
-(the explicit `readonly [number, ...]` return-type annotation on the mapped callback is required — without it, `Object.fromEntries` infers the array as `(number | KnownPickOption[])[]` and TypeScript rejects it.)
+Then run `pnpm test DossierCard` and confirm all pre-existing assertions still pass unchanged — this only adds a prop no existing test reads.
 
-`RosterTrackerProps.teams` already exists and is `TeamWithRoster[]` — passing a second, differently-shaped `teams` prop for the trade UI would collide with it. Name the new prop `tradeTeams: LeagueTeam[]` instead when threading it (and `generatedPickYear`, `tradeablePicksByTeamId`) into `<RosterTracker>`.
+- [ ] **Step 6a: Surface `netBudgetDelta` on the dossier face**
+
+Task 4 added `netBudgetDelta` to `TeamStats`/`TeamWithRoster` and Task 8 populated it, but nothing in the UI renders it yet — without this step, a team's remaining budget silently reflects its trades (correctly) with no visible explanation of why, which defeats the spec's stated reason for exposing the field at all (a manager checking a rival's card has no way to tell a budget swing came from a trade rather than overpaying). `DossierFace.tsx` already has a line showing `{tendency.buys} buys · ${tendency.totalSpend} · top ${tendency.topBuy}` (line 122-124) — append the delta there when nonzero:
+
+```tsx
+<div className="mt-1.5 font-mono text-[11px] text-muted-foreground tabular-nums">
+  {tendency.buys} buys · ${tendency.totalSpend} · top ${tendency.topBuy}
+  {team.netBudgetDelta !== 0 && (
+    <span
+      data-testid={`dossier-trade-delta-${team.id}${testIdSuffix}`}
+      style={{ color: team.netBudgetDelta > 0 ? 'var(--age-young)' : 'var(--age-old)' }}
+    >
+      {' '}
+      · {team.netBudgetDelta > 0 ? '+' : ''}
+      {team.netBudgetDelta} trades
+    </span>
+  )}
+</div>
+```
+
+`DossierFace` has no dedicated test file of its own today — it's exercised indirectly through `DossierCard.test.tsx`, which already has `team()`/`tendency()` fixture helpers (see Step 6's fix above) and renders `<DossierCard>` (which renders `DossierFace` internally). Add two cases there:
+
+```tsx
+it('shows the trade budget delta when nonzero', () => {
+  render(
+    <DossierCard
+      team={team({ netBudgetDelta: -80 })}
+      tendency={tendency()}
+      isOwner={false}
+      isExpanded={false}
+      onToggle={noop}
+      onLogTrade={noop}
+    />,
+  );
+  expect(screen.getByTestId('dossier-trade-delta-1')).toHaveTextContent('-80 trades');
+});
+
+it('omits the trade delta badge when zero', () => {
+  render(
+    <DossierCard
+      team={team({ netBudgetDelta: 0 })}
+      tendency={tendency()}
+      isOwner={false}
+      isExpanded={false}
+      onToggle={noop}
+      onLogTrade={noop}
+    />,
+  );
+  expect(screen.queryByTestId('dossier-trade-delta-1')).not.toBeInTheDocument();
+});
+```
+
+`team()`'s base fixture (line 67-81) already has a `netBudgetDelta: 0` default from Task 4 Step 6, so `team({ netBudgetDelta: -80 })` above just overrides it for these two cases. Run `pnpm test DossierCard` to confirm both the new and pre-existing cases pass.
+
+- [ ] **Step 7: Wire modal state and picker data into `RosterTracker` and `teams/page.tsx`**
+
+`teams/page.tsx` is a server component; the modal-open state has to live in the client component. `RosterTracker.tsx` (`src/components/RosterTracker/RosterTracker.tsx`) already has a `'use client'` directive at the top — add the state directly there rather than introducing a wrapper component.
+
+Add the four new fields to `RosterTrackerProps` (currently `{ teams: TeamWithRoster[]; tendencies: ManagerTendency[]; ownerHandle: string | null; startingLineup?: StartingSlot[] }` at lines 22-27 — `teams` already exists and is `TeamWithRoster[]`, so the new team list for the trade UI is named `tradeTeams` to avoid colliding with it):
+
+```ts
+import type { LeagueTeam } from '@/types';
+import type { KnownPickOption } from '@/lib/tradePicker';
+import TradeModal from '@/components/TradeModal';
+
+interface RosterTrackerProps {
+  teams: TeamWithRoster[];
+  tendencies: ManagerTendency[];
+  ownerHandle: string | null;
+  startingLineup?: StartingSlot[];
+  draftId: number;
+  tradeTeams: LeagueTeam[];
+  generatedPickYear: number | null;
+  tradeablePicksByTeamId: Record<number, KnownPickOption[]>;
+}
+```
+
+Destructure the new props alongside the existing ones (line 115-120), add `openTradeTeamId` state next to the existing `expanded`/`sortBy`/`sortDir` state (line 124-126):
+
+```ts
+const [openTradeTeamId, setOpenTradeTeamId] = useState<number | null>(null);
+```
+
+Add `onLogTrade={setOpenTradeTeamId}` to **both** existing `<DossierCard>` render sites — the desktop list at line 245-254 and the mobile grid at line 270-274 (grep `<DossierCard` to confirm you've found both; missing one leaves that layout's Log Trade button silently absent). Then render `<TradeModal>` once, near the end of the component's returned JSX (after the desktop/mobile conditional, still inside the outer `<main>`):
+
+```tsx
+{
+  openTradeTeamId !== null && (
+    <TradeModal
+      draftId={draftId}
+      teams={tradeTeams}
+      initialTeamId={openTradeTeamId}
+      generatedPickYear={generatedPickYear}
+      tradeablePicksByTeamId={tradeablePicksByTeamId}
+      isOpen
+      onClose={() => setOpenTradeTeamId(null)}
+    />
+  );
+}
+```
+
+In `src/app/draft/[draftId]/teams/page.tsx`, load picker data using Task 20's batch loader — **not** a per-team loop, which would run `resolveAllPickHolders` (3 queries) once per team instead of once total:
+
+```ts
+import { getTradeablePicksForAllTeams } from '@/lib/tradePicker';
+
+// ...after `const teams = computeDraftTeamStats(...)`:
+const { generatedPickYear, tradeablePicksByTeamId } = await getTradeablePicksForAllTeams(
+  getPrisma(),
+  draftId,
+);
+```
+
+The page's existing raw team list — `rawTeams` (line 21, from `getPrisma().team.findMany(...)`) — is already structurally a superset of `LeagueTeam` (`id`, `handle`, `displayName`, plus extra fields `LeagueTeam` doesn't need), so it can be passed directly without transformation. Change the return statement (currently lines 50-57) from:
+
+```tsx
+return (
+  <RosterTracker
+    teams={teams}
+    tendencies={tendencies}
+    ownerHandle={draft.ownerTeam?.handle ?? null}
+    startingLineup={startingLineup}
+  />
+);
+```
+
+to:
+
+```tsx
+return (
+  <RosterTracker
+    teams={teams}
+    tendencies={tendencies}
+    ownerHandle={draft.ownerTeam?.handle ?? null}
+    startingLineup={startingLineup}
+    draftId={draftId}
+    tradeTeams={rawTeams}
+    generatedPickYear={generatedPickYear}
+    tradeablePicksByTeamId={tradeablePicksByTeamId}
+  />
+);
+```
+
+Fix the two existing test surfaces that break from these new required props:
+
+1. `src/__tests__/RosterTracker.test.tsx` — every `<RosterTracker>` render call (17 in the file, all self-closing, none with children) needs the four new props. Since none of the existing tests read or assert on trade behavior, a shared empty-default object is enough:
+
+   ```ts
+   const TRADE_PROPS = {
+     draftId: 1,
+     tradeTeams: [],
+     generatedPickYear: null,
+     tradeablePicksByTeamId: {},
+   };
+   ```
+
+   Insert it near the file's other shared fixtures (next to `makeTeam`/`makeTendency`), then splice `{...TRADE_PROPS}` into every call:
+
+   ```bash
+   perl -0777 -pi -e 's/(<RosterTracker\b(?:(?!\/>).)*?)\/>/$1{...TRADE_PROPS} \/>/gs' src/__tests__/RosterTracker.test.tsx
+   ```
+
+   Run `pnpm test RosterTracker` afterward and confirm the pre-existing assertions are unaffected — spot-check a couple of the resulting render calls by eye (e.g. around the multi-prop calls at the `startingLineup` and `mockDesktop` tests) to confirm the regex placed `{...TRADE_PROPS}` before the closing `/>` correctly rather than mangling an existing prop line.
+
+2. `src/__tests__/helpers/criticalRouteFixtures.tsx` — its `rosterTrackerProps()` helper needs the same four fields added to whatever object it returns (read the file first to match its existing style — it likely already has a `teams`/`ownerHandle` shape to extend). `src/__tests__/criticalRouteLandmarks.test.tsx` and `src/__tests__/criticalRouteAccessibility.test.tsx` both spread this helper's return value into their own `<RosterTracker>` renders, so fixing it there covers both without further edits. Run `pnpm test criticalRoute` afterward to confirm.
 
 - [ ] **Step 8: Run tests to verify they pass**
 
-Run: `pnpm test TradeModal`
-Expected: PASS
+Run: `pnpm test TradeModal DossierCard RosterTracker criticalRoute`
+Expected: PASS — the new `TradeModal` tests, and every pre-existing test in the three files touched by this step's fallout.
 
 - [ ] **Step 9: Run full typecheck and lint**
 
@@ -4436,7 +4887,7 @@ Run `make dev`, open `/draft/[draftId]/teams`, click "Log Trade" on a team card.
 - [ ] **Step 11: Commit**
 
 ```bash
-git add src/components/TradeModal src/components/RosterTracker src/app/draft/\[draftId\]/teams/page.tsx
+git add src/components/TradeModal src/components/RosterTracker src/app/draft/\[draftId\]/teams/page.tsx src/__tests__/TradeModal.test.tsx src/__tests__/DossierCard.test.tsx src/__tests__/RosterTracker.test.tsx src/__tests__/helpers/criticalRouteFixtures.tsx
 git commit -m "Add trade-entry modal with direction control and off-book pick entry"
 ```
 
@@ -4451,7 +4902,7 @@ git commit -m "Add trade-entry modal with direction control and off-book pick en
 - Create: `src/components/TradeHistory/TradeHistoryList.tsx`
 - Create: `src/components/TradeHistory/index.ts`
 - Modify: `src/app/draft/[draftId]/teams/page.tsx`
-- Test: `src/components/TradeHistory/__tests__/TradeHistoryList.test.tsx`
+- Test: `src/__tests__/TradeHistoryList.test.tsx` (co-located under `src/__tests__/`, per this plan's Global Constraints — not `src/components/TradeHistory/__tests__/`)
 
 **Interfaces:**
 
@@ -4493,6 +4944,9 @@ const mockDeleteTrade = deleteTrade as jest.Mock;
 const mockUpdateTrade = updateTrade as jest.Mock;
 const mockRestoreTrade = restoreTrade as jest.Mock;
 
+const mockRouterRefresh = jest.fn();
+jest.mock('next/navigation', () => ({ useRouter: () => ({ refresh: mockRouterRefresh }) }));
+
 const TRADE: import('@/components/TradeHistory/TradeHistoryList').TradeHistoryEntry = {
   id: 501,
   budgetTeamHandle: 'team-a',
@@ -4514,6 +4968,7 @@ it('deletes a trade when Remove is clicked and confirmed', async () => {
   fireEvent.click(screen.getByTestId('trade-history-confirm-remove-501'));
 
   await waitFor(() => expect(mockDeleteTrade).toHaveBeenCalledWith({ id: 501, draftId: 4 }));
+  expect(mockRouterRefresh).toHaveBeenCalled();
 });
 
 it('shows a visible error, not just an sr-only one, when delete fails', async () => {
@@ -4524,7 +4979,9 @@ it('shows a visible error, not just an sr-only one, when delete fails', async ()
   fireEvent.click(screen.getByTestId('trade-history-confirm-remove-501'));
 
   const visibleError = await screen.findByTestId('trade-history-error-501');
-  expect(visibleError).toHaveTextContent(/PICK_ALREADY_RETRADED/i);
+  expect(visibleError).toHaveTextContent(
+    'A later trade already re-traded one of these picks. Remove that one first.',
+  );
   expect(visibleError.className).not.toMatch(/sr-only/);
 });
 
@@ -4574,16 +5031,32 @@ Expected: FAIL — `src/components/TradeHistory/TradeHistoryList.tsx` doesn't ex
 
 - [ ] **Step 3: Implement `TradeHistoryList.tsx`**
 
-Two-step Remove/Confirm-Remove guard, matching `BidModal`'s existing destructive-action pattern (HARD-010). Errors render both a visible message (per-row, plain text) and go through `MutationStatus` for the `aria-live` announcement — the two are not redundant, they serve sighted and screen-reader users respectively, and both are needed:
+Two-step Remove/Confirm-Remove guard, matching `BidModal`'s existing destructive-action pattern (HARD-010). Errors render both a visible message (per-row, plain text) and go through `MutationStatus` for the `aria-live` announcement — the two are not redundant, they serve sighted and screen-reader users respectively, and both are needed. Also matches `BidHistoryPanel.tsx`'s established pattern for the other two HARD-010 requirements this task's first draft missed: `try/catch` inside every `startTransition` (an action that throws must not become an unhandled rejection), `router.refresh()` on every outcome so `/teams`, `/budget`, and the value sheet all reflect the mutation immediately, and a ticking `now` via `useState` + a 1-second `setInterval` (mirroring `BidHistoryPanel.tsx:61,66-69`) rather than a value computed once at render — the previous version's `const now = nowMs ?? Date.now();` never advanced without an unrelated re-render, so the Restore button wouldn't visibly expire on its own. The interval only runs when `nowMs` isn't supplied, so tests that pin the clock stay deterministic:
 
 ```tsx
 'use client';
 
-import { useState, useTransition } from 'react';
+import { useEffect, useState, useTransition } from 'react';
+import { useRouter } from 'next/navigation';
 import { deleteTrade, restoreTrade, updateTrade } from '@/lib/actions';
 import MutationStatus from '@/components/MutationStatus';
 
 const RESTORE_WINDOW_MS = 30 * 60 * 1000;
+
+function getTradeMutationFailureMessage(code: string): string {
+  const messages: Record<string, string> = {
+    TRADE_NOT_FOUND: 'This trade could not be found. Refresh to see the current list.',
+    TRADE_NOT_DELETED: 'This trade is already active. Refresh to see the current list.',
+    TRADE_EXCEEDS_BUDGET: 'This change would leave a team without enough budget for its roster.',
+    PICK_NOT_HELD: 'One of the picks in this trade is no longer held by the expected team.',
+    PICK_ALREADY_RETRADED:
+      'A later trade already re-traded one of these picks. Remove that one first.',
+    RESTORE_WINDOW_EXPIRED: 'The 30-minute recovery window expired.',
+    INVALID_INPUT: 'Enter a valid, positive budget amount.',
+    DRAFT_COMPLETE: 'This draft is complete and cannot be changed.',
+  };
+  return messages[code] ?? 'Unable to complete this action. Refresh and try again.';
+}
 
 export interface TradeHistoryEntry {
   id: number;
@@ -4602,13 +5075,20 @@ export interface TradeHistoryListProps {
 }
 
 export default function TradeHistoryList({ draftId, trades, nowMs }: TradeHistoryListProps) {
-  const now = nowMs ?? Date.now();
+  const router = useRouter();
+  const [now, setNow] = useState(() => nowMs ?? Date.now());
   const [confirmingId, setConfirmingId] = useState<number | null>(null);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editAmount, setEditAmount] = useState('');
   const [errorByTradeId, setErrorByTradeId] = useState<Record<number, string>>({});
   const [statusMessage, setStatusMessage] = useState('');
   const [isPending, startTransition] = useTransition();
+
+  useEffect(() => {
+    if (nowMs !== undefined) return; // tests pin the clock — don't tick in that case
+    const intervalId = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(intervalId);
+  }, [nowMs]);
 
   function setRowError(tradeId: number, message: string | null) {
     setErrorByTradeId((prev) => {
@@ -4621,27 +5101,39 @@ export default function TradeHistoryList({ draftId, trades, nowMs }: TradeHistor
 
   function handleDelete(tradeId: number) {
     startTransition(async () => {
-      const result = await deleteTrade({ id: tradeId, draftId });
-      if (result.ok) {
-        setStatusMessage('Trade removed.');
-        setRowError(tradeId, null);
-      } else {
-        setStatusMessage(`Could not remove trade: ${result.code}`);
-        setRowError(tradeId, result.code);
+      try {
+        const result = await deleteTrade({ id: tradeId, draftId });
+        if (result.ok) {
+          setStatusMessage('Trade removed.');
+          setRowError(tradeId, null);
+        } else {
+          setStatusMessage(`Could not remove trade: ${result.code}`);
+          setRowError(tradeId, getTradeMutationFailureMessage(result.code));
+        }
+      } catch {
+        setRowError(tradeId, 'Unable to remove this trade. Refresh and try again.');
+      } finally {
+        setConfirmingId(null);
+        router.refresh();
       }
-      setConfirmingId(null);
     });
   }
 
   function handleRestore(tradeId: number) {
     startTransition(async () => {
-      const result = await restoreTrade({ id: tradeId, draftId });
-      if (result.ok) {
-        setStatusMessage('Trade restored.');
-        setRowError(tradeId, null);
-      } else {
-        setStatusMessage(`Could not restore trade: ${result.code}`);
-        setRowError(tradeId, result.code);
+      try {
+        const result = await restoreTrade({ id: tradeId, draftId });
+        if (result.ok) {
+          setStatusMessage('Trade restored.');
+          setRowError(tradeId, null);
+        } else {
+          setStatusMessage(`Could not restore trade: ${result.code}`);
+          setRowError(tradeId, getTradeMutationFailureMessage(result.code));
+        }
+      } catch {
+        setRowError(tradeId, 'Unable to restore this trade. Refresh and try again.');
+      } finally {
+        router.refresh();
       }
     });
   }
@@ -4654,18 +5146,24 @@ export default function TradeHistoryList({ draftId, trades, nowMs }: TradeHistor
   function handleSaveEdit(tradeId: number) {
     const parsedAmount = Number(editAmount);
     if (!Number.isInteger(parsedAmount) || parsedAmount <= 0) {
-      setRowError(tradeId, 'INVALID_INPUT');
+      setRowError(tradeId, 'Enter a valid, positive budget amount.');
       return;
     }
     startTransition(async () => {
-      const result = await updateTrade({ id: tradeId, budgetAmount: parsedAmount, draftId });
-      if (result.ok) {
-        setStatusMessage('Trade updated.');
-        setRowError(tradeId, null);
-        setEditingId(null);
-      } else {
-        setStatusMessage(`Could not update trade: ${result.code}`);
-        setRowError(tradeId, result.code);
+      try {
+        const result = await updateTrade({ id: tradeId, budgetAmount: parsedAmount, draftId });
+        if (result.ok) {
+          setStatusMessage('Trade updated.');
+          setRowError(tradeId, null);
+          setEditingId(null);
+        } else {
+          setStatusMessage(`Could not update trade: ${result.code}`);
+          setRowError(tradeId, getTradeMutationFailureMessage(result.code));
+        }
+      } catch {
+        setRowError(tradeId, 'Unable to update this trade. Refresh and try again.');
+      } finally {
+        router.refresh();
       }
     });
   }
@@ -4790,6 +5288,8 @@ export type { TradeHistoryEntry, TradeHistoryListProps } from './TradeHistoryLis
 
 - [ ] **Step 5: Load and pass trade history from `teams/page.tsx`**
 
+Add the import: `import TradeHistoryList, { type TradeHistoryEntry } from '@/components/TradeHistory';`
+
 ```ts
 const rawTrades = await getPrisma().trade.findMany({
   where: { draftId },
@@ -4834,9 +5334,11 @@ Run `make dev`, log a trade, confirm it appears in the history list. Edit its am
 - [ ] **Step 9: Commit**
 
 ```bash
-git add src/components/TradeHistory src/app/draft/\[draftId\]/teams/page.tsx
+git add src/components/TradeHistory src/app/draft/\[draftId\]/teams/page.tsx src/__tests__/TradeHistoryList.test.tsx
 git commit -m "Add trade history list with visible errors, edit, and expiring restore"
 ```
+
+---
 
 ## Task 23: Final verification
 
@@ -4905,3 +5407,20 @@ Completed against `docs/superpowers/specs/2026-07-28-budget-for-picks-trading-de
 - `TradePickInput` (Task 12) is the same shape reused unchanged through Tasks 16 (server action), 21 (`TradeModal`'s submitted picks).
 - `DraftMutationCode` additions (Task 3: `TRADE_NOT_FOUND`, `TRADE_NOT_DELETED`, `TRADE_EXCEEDS_BUDGET`, `PICK_NOT_HELD`, `PICK_ALREADY_RETRADED`, `PICK_HAS_ACTIVE_TRADES`) are each thrown from exactly the task that owns that failure mode and never referenced before their Task-3 definition.
 - `assertTeamCanAbsorbBudgetChange`'s `pendingDelta`/`excludeTradeId` parameters are used consistently across Tasks 12 (create: `-budgetAmount`, no exclude), 13 (edit: both signs, exclude self), 14 (delete: `0`, exclude self), 15 (restore: `-budgetAmount`, no exclude — matches create since the trade is currently excluded from the sum by virtue of being soft-deleted).
+
+**Round 3 (third independent review pass) fixes, applied after the notes above were originally written:**
+
+- **The most severe finding**: `resolvePickHolder`/`resolveAllPickHolders` (Tasks 5, 6) resolved a traded pick to `trade.pickTeamId` (the seller) instead of `trade.budgetTeamId` (the buyer) — a trade was a no-op for ownership as originally written. Fixed in both functions and their tests; the spec (line 151) had the same error and is now corrected too.
+- `restoreTradeRecord` (Task 15) now also calls `assertNoLaterTradeRetradesAnyPick` (previously only used by `deleteTradeRecord`), so restoring surfaces `PICK_ALREADY_RETRADED` instead of the less specific `PICK_NOT_HELD` when a later active trade already re-traded one of its picks — matching the spec's explicit requirement that restore re-check both failure modes.
+- `updateTradeRecord` (Task 13) no longer wipes a trade's `notes` when the caller updates only the amount (`notes: input.notes ?? existing.notes`, not `?? null`).
+- `TradeModal` and `TradeHistoryList` (Tasks 21, 22) now match the repo's HARD-010 mutation convention (`BidHistoryPanel.tsx`): `try/catch` inside every `startTransition`, `router.refresh()` on every outcome, and a `DraftMutationCode`→message mapper instead of raw codes. `TradeHistoryList`'s `now` is a ticking `useState` + 1-second interval (mirroring `BidHistoryPanel`) instead of a value computed once at render.
+- Added `getTradeablePicksForAllTeams` (Task 20) so `/teams` resolves every team's tradeable picks in one pass instead of once per team (an N+1 the original Task 21 wiring would have introduced).
+- `resolvePickHolder`'s origin-team lookup now uses `findFirst` + an explicit `TEAM_NOT_FOUND` throw instead of `findFirstOrThrow`, so a stale/invalid `originTeamId` surfaces as a typed `DraftMutationFailure` instead of an unhandled Prisma `P2025`.
+- Added a real `netBudgetDelta` display (`DossierFace.tsx`, Task 21 Step 6a) — the field existed since Task 4 but nothing rendered it, defeating its stated purpose.
+- Fixed the fallback-path economy scale in `pickCapital.ts`'s wiring (Task 18 Step 9): it was computing `playerValueSourceBudget / DEFAULT_RANKING_SOURCE_BUDGET` (right by coincidence only for $1,000-source, $1,000-budget drafts) instead of `draft.budget / draft.playerValueSourceBudget`.
+- Fixed two test files (`sleeper-roster-actions.test.ts` Task 9, `nomination-data.test.ts` Task 8) whose mock `@/lib/db` clients had no `trade` key, which this plan's own bid-legality and nomination-data changes would have made throw.
+- Fixed `RosterTracker.test.tsx`/`DossierCard.test.tsx`/`criticalRouteFixtures.tsx` (Task 21) missing the new required props those components gained.
+- Fixed Task 19's integration test `afterAll` deleting a `Team` before nulling the `Draft.ownerTeamId` that FKs to it (violates `onDelete: Restrict`).
+- Moved `TradeModal.test.tsx`/`TradeHistoryList.test.tsx` to `src/__tests__/`, matching this plan's own Global Constraints (they were originally placed under `src/components/*/__tests__/`).
+- Added an `undefined`-`draftId` guard to two integration tests' `afterAll` blocks (Tasks 8, 19) — an unguarded `deleteMany({ where: { draftId } })` with `draftId` still `undefined` after an early test failure deletes every row in the table, not just the test's own rows.
+- Threaded `draftId` all the way from `teams/page.tsx` through `RosterTracker` to `TradeModal` (previously required by `TradeModalProps` but never actually supplied by any caller).

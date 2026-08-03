@@ -90,6 +90,7 @@ export function budgetPressureViewProps() {
       rosterRemaining: 20,
       buyingPower: 660,
       pkgCount: 0,
+      netBudgetDelta: 0,
       avgAge: null,
     },
   ];
@@ -114,6 +115,7 @@ export function rosterTrackerProps() {
     rosterRemaining: 29,
     buyingPower: 860,
     pkgCount: 0,
+    netBudgetDelta: 0,
     avgAge: null,
     results: [
       {

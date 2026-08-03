@@ -15,6 +15,7 @@ const stats = (id: number, handle: string, buyingPower: number): TeamStats => ({
   rosterRemaining: 20,
   buyingPower,
   pkgCount: 0,
+  netBudgetDelta: 0,
   avgAge: null,
 });
 

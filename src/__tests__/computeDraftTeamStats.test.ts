@@ -55,4 +55,24 @@ describe('computeDraftTeamStats', () => {
     expect(stats.results[0].delta).toBeNull();
     expect(stats.avgAge).toBe(23);
   });
+
+  it('exposes the applied budget delta as netBudgetDelta', () => {
+    const result = computeDraftTeamStats({
+      teams: [{ id: 1, handle: 'a', displayName: null, budget: 1000, results: [] }],
+      players: [],
+      rosterSize: 30,
+      budgetDeltaByTeamId: new Map([[1, -80]]),
+    });
+    expect(result[0].netBudgetDelta).toBe(-80);
+    expect(result[0].remaining).toBe(920);
+  });
+
+  it('defaults netBudgetDelta to zero when no map is passed', () => {
+    const result = computeDraftTeamStats({
+      teams: [{ id: 1, handle: 'a', displayName: null, budget: 1000, results: [] }],
+      players: [],
+      rosterSize: 30,
+    });
+    expect(result[0].netBudgetDelta).toBe(0);
+  });
 });

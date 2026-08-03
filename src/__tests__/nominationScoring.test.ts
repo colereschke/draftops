@@ -26,6 +26,7 @@ const makeTeamStat = (overrides: Partial<TeamStats> = {}): TeamStats => ({
   rosterRemaining: 30,
   buyingPower: 970,
   pkgCount: 0,
+  netBudgetDelta: 0,
   avgAge: null,
   ...overrides,
 });

@@ -108,6 +108,7 @@ const TEAM_STATS: TeamStats = {
   rosterRemaining: 30,
   buyingPower: 970,
   pkgCount: 0,
+  netBudgetDelta: 0,
   avgAge: null,
 };
 const TENDENCY: ManagerTendency = {

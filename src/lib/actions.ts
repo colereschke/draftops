@@ -27,6 +27,13 @@ import {
   restoreBidRecord,
   updateBidRecord,
 } from '@/lib/bidMutation';
+import {
+  createTradeRecord,
+  deleteTradeRecord,
+  restoreTradeRecord,
+  updateTradeRecord,
+  type TradePickInput,
+} from '@/lib/tradeMutation';
 import { draftInputSchema, type DraftInput } from '@/lib/draftInputSchema';
 
 export async function logBid(data: {
@@ -95,6 +102,80 @@ export async function restoreBid(data: {
     bidId: data.id,
   });
   if (result.ok) revalidatePath(`/draft/${data.draftId}`);
+  return result;
+}
+
+function revalidateTradeAffectedPaths(draftId: number): void {
+  revalidatePath(`/draft/${draftId}`);
+  revalidatePath(`/draft/${draftId}/teams`);
+  revalidatePath(`/draft/${draftId}/budget`);
+}
+
+export async function logTrade(data: {
+  budgetTeamId: number;
+  pickTeamId: number;
+  budgetAmount: number;
+  notes?: string;
+  picks: TradePickInput[];
+  draftId: number;
+}): Promise<DraftMutationResult<{ tradeId: number }>> {
+  const session = await auth();
+  if (!session) return { ok: false, code: 'UNAUTHORIZED' };
+
+  const result = await createTradeRecord({ ...data, userId: session.user.id });
+  if (result.ok) revalidateTradeAffectedPaths(data.draftId);
+  return result;
+}
+
+export async function updateTrade(data: {
+  id: number;
+  budgetAmount: number;
+  notes?: string;
+  draftId: number;
+}): Promise<DraftMutationResult<{ tradeId: number }>> {
+  const session = await auth();
+  if (!session) return { ok: false, code: 'UNAUTHORIZED' };
+
+  const result = await updateTradeRecord({
+    userId: session.user.id,
+    draftId: data.draftId,
+    tradeId: data.id,
+    budgetAmount: data.budgetAmount,
+    notes: data.notes,
+  });
+  if (result.ok) revalidateTradeAffectedPaths(data.draftId);
+  return result;
+}
+
+export async function deleteTrade(data: {
+  id: number;
+  draftId: number;
+}): Promise<DraftMutationResult<null>> {
+  const session = await auth();
+  if (!session) return { ok: false, code: 'UNAUTHORIZED' };
+
+  const result = await deleteTradeRecord({
+    userId: session.user.id,
+    draftId: data.draftId,
+    tradeId: data.id,
+  });
+  if (result.ok) revalidateTradeAffectedPaths(data.draftId);
+  return result;
+}
+
+export async function restoreTrade(data: {
+  id: number;
+  draftId: number;
+}): Promise<DraftMutationResult<{ tradeId: number }>> {
+  const session = await auth();
+  if (!session) return { ok: false, code: 'UNAUTHORIZED' };
+
+  const result = await restoreTradeRecord({
+    userId: session.user.id,
+    draftId: data.draftId,
+    tradeId: data.id,
+  });
+  if (result.ok) revalidateTradeAffectedPaths(data.draftId);
   return result;
 }
 

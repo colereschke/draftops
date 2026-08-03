@@ -217,7 +217,7 @@ async function getTransactionTimestamp(tx: Prisma.TransactionClient): Promise<Da
   return clock[0].now;
 }
 
-async function assertNoLaterTradeRetradesAnyPick(
+export async function assertNoLaterTradeRetradesAnyPick(
   tx: Prisma.TransactionClient,
   draftId: number,
   trade: { id: number; createdAt: Date },

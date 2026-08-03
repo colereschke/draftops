@@ -32,6 +32,7 @@ interface RosterTrackerProps {
   tradeTeams: LeagueTeam[];
   generatedPickYear: number | null;
   tradeablePicksByTeamId: Record<number, KnownPickOption[]>;
+  isReadOnly?: boolean;
 }
 
 type SortKey = RosterTrackerSortKey;
@@ -129,6 +130,7 @@ export default function RosterTracker({
   tradeTeams,
   generatedPickYear,
   tradeablePicksByTeamId,
+  isReadOnly = false,
 }: RosterTrackerProps) {
   const searchParams = useSearchParams();
   const initialUrlState = parseRosterTrackerSearchParams(searchParams);
@@ -265,6 +267,7 @@ export default function RosterTracker({
                 mode="select"
                 onToggle={setSelectedTeamId}
                 onLogTrade={setOpenTradeTeamId}
+                isReadOnly={isReadOnly}
               />
             ))}
           </div>
@@ -289,6 +292,7 @@ export default function RosterTracker({
               isExpanded={expanded.has(team.id)}
               onToggle={toggle}
               onLogTrade={setOpenTradeTeamId}
+              isReadOnly={isReadOnly}
             />
           ))}
         </div>

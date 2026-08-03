@@ -383,4 +383,19 @@ describe('DossierCard', () => {
     expect(onLogTrade).toHaveBeenCalledWith(1);
     expect(onToggle).not.toHaveBeenCalled();
   });
+
+  it('hides the Log Trade control when isReadOnly is true', () => {
+    render(
+      <DossierCard
+        team={team()}
+        tendency={tendency()}
+        isOwner={false}
+        isExpanded={false}
+        onToggle={noop}
+        onLogTrade={noop}
+        isReadOnly
+      />,
+    );
+    expect(screen.queryByTestId('dossier-log-trade-1')).not.toBeInTheDocument();
+  });
 });

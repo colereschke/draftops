@@ -143,6 +143,22 @@ describe('RosterTracker', () => {
     expect(cards[0]).toHaveAttribute('data-testid', 'dossier-card-1'); // owner pinned first
   });
 
+  it('hides the Log Trade control on every card when isReadOnly is true', () => {
+    const teams = [makeTeam({ id: 2, handle: 'rival_b', displayName: 'B' }), makeTeam()];
+    const tendencies = [makeTendency({ teamId: 2, handle: 'rival_b' }), makeTendency()];
+    render(
+      <RosterTracker
+        teams={teams}
+        tendencies={tendencies}
+        ownerHandle="coreschke"
+        {...TRADE_PROPS}
+        isReadOnly
+      />,
+    );
+    expect(screen.queryByTestId('dossier-log-trade-1')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('dossier-log-trade-2')).not.toBeInTheDocument();
+  });
+
   it('expands a card to reveal the grouped roster drawer', async () => {
     render(
       <RosterTracker

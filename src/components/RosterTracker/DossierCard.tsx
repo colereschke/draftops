@@ -21,6 +21,7 @@ export interface DossierCardProps {
   mode?: 'expand' | 'select';
   onToggle: (id: number) => void;
   onLogTrade: (teamId: number) => void;
+  isReadOnly?: boolean;
 }
 
 export default function DossierCard({
@@ -32,6 +33,7 @@ export default function DossierCard({
   mode = 'expand',
   onToggle,
   onLogTrade,
+  isReadOnly = false,
 }: DossierCardProps) {
   return (
     <div
@@ -77,21 +79,25 @@ export default function DossierCard({
       {/* Sibling of the role="button" face — never nested inside it. A button inside a
           role="button" container is a nested-interactive-control a11y violation, and its
           click would also fire the face's own toggle handler. stopPropagation is
-          defense-in-depth in case a future edit moves this back inside. */}
-      <div className="flex justify-end px-4 pb-3">
-        <Button
-          type="button"
-          size="sm"
-          variant="outline"
-          data-testid={`dossier-log-trade-${team.id}`}
-          onClick={(event) => {
-            event.stopPropagation();
-            onLogTrade(team.id);
-          }}
-        >
-          Log Trade
-        </Button>
-      </div>
+          defense-in-depth in case a future edit moves this back inside. Hidden entirely
+          (not disabled) on a completed draft, matching the repo's isReadOnly convention
+          (e.g. WatchlistSidebar's action controls). */}
+      {!isReadOnly ? (
+        <div className="flex justify-end px-4 pb-3">
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            data-testid={`dossier-log-trade-${team.id}`}
+            onClick={(event) => {
+              event.stopPropagation();
+              onLogTrade(team.id);
+            }}
+          >
+            Log Trade
+          </Button>
+        </div>
+      ) : null}
 
       {isExpanded && (
         <div className="border-t border-border-subtle border-l-[3px] border-l-primary bg-background px-4 pt-2.5 pb-3.5">

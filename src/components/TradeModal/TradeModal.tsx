@@ -1,9 +1,10 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState, useTransition } from 'react';
+import { useMemo, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { logTrade } from '@/lib/actions';
 import MutationStatus from '@/components/MutationStatus';
+import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 import type { LeagueTeam } from '@/types';
 import type { KnownPickOption } from '@/lib/tradePicker';
 
@@ -68,16 +69,7 @@ export default function TradeModal({
   const [manualRound, setManualRound] = useState<1 | 2 | 3>(1);
   const [errorMessage, setErrorMessage] = useState('');
   const [isPending, startTransition] = useTransition();
-  const dialogRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
-
-  useEffect(() => {
-    if (isOpen) dialogRef.current?.focus();
-  }, [isOpen]);
-
-  function handleKeyDown(event: React.KeyboardEvent) {
-    if (event.key === 'Escape') onClose();
-  }
 
   const budgetTeamId = initiatingRole === 'budget' ? initialTeamId : counterpartyTeamId;
   const pickTeamId = initiatingRole === 'budget' ? counterpartyTeamId : initialTeamId;
@@ -105,8 +97,6 @@ export default function TradeModal({
     Number.isInteger(parsedManualYear) &&
     (generatedPickYear === null || parsedManualYear > generatedPickYear) &&
     parsedManualYear > 0;
-
-  if (!isOpen) return null;
 
   function toggleKnownPick(pick: KnownPickOption) {
     setCheckedKnownKeys((prev) => {
@@ -181,17 +171,18 @@ export default function TradeModal({
   const initialTeamHandle = teams.find((team) => team.id === initialTeamId)?.handle ?? '';
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/60 p-4">
-      <div
-        ref={dialogRef}
-        role="dialog"
-        aria-modal="true"
-        aria-label="Log trade"
+    <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent
+        showCloseButton={false}
         data-testid="trade-modal"
-        tabIndex={-1}
-        onKeyDown={handleKeyDown}
-        className="my-auto w-full max-w-[420px] rounded-lg border border-border-subtle bg-card p-4 text-foreground shadow-lg focus-visible:outline-none"
+        className="bg-card"
+        style={{
+          width: '420px',
+          maxWidth: 'calc(100vw - 32px)',
+        }}
       >
+        <DialogTitle className="sr-only">Log Trade</DialogTitle>
+
         <div className="font-label text-[10px] font-bold tracking-wide text-muted-foreground uppercase">
           Log Trade
         </div>
@@ -413,7 +404,7 @@ export default function TradeModal({
           </div>
         </form>
         <MutationStatus message={errorMessage} />
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }

@@ -5,16 +5,26 @@ import { getActiveDraftPlayers } from '@/lib/activeDraftPlayers';
 import type { StartingSlot } from '@/types';
 
 const mockPlayerFindMany = jest.fn();
+const mockPlayerAggregate = jest.fn();
 const mockDraftPlayerValueFindMany = jest.fn();
 const mockDraftFindUnique = jest.fn();
+const mockTeamFindMany = jest.fn();
+const mockTradePickAssetFindMany = jest.fn();
+const mockAuctionResultFindMany = jest.fn();
 
 jest.mock('@/lib/db', () => ({
   getPrisma: () => ({
     draft: { findUnique: (...args: unknown[]) => mockDraftFindUnique(...args) },
-    player: { findMany: (...args: unknown[]) => mockPlayerFindMany(...args) },
+    player: {
+      findMany: (...args: unknown[]) => mockPlayerFindMany(...args),
+      aggregate: (...args: unknown[]) => mockPlayerAggregate(...args),
+    },
     draftPlayerValue: {
       findMany: (...args: unknown[]) => mockDraftPlayerValueFindMany(...args),
     },
+    team: { findMany: (...args: unknown[]) => mockTeamFindMany(...args) },
+    tradePickAsset: { findMany: (...args: unknown[]) => mockTradePickAssetFindMany(...args) },
+    auctionResult: { findMany: (...args: unknown[]) => mockAuctionResultFindMany(...args) },
   }),
 }));
 
@@ -51,6 +61,10 @@ const input = {
 beforeEach(() => {
   jest.clearAllMocks();
   mockDraftFindUnique.mockResolvedValue({ activeProjectionValueSetId: 11 });
+  mockTeamFindMany.mockResolvedValue([]);
+  mockPlayerAggregate.mockResolvedValue({ _max: { futurePickYear: null } });
+  mockTradePickAssetFindMany.mockResolvedValue([]);
+  mockAuctionResultFindMany.mockResolvedValue([]);
 });
 
 describe('getActiveDraftPlayers', () => {

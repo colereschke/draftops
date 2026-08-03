@@ -58,6 +58,7 @@ describe('applyDynamicPickValues', () => {
         bid('Strong WR', 'strong', 70),
       ],
       startingLineup: lineup,
+      futureCapitalByHandle: new Map(),
     });
 
     const weakPackage = adjusted.find((player) => player.player === 'weak 2027 Pick Package')!;
@@ -66,6 +67,107 @@ describe('applyDynamicPickValues', () => {
     expect(
       adjusted.find((player) => player.player === 'strong 2027 Pick Package')!.budget,
     ).toBeLessThan(109);
+  });
+
+  it('produces the same result with an explicit futureCapitalByHandle as the old internal accumulation did', () => {
+    // Identical fixture to 'raises a weak origin team package...' above — both PKG rows are
+    // budget: 109 with no trades, so the old internally-accumulated capital and the new explicit
+    // map agree on the same number. Reusing that test's own (relative, not hardcoded) assertions
+    // is the actual regression check: adding the required `futureCapitalByHandle` parameter must
+    // not change this fixture's output at all when the map matches what accumulation would have
+    // derived organically.
+    const players = [
+      p({ player: 'Weak WR', budget: 100, projectedPoints: 40, vor: 2, age: 31 }),
+      p({
+        player: 'weak 2027 Pick Package',
+        pos: 'PKG',
+        team: 'weak',
+        budget: 109,
+        ceiling: 131,
+        floor: 75,
+        futurePickOriginHandle: 'weak',
+        futurePickAssetKind: 'package',
+        futurePickYear: 2027,
+      }),
+      p({ player: 'Strong QB', pos: 'QB', budget: 100, projectedPoints: 300, vor: 80, age: 24 }),
+      p({ player: 'Strong WR', budget: 100, projectedPoints: 260, vor: 70, age: 25 }),
+      p({
+        player: 'strong 2027 Pick Package',
+        pos: 'PKG',
+        team: 'strong',
+        budget: 109,
+        ceiling: 131,
+        floor: 75,
+        futurePickOriginHandle: 'strong',
+        futurePickAssetKind: 'package',
+        futurePickYear: 2027,
+      }),
+    ];
+
+    const adjusted = applyDynamicPickValues({
+      players,
+      bids: [
+        bid('Weak WR', 'weak', 150),
+        bid('Strong QB', 'strong', 60),
+        bid('Strong WR', 'strong', 70),
+      ],
+      startingLineup: lineup,
+      futureCapitalByHandle: new Map([
+        ['weak', 109],
+        ['strong', 109],
+      ]),
+    });
+
+    const weakPackage = adjusted.find((player) => player.player === 'weak 2027 Pick Package')!;
+    expect(weakPackage.budget).toBeGreaterThan(109);
+    expect(weakPackage.dynamicPickValue?.adjustment).toBe(weakPackage.budget - 109);
+    expect(
+      adjusted.find((player) => player.player === 'strong 2027 Pick Package')!.budget,
+    ).toBeLessThan(109);
+  });
+
+  it('lowers a package holder’s valuation as its future capital shrinks toward zero', () => {
+    // A maximal swing (full package capital down to none divested) rather than a partial one
+    // (e.g. down to a two-round remainder) — the rebuild-signal weighting is small enough that a
+    // partial swing can round to an identical dollar value depending on roster strength, which
+    // would make this test pass or fail for the wrong reason. Going to zero avoids that ambiguity:
+    // whatever the exact formula, more capital must never score lower than none.
+    const players = [
+      p({ player: 'Weak WR', budget: 100, projectedPoints: 40, vor: 2, age: 23 }),
+      p({
+        player: 'weak 2028 Pick Package',
+        pos: 'PKG',
+        team: 'weak',
+        budget: 109,
+        ceiling: 131,
+        floor: 75,
+        futurePickOriginHandle: 'weak',
+        futurePickAssetKind: 'package',
+        futurePickYear: 2028,
+      }),
+    ];
+    const bids = [bid('Weak WR', 'weak', 100)];
+
+    const withFullCapital = applyDynamicPickValues({
+      players,
+      bids,
+      startingLineup: lineup,
+      futureCapitalByHandle: new Map([['weak', 109]]),
+    });
+    const withNoCapital = applyDynamicPickValues({
+      players,
+      bids,
+      startingLineup: lineup,
+      futureCapitalByHandle: new Map(), // fully divested — no entry for 'weak' at all
+    });
+
+    const withFullCapitalBudget = withFullCapital.find(
+      (player) => player.player === 'weak 2028 Pick Package',
+    )!.budget;
+    const withNoCapitalBudget = withNoCapital.find(
+      (player) => player.player === 'weak 2028 Pick Package',
+    )!.budget;
+    expect(withNoCapitalBudget).toBeLessThan(withFullCapitalBudget);
   });
 
   it('does not adjust future pick rows without enough origin-team data', () => {
@@ -83,7 +185,12 @@ describe('applyDynamicPickValues', () => {
       }),
     ];
 
-    const [pkg] = applyDynamicPickValues({ players, bids: [], startingLineup: lineup });
+    const [pkg] = applyDynamicPickValues({
+      players,
+      bids: [],
+      startingLineup: lineup,
+      futureCapitalByHandle: new Map(),
+    });
 
     expect(pkg.budget).toBe(109);
     expect(pkg.dynamicPickValue?.direction).toBe('flat');
@@ -128,6 +235,7 @@ describe('applyDynamicPickValues', () => {
       players,
       bids: [bid('Overpay WR', 'overpay', 1000), bid('Discount QB', 'discount', 1)],
       startingLineup: lineup,
+      futureCapitalByHandle: new Map(),
     });
 
     expect(adjusted.find((player) => player.player === 'overpay 2028 Pick Package')!.budget).toBe(
@@ -181,6 +289,12 @@ describe('applyDynamicPickValues', () => {
         bid('Other Weak WR', 'other-weak', 100),
       ],
       startingLineup: lineup,
+      // Not `new Map()` like the other pre-trading call sites: this test's `'extra pick'` bid
+      // exists specifically so the old accumulation path gave `'weak'` exactly 75 of capital
+      // (a PICK row with budget 75 and no baseBudget), which is what makes its +1 assertion
+      // hold. Passing the equivalent value explicitly preserves the test's meaning under the
+      // snapshot model instead of silently zeroing the signal it claims to exercise.
+      futureCapitalByHandle: new Map([['weak', 75]]),
     });
 
     expect(adjusted.find((player) => player.player === 'weak 2028 Pick Package')!.budget).toBe(
@@ -216,6 +330,7 @@ describe('applyDynamicPickValues', () => {
       players,
       bids: [bid('Adjusted QB', 'origin', 120)],
       startingLineup: lineup,
+      futureCapitalByHandle: new Map(),
     });
 
     expect(
@@ -294,6 +409,7 @@ describe('applyDynamicPickValues', () => {
         bid('Ben Sinnott', 'overpay-team', 1),
       ],
       startingLineup: lineup,
+      futureCapitalByHandle: new Map(),
     });
 
     expect(adjusted.find((player) => player.player === "overpay-team's 2027 package")!.budget).toBe(
@@ -329,6 +445,7 @@ describe('applyDynamicPickValues', () => {
       players,
       bids: origins.map((origin) => bid(`${origin} QB`, origin, 1000)),
       startingLineup: lineup,
+      futureCapitalByHandle: new Map(),
     });
 
     for (const origin of origins) {

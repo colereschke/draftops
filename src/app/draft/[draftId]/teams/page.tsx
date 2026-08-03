@@ -6,6 +6,7 @@ import { getActiveDraftPlayers } from '@/lib/activeDraftPlayers';
 import { computeDraftTeamStats } from '@/lib/computeDraftTeamStats';
 import { computeTendencies } from '@/lib/tendencies';
 import { getTradeBudgetDeltaByTeamId } from '@/lib/tradeBudget';
+import { getTradeablePicksForAllTeams } from '@/lib/tradePicker';
 import RosterTracker from '@/components/RosterTracker';
 import { fromPrismaFuturePickMode } from '@/lib/futurePickAssets';
 import { toStartingLineup } from '@/lib/startingLineup';
@@ -50,12 +51,24 @@ export default async function TeamsPage({ params }: { params: Promise<{ draftId:
     budgetDeltaByTeamId,
   });
 
+  // Batch loader — resolves the generated-pick year and every team's tradeable picks in one
+  // pass. A per-team getTradeablePicksForTeam loop would re-run resolveAllPickHolders once
+  // per team (an N+1 across 12 teams).
+  const { generatedPickYear, tradeablePicksByTeamId } = await getTradeablePicksForAllTeams(
+    getPrisma(),
+    draftId,
+  );
+
   return (
     <RosterTracker
       teams={teams}
       tendencies={tendencies}
       ownerHandle={draft.ownerTeam?.handle ?? null}
       startingLineup={startingLineup}
+      draftId={draftId}
+      tradeTeams={rawTeams}
+      generatedPickYear={generatedPickYear}
+      tradeablePicksByTeamId={tradeablePicksByTeamId}
     />
   );
 }

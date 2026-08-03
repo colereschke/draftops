@@ -121,6 +121,16 @@ export default function DossierFace({
 
       <div className="mt-1.5 font-mono text-[11px] text-muted-foreground tabular-nums">
         {tendency.buys} buys · ${tendency.totalSpend} · top ${tendency.topBuy}
+        {team.netBudgetDelta !== 0 && (
+          <span
+            data-testid={`dossier-trade-delta-${team.id}${testIdSuffix}`}
+            style={{ color: team.netBudgetDelta > 0 ? 'var(--age-young)' : 'var(--age-old)' }}
+          >
+            {' '}
+            · {team.netBudgetDelta > 0 ? '+' : ''}
+            {team.netBudgetDelta} trades
+          </span>
+        )}
       </div>
 
       <div

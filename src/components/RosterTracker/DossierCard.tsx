@@ -4,6 +4,7 @@ import { ChevronRight } from 'lucide-react';
 import type { TeamWithRoster } from '@/types';
 import type { ManagerTendency } from '@/lib/tendencies';
 import { cn } from '@/lib/utils';
+import { Button } from '@/components/ui/button';
 import DossierFace from './DossierFace';
 import TeamRosterDetail from './TeamRosterDetail';
 
@@ -19,6 +20,7 @@ export interface DossierCardProps {
   // expands, so the disclosure affordance (chevron, aria-expanded) is wrong here.
   mode?: 'expand' | 'select';
   onToggle: (id: number) => void;
+  onLogTrade: (teamId: number) => void;
 }
 
 export default function DossierCard({
@@ -29,6 +31,7 @@ export default function DossierCard({
   isSelected = false,
   mode = 'expand',
   onToggle,
+  onLogTrade,
 }: DossierCardProps) {
   return (
     <div
@@ -69,6 +72,25 @@ export default function DossierCard({
           />
         )}
         <DossierFace team={team} tendency={tendency} isOwner={isOwner} />
+      </div>
+
+      {/* Sibling of the role="button" face — never nested inside it. A button inside a
+          role="button" container is a nested-interactive-control a11y violation, and its
+          click would also fire the face's own toggle handler. stopPropagation is
+          defense-in-depth in case a future edit moves this back inside. */}
+      <div className="flex justify-end px-4 pb-3">
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          data-testid={`dossier-log-trade-${team.id}`}
+          onClick={(event) => {
+            event.stopPropagation();
+            onLogTrade(team.id);
+          }}
+        >
+          Log Trade
+        </Button>
       </div>
 
       {isExpanded && (

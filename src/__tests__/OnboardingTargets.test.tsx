@@ -247,7 +247,15 @@ describe('onboarding targets', () => {
     ).toBeInTheDocument();
 
     render(
-      <RosterTracker teams={[ROSTER_TEAM]} tendencies={[TENDENCY]} ownerHandle={TEAM.handle} />,
+      <RosterTracker
+        teams={[ROSTER_TEAM]}
+        tendencies={[TENDENCY]}
+        ownerHandle={TEAM.handle}
+        draftId={5}
+        tradeTeams={[TEAM]}
+        generatedPickYear={null}
+        tradeablePicksByTeamId={{}}
+      />,
     );
     expect(document.querySelector('[data-onboarding-target="team-rosters"]')).toBeInTheDocument();
 

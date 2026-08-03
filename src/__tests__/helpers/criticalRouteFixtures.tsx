@@ -7,6 +7,7 @@ import {
   DEFAULT_STARTING_LINEUP,
 } from '@/types';
 import type { ManagerTendency, Appetite, AppetitePos } from '@/lib/tendencies';
+import type { KnownPickOption } from '@/lib/tradePicker';
 
 export const FIXTURE_PLAYERS: Player[] = [
   {
@@ -137,6 +138,10 @@ export function rosterTrackerProps() {
     teams: [team],
     tendencies: [fixtureManagerTendency(1, 'coreschke')],
     ownerHandle: 'coreschke',
+    draftId: 1,
+    tradeTeams: FIXTURE_TEAMS,
+    generatedPickYear: null,
+    tradeablePicksByTeamId: {} as Record<number, KnownPickOption[]>,
   };
 }
 

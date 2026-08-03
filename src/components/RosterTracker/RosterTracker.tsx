@@ -3,9 +3,11 @@
 import { useState, useMemo, useCallback } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { ArrowUp, ArrowDown, ArrowUpDown } from 'lucide-react';
-import type { TeamWithRoster, StartingSlot } from '@/types';
+import type { TeamWithRoster, StartingSlot, LeagueTeam } from '@/types';
 import { DEFAULT_STARTING_LINEUP } from '@/types';
 import type { AppetitePos, ManagerTendency } from '@/lib/tendencies';
+import type { KnownPickOption } from '@/lib/tradePicker';
+import TradeModal from '@/components/TradeModal';
 import { APPETITE_POSITIONS } from '@/lib/tendencies.constants';
 import { POS_COLORS } from '@/lib/posColors';
 import { useMediaQuery } from '@/lib/useMediaQuery';
@@ -24,6 +26,12 @@ interface RosterTrackerProps {
   tendencies: ManagerTendency[];
   ownerHandle: string | null;
   startingLineup?: StartingSlot[];
+  draftId: number;
+  // Named `tradeTeams` rather than `teams` — `teams` above is already the
+  // TeamWithRoster[] the dossier board renders.
+  tradeTeams: LeagueTeam[];
+  generatedPickYear: number | null;
+  tradeablePicksByTeamId: Record<number, KnownPickOption[]>;
 }
 
 type SortKey = RosterTrackerSortKey;
@@ -117,11 +125,16 @@ export default function RosterTracker({
   tendencies,
   ownerHandle,
   startingLineup = DEFAULT_STARTING_LINEUP,
+  draftId,
+  tradeTeams,
+  generatedPickYear,
+  tradeablePicksByTeamId,
 }: RosterTrackerProps) {
   const searchParams = useSearchParams();
   const initialUrlState = parseRosterTrackerSearchParams(searchParams);
 
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
+  const [openTradeTeamId, setOpenTradeTeamId] = useState<number | null>(null);
   const [sortBy, setSortBy] = useState<SortKey>(initialUrlState.sortBy);
   const [sortDir, setSortDir] = useState<SortDir>(initialUrlState.sortDir);
   const isDesktop = useMediaQuery('(min-width: 1024px)');
@@ -251,6 +264,7 @@ export default function RosterTracker({
                 isSelected={team.id === selectedTeamId}
                 mode="select"
                 onToggle={setSelectedTeamId}
+                onLogTrade={setOpenTradeTeamId}
               />
             ))}
           </div>
@@ -274,9 +288,22 @@ export default function RosterTracker({
               isOwner={ownerHandle !== null && team.handle === ownerHandle}
               isExpanded={expanded.has(team.id)}
               onToggle={toggle}
+              onLogTrade={setOpenTradeTeamId}
             />
           ))}
         </div>
+      )}
+
+      {openTradeTeamId !== null && (
+        <TradeModal
+          draftId={draftId}
+          teams={tradeTeams}
+          initialTeamId={openTradeTeamId}
+          generatedPickYear={generatedPickYear}
+          tradeablePicksByTeamId={tradeablePicksByTeamId}
+          isOpen
+          onClose={() => setOpenTradeTeamId(null)}
+        />
       )}
     </main>
   );

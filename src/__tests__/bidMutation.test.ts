@@ -380,6 +380,17 @@ describe('createBidRecord', () => {
 
     expect(result).toEqual({ ok: false, code: 'BID_EXCEEDS_MAX' }); // 100 - 50 - 90 = -40 < 0
   });
+
+  it('accepts a pre-fetched budget delta map instead of querying inside the transaction', async () => {
+    mockTeamFindFirst.mockResolvedValue({ id: 7, budget: 100 });
+    mockAuctionFindMany.mockResolvedValue([]);
+    const prefetched = new Map([[7, 50]]);
+
+    const result = await createBidRecord({ ...CREATE_INPUT, price: 130 }, prefetched);
+
+    expect(result.ok).toBe(true); // 100 + 50 - 130 = 20 >= 0
+    expect(mockTradeFindMany).not.toHaveBeenCalled();
+  });
 });
 
 describe('updateBidRecord', () => {

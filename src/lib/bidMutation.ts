@@ -138,6 +138,7 @@ export async function assertBidLegalInTransaction(
   tx: Prisma.TransactionClient,
   draft: Draft,
   input: BidLegalityInput,
+  prefetchedBudgetDeltaByTeamId?: ReadonlyMap<number, number>,
 ): Promise<LegalBidState> {
   const [team, existingResults, budgetDeltaByTeamId] = await Promise.all([
     tx.team.findFirst({
@@ -153,7 +154,9 @@ export async function assertBidLegalInTransaction(
       },
       select: { id: true, price: true, position: true },
     }),
-    getTradeBudgetDeltaByTeamId(tx, draft.id),
+    prefetchedBudgetDeltaByTeamId
+      ? Promise.resolve(prefetchedBudgetDeltaByTeamId)
+      : getTradeBudgetDeltaByTeamId(tx, draft.id),
   ]);
   if (!team) throw new DraftMutationFailure('TEAM_NOT_FOUND');
 
@@ -181,12 +184,14 @@ export async function createBidInTransaction(
   tx: Prisma.TransactionClient,
   draft: Draft,
   input: CreateBidInTransactionInput,
+  prefetchedBudgetDeltaByTeamId?: ReadonlyMap<number, number>,
 ): Promise<{ bidId: number }> {
-  await assertBidLegalInTransaction(tx, draft, {
-    teamId: input.teamId,
-    position: input.player.pos,
-    price: input.price,
-  });
+  await assertBidLegalInTransaction(
+    tx,
+    draft,
+    { teamId: input.teamId, position: input.player.pos, price: input.price },
+    prefetchedBudgetDeltaByTeamId,
+  );
 
   const deletedClaims = await tx.auctionResult.findMany({
     where: {
@@ -251,6 +256,7 @@ export async function createBidInTransaction(
 
 export async function createBidRecord(
   input: CreateBidRecordInput,
+  prefetchedBudgetDeltaByTeamId?: ReadonlyMap<number, number>,
 ): Promise<DraftMutationResult<{ bidId: number }>> {
   if (!hasValidCreateInput(input)) return { ok: false, code: 'INVALID_INPUT' };
 
@@ -268,12 +274,12 @@ export async function createBidRecord(
     if (!player) throw new DraftMutationFailure('PLAYER_NOT_FOUND');
     if (existingResult) throw new DraftMutationFailure('PLAYER_ALREADY_CLAIMED');
 
-    return createBidInTransaction(tx, draft, {
-      player,
-      teamId: input.teamId,
-      price: input.price,
-      actorId: input.userId,
-    });
+    return createBidInTransaction(
+      tx,
+      draft,
+      { player, teamId: input.teamId, price: input.price, actorId: input.userId },
+      prefetchedBudgetDeltaByTeamId,
+    );
   });
 }
 

@@ -4,6 +4,7 @@ import { getPrisma } from '@/lib/db';
 import { getDraft } from '@/lib/draft';
 import { getActiveDraftPlayers } from '@/lib/activeDraftPlayers';
 import { computeDraftTeamStats } from '@/lib/computeDraftTeamStats';
+import { getTradeBudgetDeltaByTeamId } from '@/lib/tradeBudget';
 import { fromPrismaFuturePickMode } from '@/lib/futurePickAssets';
 import { DEFAULT_STARTING_LINEUP, DEFAULT_TARGET_ROSTER } from '@/types';
 import type { AuctionResultEntry, Position, StartingSlot } from '@/types';
@@ -46,10 +47,12 @@ export async function GET(
     startingLineup: (draft.startingLineup ?? DEFAULT_STARTING_LINEUP) as StartingSlot[],
     futurePickAuctionMode: fromPrismaFuturePickMode(draft.futurePickAuctionMode),
   });
+  const budgetDeltaByTeamId = await getTradeBudgetDeltaByTeamId(getPrisma(), draft.id);
   const teamStats = computeDraftTeamStats({
     teams,
     players,
     rosterSize: draft.rosterSize,
+    budgetDeltaByTeamId,
   });
 
   const auctionResults: AuctionResultEntry[] = teams.flatMap((team) =>

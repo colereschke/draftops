@@ -5,6 +5,7 @@ import { getDraft } from '@/lib/draft';
 import { getActiveDraftPlayers } from '@/lib/activeDraftPlayers';
 import { computeDraftTeamStats } from '@/lib/computeDraftTeamStats';
 import { computeTendencies } from '@/lib/tendencies';
+import { getTradeBudgetDeltaByTeamId } from '@/lib/tradeBudget';
 import { resolveLiveNomination } from '@/lib/liveNomination';
 import BudgetPressureView from '@/components/BudgetPressure';
 import { fromPrismaFuturePickMode } from '@/lib/futurePickAssets';
@@ -52,10 +53,12 @@ export default async function BudgetPage({ params }: { params: Promise<{ draftId
   const live = resolveLiveNomination(nominated, posByPlayerId);
 
   const tendencies = computeTendencies(teams, players);
+  const budgetDeltaByTeamId = await getTradeBudgetDeltaByTeamId(getPrisma(), draftId);
   const teamStats = computeDraftTeamStats({
     teams,
     players,
     rosterSize: draft.rosterSize,
+    budgetDeltaByTeamId,
   });
 
   return (

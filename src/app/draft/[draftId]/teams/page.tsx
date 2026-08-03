@@ -5,6 +5,7 @@ import { getDraft } from '@/lib/draft';
 import { getActiveDraftPlayers } from '@/lib/activeDraftPlayers';
 import { computeDraftTeamStats } from '@/lib/computeDraftTeamStats';
 import { computeTendencies } from '@/lib/tendencies';
+import { getTradeBudgetDeltaByTeamId } from '@/lib/tradeBudget';
 import RosterTracker from '@/components/RosterTracker';
 import { fromPrismaFuturePickMode } from '@/lib/futurePickAssets';
 import { toStartingLineup } from '@/lib/startingLineup';
@@ -41,10 +42,12 @@ export default async function TeamsPage({ params }: { params: Promise<{ draftId:
   });
 
   const tendencies = computeTendencies(rawTeams, players);
+  const budgetDeltaByTeamId = await getTradeBudgetDeltaByTeamId(getPrisma(), draftId);
   const teams = computeDraftTeamStats({
     teams: rawTeams,
     players,
     rosterSize: draft.rosterSize,
+    budgetDeltaByTeamId,
   });
 
   return (

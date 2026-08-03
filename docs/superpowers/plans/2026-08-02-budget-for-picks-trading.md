@@ -3712,7 +3712,7 @@ git commit -m "Replace incremental futureCapital accumulation with a current-hol
 **Files:**
 
 - Modify: `src/app/draft/[draftId]/page.tsx`
-- Modify: `src/components/AuctionSheet/AuctionSheet.tsx:39-65,309,406-408`
+- Modify: `src/components/AuctionSheet/AuctionSheet.tsx` (props interface ~39-65, `remaining` calculation ~195, `<AuctionHeader>` JSX ~237-238 — the HARD-022 auction-workspace decomposition shifted these from earlier line numbers this plan was originally written against; confirm current numbers by reading the file rather than trusting them exactly)
 - Modify: `src/components/AuctionSheet/AuctionHeader.tsx:20-77`
 - Test: `src/__tests__/integration/ownerBudgetDelta.postgres.test.ts` (new — real Postgres, page-level wiring)
 
@@ -3818,7 +3818,7 @@ Add to the destructured props (near the existing `ownerBudget,` at line 65):
   ownerBudgetDelta,
 ```
 
-Change line 309 from:
+Change (currently around line 195, but grep for the exact text — the HARD-022 decomposition shifted line numbers in this file after this plan was written):
 
 ```ts
 const remaining = ownerBudget - mySpent;
@@ -3830,7 +3830,7 @@ to:
 const remaining = ownerBudget + ownerBudgetDelta - mySpent;
 ```
 
-Add `ownerBudgetDelta={ownerBudgetDelta}` to the `<AuctionHeader>` JSX (alongside the existing `ownerBudget={ownerBudget}` at line 406).
+Add `ownerBudgetDelta={ownerBudgetDelta}` to the `<AuctionHeader>` JSX (alongside the existing `ownerBudget={ownerBudget}`, currently around line 238).
 
 - [ ] **Step 5: Thread the prop through `AuctionHeader.tsx` and its Budget metric**
 

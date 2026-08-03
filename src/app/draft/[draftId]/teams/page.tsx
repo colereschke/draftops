@@ -8,6 +8,7 @@ import { computeTendencies } from '@/lib/tendencies';
 import { getTradeBudgetDeltaByTeamId } from '@/lib/tradeBudget';
 import { getTradeablePicksForAllTeams } from '@/lib/tradePicker';
 import RosterTracker from '@/components/RosterTracker';
+import TradeHistoryList, { type TradeHistoryEntry } from '@/components/TradeHistory';
 import { fromPrismaFuturePickMode } from '@/lib/futurePickAssets';
 import { toStartingLineup } from '@/lib/startingLineup';
 
@@ -59,17 +60,56 @@ export default async function TeamsPage({ params }: { params: Promise<{ draftId:
     draftId,
   );
 
+  // Deleted trades are included deliberately — the list is where a soft-deleted trade is
+  // restored from, inside its 30-minute window. `id` breaks createdAt ties so the order is
+  // stable across refreshes.
+  const rawTrades = await getPrisma().trade.findMany({
+    where: { draftId },
+    select: {
+      id: true,
+      budgetAmount: true,
+      createdAt: true,
+      deletedAt: true,
+      budgetTeam: { select: { handle: true } },
+      pickTeam: { select: { handle: true } },
+      pickAssets: {
+        select: {
+          futurePickYear: true,
+          futurePickRound: true,
+          originTeam: { select: { handle: true } },
+        },
+      },
+    },
+    orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+  });
+  const tradeHistory: TradeHistoryEntry[] = rawTrades.map((trade) => ({
+    id: trade.id,
+    budgetTeamHandle: trade.budgetTeam.handle,
+    pickTeamHandle: trade.pickTeam.handle,
+    budgetAmount: trade.budgetAmount,
+    picks: trade.pickAssets.map((asset) => ({
+      originHandle: asset.originTeam.handle,
+      futurePickYear: asset.futurePickYear,
+      futurePickRound: asset.futurePickRound as 1 | 2 | 3,
+    })),
+    createdAt: trade.createdAt.toISOString(),
+    deletedAt: trade.deletedAt?.toISOString() ?? null,
+  }));
+
   return (
-    <RosterTracker
-      teams={teams}
-      tendencies={tendencies}
-      ownerHandle={draft.ownerTeam?.handle ?? null}
-      startingLineup={startingLineup}
-      draftId={draftId}
-      tradeTeams={rawTeams.map(({ id, handle, displayName }) => ({ id, handle, displayName }))}
-      generatedPickYear={generatedPickYear}
-      tradeablePicksByTeamId={tradeablePicksByTeamId}
-      isReadOnly={draft.status === 'COMPLETE'}
-    />
+    <>
+      <RosterTracker
+        teams={teams}
+        tendencies={tendencies}
+        ownerHandle={draft.ownerTeam?.handle ?? null}
+        startingLineup={startingLineup}
+        draftId={draftId}
+        tradeTeams={rawTeams.map(({ id, handle, displayName }) => ({ id, handle, displayName }))}
+        generatedPickYear={generatedPickYear}
+        tradeablePicksByTeamId={tradeablePicksByTeamId}
+        isReadOnly={draft.status === 'COMPLETE'}
+      />
+      <TradeHistoryList draftId={draftId} trades={tradeHistory} />
+    </>
   );
 }

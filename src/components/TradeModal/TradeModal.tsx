@@ -175,7 +175,7 @@ export default function TradeModal({
       <DialogContent
         showCloseButton={false}
         data-testid="trade-modal"
-        className="bg-card"
+        className="flex max-h-[85vh] flex-col overflow-y-auto bg-card"
         style={{
           width: '420px',
           maxWidth: 'calc(100vw - 32px)',

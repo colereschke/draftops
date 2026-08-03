@@ -94,6 +94,46 @@ async function getTransactionTimestamp(tx: Prisma.TransactionClient): Promise<Da
   return clock[0].now;
 }
 
+async function assertNoLaterTradeDependsOnBid(
+  tx: Prisma.TransactionClient,
+  draftId: number,
+  bid: { id: number; teamId: number; playerId: number; position: string; createdAt: Date },
+): Promise<void> {
+  if (bid.position !== 'PKG' && bid.position !== 'PICK') return;
+
+  const playerRow = await tx.player.findFirst({
+    where: { id: bid.playerId, draftId },
+    select: { futurePickOriginHandle: true, futurePickYear: true, futurePickRound: true },
+  });
+  if (!playerRow?.futurePickOriginHandle || playerRow.futurePickYear === null) return;
+
+  const origin = await tx.team.findFirst({
+    where: { draftId, handle: playerRow.futurePickOriginHandle },
+    select: { id: true },
+  });
+  if (!origin) return;
+
+  const rounds =
+    bid.position === 'PKG'
+      ? [1, 2, 3]
+      : playerRow.futurePickRound !== null
+        ? [playerRow.futurePickRound]
+        : [];
+  if (rounds.length === 0) return;
+
+  const laterTrade = await tx.tradePickAsset.findFirst({
+    where: {
+      draftId,
+      originTeamId: origin.id,
+      futurePickYear: playerRow.futurePickYear,
+      futurePickRound: { in: rounds },
+      trade: { deletedAt: null, createdAt: { gt: bid.createdAt } },
+    },
+    select: { id: true },
+  });
+  if (laterTrade) throw new DraftMutationFailure('PICK_HAS_ACTIVE_TRADES');
+}
+
 export async function assertBidLegalInTransaction(
   tx: Prisma.TransactionClient,
   draft: Draft,
@@ -248,6 +288,10 @@ export async function updateBidRecord(
     });
     if (!existingBid) throw new DraftMutationFailure('BID_NOT_FOUND');
 
+    if (existingBid.teamId !== input.teamId) {
+      await assertNoLaterTradeDependsOnBid(tx, draft.id, existingBid);
+    }
+
     await assertBidLegalInTransaction(tx, draft, {
       teamId: input.teamId,
       position: existingBid.position,
@@ -283,6 +327,8 @@ export async function deleteBidRecord(
       where: { id: input.bidId, draftId: draft.id, deletedAt: null },
     });
     if (!existingBid) throw new DraftMutationFailure('BID_NOT_FOUND');
+
+    await assertNoLaterTradeDependsOnBid(tx, draft.id, existingBid);
 
     const transactionTimestamp = await getTransactionTimestamp(tx);
     const deleted = await tx.auctionResult.update({

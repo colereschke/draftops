@@ -19,6 +19,7 @@ const mockAuctionDeleteMany = jest.fn();
 const mockNominationDeleteMany = jest.fn();
 const mockAuditCreate = jest.fn();
 const mockTradeFindMany = jest.fn();
+const mockTradePickAssetFindFirst = jest.fn();
 
 const mockTx = {
   $executeRaw: mockExecuteRaw,
@@ -36,6 +37,7 @@ const mockTx = {
   bidAuditEvent: { create: mockAuditCreate },
   nominatedPlayer: { deleteMany: mockNominationDeleteMany },
   trade: { findMany: mockTradeFindMany },
+  tradePickAsset: { findFirst: mockTradePickAssetFindFirst },
 };
 
 jest.mock('@/lib/db', () => ({
@@ -87,6 +89,7 @@ beforeEach(() => {
   mockAuctionFindFirst.mockResolvedValue(null);
   mockAuctionFindMany.mockResolvedValue([]);
   mockTradeFindMany.mockResolvedValue([]);
+  mockTradePickAssetFindFirst.mockResolvedValue(null);
   mockAuctionCreate.mockResolvedValue({
     id: 99,
     draftId: 4,
@@ -663,5 +666,94 @@ describe('restoreBidRecord', () => {
     });
     expect(mockQueryRaw).not.toHaveBeenCalled();
     expect(mockAuctionUpdate).not.toHaveBeenCalled();
+  });
+});
+
+describe('PICK_HAS_ACTIVE_TRADES guard', () => {
+  const PKG_BID = {
+    id: 55,
+    draftId: 4,
+    playerId: 20,
+    player: "team-b's 2027 package",
+    position: 'PKG',
+    nflTeam: '',
+    price: 109,
+    sfRank: 900,
+    notes: null,
+    teamId: 7,
+    createdAt: new Date('2026-07-01T00:00:00.000Z'),
+    updatedAt: new Date('2026-07-01T00:00:00.000Z'),
+    deletedAt: null,
+    supersededAt: null,
+  };
+  const PKG_PLAYER_ROW = {
+    futurePickOriginHandle: 'team-b',
+    futurePickYear: 2027,
+    futurePickRound: null,
+  };
+  const DELETED_SNAPSHOT = { ...PKG_BID, deletedAt: new Date('2026-07-19T12:20:00.000Z') };
+
+  beforeEach(() => {
+    mockAuctionFindFirst.mockResolvedValue(PKG_BID);
+    mockPlayerFindFirst.mockResolvedValue(PKG_PLAYER_ROW);
+    mockQueryRaw.mockResolvedValue([{ now: new Date('2026-07-19T12:20:00.000Z') }]);
+    mockAuctionUpdate.mockResolvedValue(DELETED_SNAPSHOT);
+  });
+
+  it('blocks deleting a PKG win when a later trade names one of its rounds', async () => {
+    // A real query filtering on trade.createdAt > bid.createdAt would find this row;
+    // the mock returns it directly to simulate that outcome.
+    mockTradePickAssetFindFirst.mockResolvedValue({ id: 900 });
+
+    const result = await deleteBidRecord({ userId: 'owner-1', draftId: 4, bidId: 55 });
+
+    expect(result).toEqual({ ok: false, code: 'PICK_HAS_ACTIVE_TRADES' });
+  });
+
+  it('allows deleting a PKG win when the only matching trade predates it', async () => {
+    // A real query filtering on trade.createdAt > bid.createdAt would find nothing here,
+    // since the only trade referencing this pick is older than the bid itself.
+    mockTradePickAssetFindFirst.mockResolvedValue(null);
+
+    const result = await deleteBidRecord({ userId: 'owner-1', draftId: 4, bidId: 55 });
+
+    expect(result.ok).toBe(true);
+  });
+
+  it('allows deleting a PKG win when no trade references any of its rounds', async () => {
+    mockTradePickAssetFindFirst.mockResolvedValue(null);
+
+    const result = await deleteBidRecord({ userId: 'owner-1', draftId: 4, bidId: 55 });
+
+    expect(result.ok).toBe(true);
+  });
+
+  it('blocks reassigning a PKG win to a different team when a later trade depends on it', async () => {
+    mockTradePickAssetFindFirst.mockResolvedValue({ id: 900 });
+
+    const result = await updateBidRecord({
+      userId: 'owner-1',
+      draftId: 4,
+      bidId: 55,
+      teamId: 11, // different from PKG_BID.teamId (7)
+      price: PKG_BID.price,
+    });
+
+    expect(result).toEqual({ ok: false, code: 'PICK_HAS_ACTIVE_TRADES' });
+  });
+
+  it('does not run the guard when updateBidRecord keeps the same teamId', async () => {
+    mockTradePickAssetFindFirst.mockResolvedValue({ id: 900 }); // would block if checked
+    mockAuctionUpdate.mockResolvedValue({ ...PKG_BID, price: 120 });
+
+    const result = await updateBidRecord({
+      userId: 'owner-1',
+      draftId: 4,
+      bidId: 55,
+      teamId: PKG_BID.teamId, // unchanged — a price correction, not a reassignment
+      price: 120,
+    });
+
+    expect(result.ok).toBe(true);
   });
 });

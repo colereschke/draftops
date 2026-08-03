@@ -82,6 +82,7 @@ export default function AuctionHeader({
             }
             value={ownerBudget + ownerBudgetDelta}
             tone="var(--text-primary)"
+            testId="budget-metric"
           />
           <MetricCard label="Spent" value={mySpent} tone="var(--pos-wr)" />
           <MetricCard
@@ -143,15 +144,23 @@ interface MetricCardProps {
   label: string;
   value: number;
   tone: string;
+  testId?: string;
 }
 
-function MetricCard({ label, value, tone }: MetricCardProps) {
+function MetricCard({ label, value, tone, testId }: MetricCardProps) {
   return (
     <div className="rounded-lg border border-border-subtle bg-card px-3 py-3">
-      <div className="font-label text-[10px] tracking-[1.7px] text-muted-foreground uppercase">
+      <div
+        className="font-label text-[10px] tracking-[1.7px] text-muted-foreground uppercase"
+        data-testid={testId ? `${testId}-label` : undefined}
+      >
         {label}
       </div>
-      <div className="mt-1 font-mono text-2xl font-bold tabular-nums" style={{ color: tone }}>
+      <div
+        className="mt-1 font-mono text-2xl font-bold tabular-nums"
+        style={{ color: tone }}
+        data-testid={testId ? `${testId}-value` : undefined}
+      >
         ${value}
       </div>
     </div>

@@ -66,6 +66,44 @@ describe('AuctionHeader', () => {
   });
 });
 
+describe('AuctionHeader — ownerBudgetDelta', () => {
+  it('adds a positive trade delta to the displayed budget and labels it with the signed amount', () => {
+    render(
+      <AuctionHeader
+        ownerBudget={1000}
+        ownerBudgetDelta={80}
+        mySpent={0}
+        remaining={1000}
+        posStats={POS_STATS}
+        grandTotal={1000}
+        totalPlayerCount={267}
+        scoringSettings={{ ...DEFAULT_SCORING_SETTINGS }}
+      />,
+    );
+
+    expect(screen.getByTestId('budget-metric-value')).toHaveTextContent('$1080');
+    expect(screen.getByTestId('budget-metric-label')).toHaveTextContent('Budget (+$80 trade)');
+  });
+
+  it('subtracts a negative trade delta from the displayed budget and labels it with the signed amount', () => {
+    render(
+      <AuctionHeader
+        ownerBudget={1000}
+        ownerBudgetDelta={-50}
+        mySpent={0}
+        remaining={1000}
+        posStats={POS_STATS}
+        grandTotal={1000}
+        totalPlayerCount={267}
+        scoringSettings={{ ...DEFAULT_SCORING_SETTINGS }}
+      />,
+    );
+
+    expect(screen.getByTestId('budget-metric-value')).toHaveTextContent('$950');
+    expect(screen.getByTestId('budget-metric-label')).toHaveTextContent('Budget ($-50 trade)');
+  });
+});
+
 describe('AuctionHeader — TE caption', () => {
   it('omits the TE clause entirely for default scoring settings', () => {
     render(

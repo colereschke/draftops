@@ -693,6 +693,51 @@ describe('PICK_HAS_ACTIVE_TRADES guard', () => {
   };
   const DELETED_SNAPSHOT = { ...PKG_BID, deletedAt: new Date('2026-07-19T12:20:00.000Z') };
 
+  // team.findFirst is stubbed once for the whole file (mockTeamFindFirst), so it also answers
+  // the guard's origin-team lookup; the outer beforeEach default resolves it to { id: 7 }.
+  const EXPECTED_PKG_QUERY = {
+    where: {
+      draftId: 4,
+      originTeamId: 7,
+      futurePickYear: 2027,
+      futurePickRound: { in: [1, 2, 3] },
+      trade: { deletedAt: null, createdAt: { gt: PKG_BID.createdAt } },
+    },
+    select: { id: true },
+  };
+
+  const PICK_BID = {
+    id: 56,
+    draftId: 4,
+    playerId: 21,
+    player: "team-c's 2028 2nd",
+    position: 'PICK',
+    nflTeam: '',
+    price: 40,
+    sfRank: 900,
+    notes: null,
+    teamId: 7,
+    createdAt: new Date('2026-07-02T00:00:00.000Z'),
+    updatedAt: new Date('2026-07-02T00:00:00.000Z'),
+    deletedAt: null,
+    supersededAt: null,
+  };
+  const PICK_PLAYER_ROW = {
+    futurePickOriginHandle: 'team-c',
+    futurePickYear: 2028,
+    futurePickRound: 2,
+  };
+  const EXPECTED_PICK_QUERY = {
+    where: {
+      draftId: 4,
+      originTeamId: 7,
+      futurePickYear: 2028,
+      futurePickRound: { in: [2] },
+      trade: { deletedAt: null, createdAt: { gt: PICK_BID.createdAt } },
+    },
+    select: { id: true },
+  };
+
   beforeEach(() => {
     mockAuctionFindFirst.mockResolvedValue(PKG_BID);
     mockPlayerFindFirst.mockResolvedValue(PKG_PLAYER_ROW);
@@ -700,7 +745,7 @@ describe('PICK_HAS_ACTIVE_TRADES guard', () => {
     mockAuctionUpdate.mockResolvedValue(DELETED_SNAPSHOT);
   });
 
-  it('blocks deleting a PKG win when a later trade names one of its rounds', async () => {
+  it('blocks deleting a PKG win when a later trade names one of its rounds, querying all three PKG rounds', async () => {
     // A real query filtering on trade.createdAt > bid.createdAt would find this row;
     // the mock returns it directly to simulate that outcome.
     mockTradePickAssetFindFirst.mockResolvedValue({ id: 900 });
@@ -708,24 +753,46 @@ describe('PICK_HAS_ACTIVE_TRADES guard', () => {
     const result = await deleteBidRecord({ userId: 'owner-1', draftId: 4, bidId: 55 });
 
     expect(result).toEqual({ ok: false, code: 'PICK_HAS_ACTIVE_TRADES' });
+    expect(mockTradePickAssetFindFirst).toHaveBeenCalledWith(EXPECTED_PKG_QUERY);
   });
 
-  it('allows deleting a PKG win when the only matching trade predates it', async () => {
-    // A real query filtering on trade.createdAt > bid.createdAt would find nothing here,
-    // since the only trade referencing this pick is older than the bid itself.
+  it('allows deleting a PKG win when the guard query finds no matching later trade', async () => {
     mockTradePickAssetFindFirst.mockResolvedValue(null);
 
     const result = await deleteBidRecord({ userId: 'owner-1', draftId: 4, bidId: 55 });
 
     expect(result.ok).toBe(true);
+    expect(mockTradePickAssetFindFirst).toHaveBeenCalledWith(EXPECTED_PKG_QUERY);
   });
 
-  it('allows deleting a PKG win when no trade references any of its rounds', async () => {
+  it('blocks deleting a PICK win when a later trade names its single round', async () => {
+    mockAuctionFindFirst.mockResolvedValue(PICK_BID);
+    mockPlayerFindFirst.mockResolvedValue(PICK_PLAYER_ROW);
+    mockAuctionUpdate.mockResolvedValue({
+      ...PICK_BID,
+      deletedAt: new Date('2026-07-19T12:20:00.000Z'),
+    });
+    mockTradePickAssetFindFirst.mockResolvedValue({ id: 901 });
+
+    const result = await deleteBidRecord({ userId: 'owner-1', draftId: 4, bidId: 56 });
+
+    expect(result).toEqual({ ok: false, code: 'PICK_HAS_ACTIVE_TRADES' });
+    expect(mockTradePickAssetFindFirst).toHaveBeenCalledWith(EXPECTED_PICK_QUERY);
+  });
+
+  it('allows deleting a PICK win when the guard query for its single round finds no later trade', async () => {
+    mockAuctionFindFirst.mockResolvedValue(PICK_BID);
+    mockPlayerFindFirst.mockResolvedValue(PICK_PLAYER_ROW);
+    mockAuctionUpdate.mockResolvedValue({
+      ...PICK_BID,
+      deletedAt: new Date('2026-07-19T12:20:00.000Z'),
+    });
     mockTradePickAssetFindFirst.mockResolvedValue(null);
 
-    const result = await deleteBidRecord({ userId: 'owner-1', draftId: 4, bidId: 55 });
+    const result = await deleteBidRecord({ userId: 'owner-1', draftId: 4, bidId: 56 });
 
     expect(result.ok).toBe(true);
+    expect(mockTradePickAssetFindFirst).toHaveBeenCalledWith(EXPECTED_PICK_QUERY);
   });
 
   it('blocks reassigning a PKG win to a different team when a later trade depends on it', async () => {
@@ -740,6 +807,7 @@ describe('PICK_HAS_ACTIVE_TRADES guard', () => {
     });
 
     expect(result).toEqual({ ok: false, code: 'PICK_HAS_ACTIVE_TRADES' });
+    expect(mockTradePickAssetFindFirst).toHaveBeenCalledWith(EXPECTED_PKG_QUERY);
   });
 
   it('does not run the guard when updateBidRecord keeps the same teamId', async () => {
@@ -755,5 +823,6 @@ describe('PICK_HAS_ACTIVE_TRADES guard', () => {
     });
 
     expect(result.ok).toBe(true);
+    expect(mockTradePickAssetFindFirst).not.toHaveBeenCalled();
   });
 });

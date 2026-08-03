@@ -18,6 +18,7 @@ const mockAuctionUpdate = jest.fn();
 const mockAuctionDeleteMany = jest.fn();
 const mockNominationDeleteMany = jest.fn();
 const mockAuditCreate = jest.fn();
+const mockTradeFindMany = jest.fn();
 
 const mockTx = {
   $executeRaw: mockExecuteRaw,
@@ -34,6 +35,7 @@ const mockTx = {
   },
   bidAuditEvent: { create: mockAuditCreate },
   nominatedPlayer: { deleteMany: mockNominationDeleteMany },
+  trade: { findMany: mockTradeFindMany },
 };
 
 jest.mock('@/lib/db', () => ({
@@ -84,6 +86,7 @@ beforeEach(() => {
   mockPlayerFindFirst.mockResolvedValue(PLAYER);
   mockAuctionFindFirst.mockResolvedValue(null);
   mockAuctionFindMany.mockResolvedValue([]);
+  mockTradeFindMany.mockResolvedValue([]);
   mockAuctionCreate.mockResolvedValue({
     id: 99,
     draftId: 4,
@@ -353,6 +356,26 @@ describe('createBidRecord', () => {
 
     await expect(createBidRecord(CREATE_INPUT)).rejects.toThrow('audit write failed');
     expect(mockNominationDeleteMany).not.toHaveBeenCalled();
+  });
+
+  it('allows a bid that would exceed raw budget but is covered by a positive trade delta', async () => {
+    mockTeamFindFirst.mockResolvedValue({ id: 7, budget: 100 });
+    mockAuctionFindMany.mockResolvedValue([]);
+    mockTradeFindMany.mockResolvedValue([{ budgetTeamId: 1, pickTeamId: 7, budgetAmount: 50 }]);
+
+    const result = await createBidRecord({ ...CREATE_INPUT, price: 130 });
+
+    expect(result.ok).toBe(true); // 100 + 50 - 130 = 20 >= requiredRosterDollars
+  });
+
+  it('blocks a bid that raw budget alone would allow but a negative trade delta forbids', async () => {
+    mockTeamFindFirst.mockResolvedValue({ id: 7, budget: 100 });
+    mockAuctionFindMany.mockResolvedValue([]);
+    mockTradeFindMany.mockResolvedValue([{ budgetTeamId: 7, pickTeamId: 1, budgetAmount: 50 }]);
+
+    const result = await createBidRecord({ ...CREATE_INPUT, price: 90 });
+
+    expect(result).toEqual({ ok: false, code: 'BID_EXCEEDS_MAX' }); // 100 - 50 - 90 = -40 < 0
   });
 });
 

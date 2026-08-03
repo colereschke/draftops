@@ -7,6 +7,7 @@ import {
 } from '@/lib/draftMutation';
 import { createBidAuditEvent, toBidSnapshot, type AuditableBid } from '@/lib/bidAudit';
 import { countsTowardRoster } from '@/lib/rosterPolicy';
+import { getTradeBudgetDeltaByTeamId } from '@/lib/tradeBudget';
 
 interface CreateBidRecordInput {
   userId: string;
@@ -98,7 +99,7 @@ export async function assertBidLegalInTransaction(
   draft: Draft,
   input: BidLegalityInput,
 ): Promise<LegalBidState> {
-  const [team, existingResults] = await Promise.all([
+  const [team, existingResults, budgetDeltaByTeamId] = await Promise.all([
     tx.team.findFirst({
       where: { id: input.teamId, draftId: draft.id },
       select: { id: true, budget: true },
@@ -112,6 +113,7 @@ export async function assertBidLegalInTransaction(
       },
       select: { id: true, price: true, position: true },
     }),
+    getTradeBudgetDeltaByTeamId(tx, draft.id),
   ]);
   if (!team) throw new DraftMutationFailure('TEAM_NOT_FOUND');
 
@@ -126,8 +128,9 @@ export async function assertBidLegalInTransaction(
   }
 
   const resultingSpend = currentSpend + input.price;
+  const netBudgetDelta = budgetDeltaByTeamId.get(team.id) ?? 0;
   const requiredRosterDollars = Math.max(0, draft.rosterSize - resultingRosterCount);
-  if (team.budget - resultingSpend < requiredRosterDollars) {
+  if (team.budget + netBudgetDelta - resultingSpend < requiredRosterDollars) {
     throw new DraftMutationFailure('BID_EXCEEDS_MAX');
   }
 

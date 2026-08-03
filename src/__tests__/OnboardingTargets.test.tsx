@@ -222,6 +222,7 @@ describe('onboarding targets', () => {
         draftId={5}
         ownerHandle={TEAM.handle}
         ownerBudget={1000}
+        ownerBudgetDelta={0}
         scoringSettings={DEFAULT_SCORING_SETTINGS}
         teamCount={DEFAULT_TEAM_COUNT}
         budget={DEFAULT_BUDGET}

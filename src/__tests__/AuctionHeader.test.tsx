@@ -15,6 +15,7 @@ describe('AuctionHeader', () => {
     render(
       <AuctionHeader
         ownerBudget={1000}
+        ownerBudgetDelta={0}
         mySpent={250}
         remaining={750}
         posStats={POS_STATS}
@@ -33,6 +34,7 @@ describe('AuctionHeader', () => {
     render(
       <AuctionHeader
         ownerBudget={1000}
+        ownerBudgetDelta={0}
         mySpent={0}
         remaining={1000}
         posStats={POS_STATS}
@@ -49,6 +51,7 @@ describe('AuctionHeader', () => {
     render(
       <AuctionHeader
         ownerBudget={1000}
+        ownerBudgetDelta={0}
         mySpent={0}
         remaining={1000}
         posStats={POS_STATS}
@@ -68,6 +71,7 @@ describe('AuctionHeader — TE caption', () => {
     render(
       <AuctionHeader
         ownerBudget={1000}
+        ownerBudgetDelta={0}
         mySpent={0}
         remaining={1000}
         posStats={POS_STATS}
@@ -84,6 +88,7 @@ describe('AuctionHeader — TE caption', () => {
     render(
       <AuctionHeader
         ownerBudget={1000}
+        ownerBudgetDelta={0}
         mySpent={0}
         remaining={1000}
         posStats={POS_STATS}
@@ -100,6 +105,7 @@ describe('AuctionHeader — TE caption', () => {
     render(
       <AuctionHeader
         ownerBudget={1000}
+        ownerBudgetDelta={0}
         mySpent={0}
         remaining={1000}
         posStats={POS_STATS}
@@ -116,6 +122,7 @@ describe('AuctionHeader — TE caption', () => {
     render(
       <AuctionHeader
         ownerBudget={1000}
+        ownerBudgetDelta={0}
         mySpent={0}
         remaining={1000}
         posStats={POS_STATS}
@@ -132,6 +139,7 @@ describe('AuctionHeader — TE caption', () => {
     render(
       <AuctionHeader
         ownerBudget={1000}
+        ownerBudgetDelta={0}
         mySpent={0}
         remaining={1000}
         posStats={POS_STATS}
@@ -149,6 +157,7 @@ describe('AuctionHeader — settings caption', () => {
     render(
       <AuctionHeader
         ownerBudget={1000}
+        ownerBudgetDelta={0}
         mySpent={0}
         remaining={1000}
         posStats={POS_STATS}
@@ -166,6 +175,7 @@ describe('AuctionHeader — settings caption', () => {
     render(
       <AuctionHeader
         ownerBudget={200}
+        ownerBudgetDelta={0}
         mySpent={0}
         remaining={200}
         posStats={POS_STATS}
@@ -185,6 +195,7 @@ describe('AuctionHeader — settings caption', () => {
     render(
       <AuctionHeader
         ownerBudget={1000}
+        ownerBudgetDelta={0}
         mySpent={0}
         remaining={1000}
         posStats={POS_STATS}

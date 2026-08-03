@@ -103,6 +103,7 @@ function renderSheet(overrides: Partial<React.ComponentProps<typeof AuctionSheet
       draftId={1}
       ownerHandle="coreschke"
       ownerBudget={1000}
+      ownerBudgetDelta={0}
       scoringSettings={{ ...DEFAULT_SCORING_SETTINGS }}
       teamCount={DEFAULT_TEAM_COUNT}
       budget={DEFAULT_BUDGET}

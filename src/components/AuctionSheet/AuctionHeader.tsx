@@ -19,6 +19,7 @@ function teCaptionClause(scoringSettings: ScoringSettings): string {
 
 interface AuctionHeaderProps {
   ownerBudget: number;
+  ownerBudgetDelta: number;
   mySpent: number;
   remaining: number;
   posStats: Record<'QB' | 'RB' | 'WR' | 'TE', { count: number; total: number }>;
@@ -35,6 +36,7 @@ const MARKET_POSITIONS = ['QB', 'RB', 'WR', 'TE'] as const;
 
 export default function AuctionHeader({
   ownerBudget,
+  ownerBudgetDelta,
   mySpent,
   remaining,
   posStats,
@@ -72,7 +74,15 @@ export default function AuctionHeader({
         </section>
 
         <section className="grid min-w-full grid-cols-3 gap-2 lg:min-w-[420px]">
-          <MetricCard label="Budget" value={ownerBudget} tone="var(--text-primary)" />
+          <MetricCard
+            label={
+              ownerBudgetDelta === 0
+                ? 'Budget'
+                : `Budget (${ownerBudgetDelta > 0 ? '+' : ''}$${ownerBudgetDelta} trade)`
+            }
+            value={ownerBudget + ownerBudgetDelta}
+            tone="var(--text-primary)"
+          />
           <MetricCard label="Spent" value={mySpent} tone="var(--pos-wr)" />
           <MetricCard
             label="Remaining"

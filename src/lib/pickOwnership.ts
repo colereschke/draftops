@@ -91,9 +91,18 @@ export interface ResolvedPick {
   eventId: number | null;
 }
 
+export interface TeamIdentity {
+  id: number;
+  handle: string;
+}
+
 export async function resolveAllPickHolders(
   client: PrismaClientLike,
   draftId: number,
+  // Callers that already have (or are already fetching) the draft's team list can pass it — or
+  // its in-flight Promise — here to avoid a second, identical `team.findMany` round trip. Omit it
+  // to preserve the original self-contained behavior.
+  preFetchedTeams?: TeamIdentity[] | Promise<TeamIdentity[]>,
 ): Promise<ResolvedPick[]> {
   const [tradedAssets, wonResults, teams] = await Promise.all([
     client.tradePickAsset.findMany({
@@ -128,7 +137,8 @@ export async function resolveAllPickHolders(
       // key (see below) deterministically keeps the most recent win, matching resolvePickHolder's
       // single-row equivalent
     }),
-    client.team.findMany({ where: { draftId }, select: { id: true, handle: true } }),
+    preFetchedTeams ??
+      client.team.findMany({ where: { draftId }, select: { id: true, handle: true } }),
   ]);
 
   const teamIdByHandle = new Map(teams.map((team) => [team.handle, team.id]));

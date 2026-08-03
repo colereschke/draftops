@@ -78,6 +78,9 @@ model Draft {
   ownerTeam        Team?             @relation("DraftOwnerTeam", fields: [ownerTeamId, id], references: [id, draftId], onDelete: Restrict, onUpdate: Restrict)
   auctionResults   AuctionResult[]
   bidAuditEvents   BidAuditEvent[]
+  trades           Trade[]
+  tradePickAssets  TradePickAsset[]
+  tradeAuditEvents TradeAuditEvent[]
   completionSnapshot DraftCompletionSnapshot?
   watchlistEntries PlayerWatchlist[]
   nominatedPlayers NominatedPlayer[]
@@ -110,6 +113,9 @@ model Team {
   sleeperRosterId Int?
   draft           Draft           @relation("DraftTeams", fields: [draftId], references: [id])
   results         AuctionResult[]
+  tradesAsBudgetTeam         Trade[]           @relation("TradeBudgetTeam")
+  tradesAsPickTeam           Trade[]           @relation("TradePickTeam")
+  originatingTradePickAssets TradePickAsset[]  @relation("TradePickAssetOrigin")
   ownedByDraft    Draft[]         @relation("DraftOwnerTeam")
 
   @@unique([id, draftId])
@@ -156,6 +162,57 @@ model BidAuditEvent {
 
   @@index([draftId, occurredAt, id])
   @@index([bidId])
+}
+
+model Trade {
+  id           Int              @id @default(autoincrement())
+  draftId      Int
+  budgetTeamId Int // sends budget, receives picks
+  pickTeamId   Int // sends picks, receives budget
+  budgetAmount Int // always > 0; a trade always moves at least one dollar and one pick
+  notes        String?
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+  deletedAt    DateTime?
+  draft        Draft            @relation(fields: [draftId], references: [id], onDelete: Restrict)
+  budgetTeam   Team             @relation("TradeBudgetTeam", fields: [budgetTeamId, draftId], references: [id, draftId], onDelete: Restrict, onUpdate: Restrict)
+  pickTeam     Team             @relation("TradePickTeam", fields: [pickTeamId, draftId], references: [id, draftId], onDelete: Restrict, onUpdate: Restrict)
+  pickAssets   TradePickAsset[]
+  auditEvents  TradeAuditEvent[]
+
+  @@unique([id, draftId])
+  @@index([draftId, deletedAt])
+}
+
+model TradePickAsset {
+  id              Int    @id @default(autoincrement())
+  tradeId         Int
+  draftId         Int
+  originTeamId    Int
+  futurePickYear  Int
+  futurePickRound Int // 1, 2, or 3
+  draft           Draft  @relation(fields: [draftId], references: [id], onDelete: Restrict)
+  trade           Trade  @relation(fields: [tradeId, draftId], references: [id, draftId], onDelete: Restrict, onUpdate: Restrict)
+  originTeam      Team   @relation("TradePickAssetOrigin", fields: [originTeamId, draftId], references: [id, draftId], onDelete: Restrict, onUpdate: Restrict)
+
+  @@unique([tradeId, originTeamId, futurePickYear, futurePickRound])
+  @@index([draftId, originTeamId, futurePickYear, futurePickRound])
+}
+
+model TradeAuditEvent {
+  id         Int               @id @default(autoincrement())
+  draftId    Int
+  tradeId    Int
+  actorId    String
+  type       BidAuditEventType // reuse CREATE/UPDATE/DELETE/RESTORE; SUPERSEDE unused here
+  before     Json?
+  after      Json?
+  occurredAt DateTime          @default(now())
+  draft      Draft             @relation(fields: [draftId], references: [id], onDelete: Restrict)
+  trade      Trade             @relation(fields: [tradeId, draftId], references: [id, draftId], onDelete: Restrict)
+
+  @@index([draftId, occurredAt, id])
+  @@index([tradeId])
 }
 
 model DraftCompletionSnapshot {

@@ -196,13 +196,17 @@ So the picker is two categories:
 
 **Same-acquisition-event grouping:** used twice — once for `/teams` display, once for valuation below
 — so it's defined once, here. Three rounds of an `(origin, year)` are a "group" only when all three
-currently resolve to the same holder _via the same single acquisition event_: either one `PKG`-level
-`AuctionResult`, or all three still untouched at origin default. If the three rounds happen to share a
-holder through independent events (three separate `individual`-mode bids, or a trade that reassembled
-them one round at a time), they are **not** a group, even though the holder matches — there's no
-single event a "package" label would accurately describe, and (per Dynamic Pick Valuation
-Integration) no single baseline that correctly values them together. `/teams` displays a group as
-"origin's YEAR package" instead of three separate lines; anything not a group displays as three lines.
+currently resolve to the same holder _via the same single acquisition event_: one `PKG`-level
+`AuctionResult`, all three still untouched at origin default, or **one single `Trade`** that named all
+three rounds together (the trade-entry UI lets an operator check off multiple picks in one submission,
+per the brainstorming decision that a package can move as a unit in a trade the same way it can at
+auction — this is one `Trade.id` as the shared `eventId`, exactly analogous to one `AuctionResult.id`).
+If the three rounds happen to share a holder through independent events (three separate
+`individual`-mode bids, or a trade that reassembled them one round at a time across multiple separate
+`Trade` records), they are **not** a group, even though the holder matches — there's no single event a
+"package" label would accurately describe, and (per Dynamic Pick Valuation Integration) no single
+baseline that correctly values them together. `/teams` displays a group as "origin's YEAR package"
+instead of three separate lines; anything not a group displays as three lines.
 
 ## Budget Effect
 

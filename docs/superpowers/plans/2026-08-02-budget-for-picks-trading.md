@@ -143,7 +143,7 @@ git commit -m "Add Trade, TradePickAsset, TradeAuditEvent models"
 
 **Interfaces:**
 
-- Produces: `export const PACKAGE_BASELINE: { budget: number; ceiling: number; floor: number }` and `export const ROUND_BASELINES: Record<1 | 2 | 3, { budget: number; ceiling: number; floor: number }>` (both currently module-private `const`, using this same inline object type — there is no separate `PickBaseline` named type in this file to reuse).
+- Produces: `export const PACKAGE_BASELINE: { budget: number; ceiling: number; floor: number }` and `export const ROUND_BASELINES: Record<1 | 2 | 3, { budget: number; ceiling: number; floor: number }>` (both currently module-private `const`). `src/lib/futurePickAssets.ts:17-21` does have a module-private `interface PickBaseline { budget; ceiling; floor }`, but the actual `const` declarations being exported here (Step 3) use this inline object type directly, not that interface name — leave `PickBaseline` itself untouched rather than reaching for it, since nothing in this task's diff references it by name.
 - Consumes: nothing new.
 
 - [ ] **Step 1: Write the failing test**
@@ -3292,48 +3292,110 @@ Expected: PASS
 
 - [ ] **Step 5: Write the failing `dynamicPickValues.ts` regression tests**
 
-Add to `src/__tests__/dynamicPickValues.test.ts` (this file already has fixtures for the existing accumulation behavior — locate the existing package-pricing test near line 141-190 mentioned in the spec's review and add alongside it):
+`dynamicPickValues.test.ts` has no exported/shared fixture constants — every test builds its own players/bids inline using the file's local `p(overrides)` and `bid(player, teamHandle, price)` helpers (both declared near the top of the file) plus the shared `lineup` constant. Add these two tests inside the existing `describe('applyDynamicPickValues', ...)` block, right after the first test (`'raises a weak origin team package and lowers a strong origin team package'`, lines 24-69) — the first new test below is a near-verbatim copy of it, so it's easiest to place immediately alongside:
 
 ```ts
-it('values an intact package identically to the pre-trade accumulation when zero trades exist', () => {
-  const futureCapitalByHandle = new Map([['origin-handle', 109]]); // same as old accumulation would produce
-  const result = applyDynamicPickValues({
-    players: EXISTING_PACKAGE_FIXTURE_PLAYERS, // reuse the file's existing fixture array
-    bids: EXISTING_PACKAGE_FIXTURE_BIDS,
-    startingLineup: EXISTING_STARTING_LINEUP,
-    futureCapitalByHandle,
+it('produces the same result with an explicit futureCapitalByHandle as the old internal accumulation did', () => {
+  // Identical fixture to 'raises a weak origin team package...' above — both PKG rows are
+  // budget: 109 with no trades, so the old internally-accumulated capital and the new explicit
+  // map agree on the same number. Reusing that test's own (relative, not hardcoded) assertions
+  // is the actual regression check: adding the required `futureCapitalByHandle` parameter must
+  // not change this fixture's output at all when the map matches what accumulation would have
+  // derived organically.
+  const players = [
+    p({ player: 'Weak WR', budget: 100, projectedPoints: 40, vor: 2, age: 31 }),
+    p({
+      player: 'weak 2027 Pick Package',
+      pos: 'PKG',
+      team: 'weak',
+      budget: 109,
+      ceiling: 131,
+      floor: 75,
+      futurePickOriginHandle: 'weak',
+      futurePickAssetKind: 'package',
+      futurePickYear: 2027,
+    }),
+    p({ player: 'Strong QB', pos: 'QB', budget: 100, projectedPoints: 300, vor: 80, age: 24 }),
+    p({ player: 'Strong WR', budget: 100, projectedPoints: 260, vor: 70, age: 25 }),
+    p({
+      player: 'strong 2027 Pick Package',
+      pos: 'PKG',
+      team: 'strong',
+      budget: 109,
+      ceiling: 131,
+      floor: 75,
+      futurePickOriginHandle: 'strong',
+      futurePickAssetKind: 'package',
+      futurePickYear: 2027,
+    }),
+  ];
+
+  const adjusted = applyDynamicPickValues({
+    players,
+    bids: [
+      bid('Weak WR', 'weak', 150),
+      bid('Strong QB', 'strong', 60),
+      bid('Strong WR', 'strong', 70),
+    ],
+    startingLineup: lineup,
+    futureCapitalByHandle: new Map([
+      ['weak', 109],
+      ['strong', 109],
+    ]),
   });
-  // Assert against the same expected adjusted value the existing (pre-Task-18) test already asserts —
-  // this test's purpose is confirming the new required parameter doesn't change that number.
+
+  const weakPackage = adjusted.find((player) => player.player === 'weak 2027 Pick Package')!;
+  expect(weakPackage.budget).toBeGreaterThan(109);
+  expect(weakPackage.dynamicPickValue?.adjustment).toBe(weakPackage.budget - 109);
   expect(
-    result.find((p) => p.player === EXISTING_PACKAGE_PLAYER_NAME)?.dynamicPickValue?.adjusted,
-  ).toBe(EXISTING_EXPECTED_ADJUSTED_VALUE);
+    adjusted.find((player) => player.player === 'strong 2027 Pick Package')!.budget,
+  ).toBeLessThan(109);
 });
 
-it('reflects a divested pick by removing its value from the origin future capital', () => {
-  const withoutTrade = new Map([['origin-handle', 109]]);
-  const afterDivesting = new Map([['origin-handle', 20]]); // kept rounds 2+3 only, per pickCapital's own test
-  const before = applyDynamicPickValues({
-    players: EXISTING_PACKAGE_FIXTURE_PLAYERS,
-    bids: EXISTING_PACKAGE_FIXTURE_BIDS,
-    startingLineup: EXISTING_STARTING_LINEUP,
-    futureCapitalByHandle: withoutTrade,
+it('lowers a package holder’s valuation as its future capital shrinks toward zero', () => {
+  // A maximal swing (full package capital down to none divested) rather than a partial one
+  // (e.g. down to a two-round remainder) — the rebuild-signal weighting is small enough that a
+  // partial swing can round to an identical dollar value depending on roster strength, which
+  // would make this test pass or fail for the wrong reason. Going to zero avoids that ambiguity:
+  // whatever the exact formula, more capital must never score lower than none.
+  const players = [
+    p({ player: 'Weak WR', budget: 100, projectedPoints: 40, vor: 2, age: 23 }),
+    p({
+      player: 'weak 2028 Pick Package',
+      pos: 'PKG',
+      team: 'weak',
+      budget: 109,
+      ceiling: 131,
+      floor: 75,
+      futurePickOriginHandle: 'weak',
+      futurePickAssetKind: 'package',
+      futurePickYear: 2028,
+    }),
+  ];
+  const bids = [bid('Weak WR', 'weak', 100)];
+
+  const withFullCapital = applyDynamicPickValues({
+    players,
+    bids,
+    startingLineup: lineup,
+    futureCapitalByHandle: new Map([['weak', 109]]),
   });
-  const after = applyDynamicPickValues({
-    players: EXISTING_PACKAGE_FIXTURE_PLAYERS,
-    bids: EXISTING_PACKAGE_FIXTURE_BIDS,
-    startingLineup: EXISTING_STARTING_LINEUP,
-    futureCapitalByHandle: afterDivesting,
+  const withNoCapital = applyDynamicPickValues({
+    players,
+    bids,
+    startingLineup: lineup,
+    futureCapitalByHandle: new Map(), // fully divested — no entry for 'weak' at all
   });
-  const beforeValue = before.find((p) => p.player === EXISTING_PACKAGE_PLAYER_NAME)
-    ?.dynamicPickValue?.adjusted;
-  const afterValue = after.find((p) => p.player === EXISTING_PACKAGE_PLAYER_NAME)?.dynamicPickValue
-    ?.adjusted;
-  expect(afterValue).not.toBe(beforeValue);
+
+  const withFullCapitalBudget = withFullCapital.find(
+    (player) => player.player === 'weak 2028 Pick Package',
+  )!.budget;
+  const withNoCapitalBudget = withNoCapital.find(
+    (player) => player.player === 'weak 2028 Pick Package',
+  )!.budget;
+  expect(withNoCapitalBudget).toBeLessThan(withFullCapitalBudget);
 });
 ```
-
-(Replace `EXISTING_PACKAGE_FIXTURE_PLAYERS`/`EXISTING_PACKAGE_FIXTURE_BIDS`/`EXISTING_STARTING_LINEUP`/`EXISTING_PACKAGE_PLAYER_NAME`/`EXISTING_EXPECTED_ADJUSTED_VALUE` with whatever the existing test file's actual fixture names are — read `src/__tests__/dynamicPickValues.test.ts` first to find them; this task's whole point is regression-testing against fixtures that already exist, not inventing new ones.)
 
 - [ ] **Step 6: Run tests to verify they fail**
 
@@ -3518,7 +3580,13 @@ export async function getActiveDraftPlayers({
           },
         })
       : Promise.resolve([]),
-    generatedPickYear === null
+    // Skip the query entirely, not just short-circuit its result, whenever there's nothing for
+    // `computeFutureCapitalByHandle` to look baselines up for — it only consults `baselines` for
+    // origins present in `resolvedPicks` (grouped), and `resolvedPicks` is empty on the
+    // overwhelmingly common "no trades or PKG/PICK wins yet" path. This route (`getActiveDraftPlayers`)
+    // backs the 20-second-polling `nomination-data` route (HARD-017 already trimmed that path once),
+    // so avoiding an unconditional extra query here on every poll matters.
+    generatedPickYear === null || resolvedPicks.length === 0
       ? Promise.resolve({
           packageBaselineByOrigin: new Map(),
           roundBaselineByOriginRound: new Map(),
@@ -3666,8 +3734,13 @@ describe('owner budget delta available for the value sheet', () => {
 
   afterAll(async () => {
     // `Draft.ownerTeamId` FKs to `Team` with `onDelete: Restrict` — this test sets it (line below),
-    // so it must be nulled before the team can be deleted, matching the existing convention in
-    // `bidRecovery.postgres.test.ts`/`draft-integrity.postgres.test.ts`/`draft-creation.postgres.test.ts`.
+    // so it must be nulled before the team can be deleted. Use `$transaction([...])` (the array
+    // form), not `Promise.all` — `bidRecovery.postgres.test.ts:59-67`,
+    // `draft-integrity.postgres.test.ts:71-79`, and `draft-creation.postgres.test.ts:110-118` all
+    // use this exact pattern because it runs its operations *sequentially* within one transaction;
+    // `Promise.all` fires both queries concurrently with no ordering guarantee across pool
+    // connections, so the team delete could reach Postgres before the ownerTeamId nulling commits
+    // and hit the FK restriction anyway.
     // Guard `draftId === undefined` (the `it` block throwing before assignment) — a `deleteMany`
     // `where` with an `undefined` field means "no filter on this field," which would otherwise
     // delete every trade/team row in the database instead of just this test's rows.
@@ -3675,12 +3748,12 @@ describe('owner budget delta available for the value sheet', () => {
       await disconnectPrisma();
       return;
     }
-    await getPrisma().trade.deleteMany({ where: { draftId } });
-    await Promise.all([
+    await getPrisma().$transaction([
+      getPrisma().trade.deleteMany({ where: { draftId } }),
       getPrisma().draft.update({ where: { id: draftId }, data: { ownerTeamId: null } }),
       getPrisma().team.deleteMany({ where: { draftId } }),
+      getPrisma().draft.delete({ where: { id: draftId } }),
     ]);
-    await getPrisma().draft.delete({ where: { id: draftId } });
     await disconnectPrisma();
   });
 
@@ -3861,6 +3934,8 @@ git commit -m "Reflect trade budget delta in the value sheet's own budget tracke
 
   Per the brainstorming decision that the trade-entry picker never shows a "package" concept — every option is a single round, even when a team happens to hold all three rounds of one origin/year together (that grouping only applies to `/teams` display and valuation, Task 18, never to this picker).
 
+  `getTradeablePicksForTeam` (single-team) has no production caller once Task 21 wires `/teams` through the batch `getTradeablePicksForAllTeams` below instead — it's kept because it's simpler to read and test in isolation, and a plausible future single-team caller (e.g. a per-team API route) would want it directly rather than discarding the other 11 teams' results from the batch call. Keep both; this isn't dead code by accident, it's a smaller building block the batch function is built from.
+
   `getTradeablePicksForAllTeams` exists because `/teams` (Task 21) needs every team's tradeable-picks list at once to populate `TradeModal`'s picker for whichever card the operator clicks. Calling `getTradeablePicksForTeam` once per team would run `resolveAllPickHolders` (itself 3 queries) once per team — for 12 teams, roughly 24-36 redundant queries returning the same underlying data every time. `getTradeablePicksForAllTeams` resolves everything once and buckets it by holder in memory instead.
 
 - [ ] **Step 1: Write the failing tests**
@@ -3943,8 +4018,17 @@ describe('getTradeablePicksForAllTeams', () => {
       { originTeamId: 9, originHandle: 'origin-team', futurePickYear: 2027, futurePickRound: 2 },
       { originTeamId: 9, originHandle: 'origin-team', futurePickYear: 2027, futurePickRound: 3 },
     ]);
+    // Team 6's bucket includes BOTH the pick it acquired from team 9 (round 1, touched) AND its
+    // own three untouched 2027 rounds (they default to their own team as holder, same as team 9's
+    // rounds 2-3 above) — every team always has its own untouched picks in its own bucket unless
+    // traded away, which is exactly what the per-team `getTradeablePicksForTeam` test above already
+    // demonstrates for team 9. Asserting only the acquired pick here would be asserting a behavior
+    // ("a team's own never-traded picks aren't tradeable") this function must NOT have.
     expect(result.tradeablePicksByTeamId[6]).toEqual([
       { originTeamId: 9, originHandle: 'origin-team', futurePickYear: 2027, futurePickRound: 1 },
+      { originTeamId: 6, originHandle: 'other-team', futurePickYear: 2027, futurePickRound: 1 },
+      { originTeamId: 6, originHandle: 'other-team', futurePickYear: 2027, futurePickRound: 2 },
+      { originTeamId: 6, originHandle: 'other-team', futurePickYear: 2027, futurePickRound: 3 },
     ]);
     // team.findMany and resolveAllPickHolders each run exactly once, not once per team.
     expect(mockTeamFindMany).toHaveBeenCalledTimes(1);
@@ -4465,8 +4549,8 @@ export default function TradeModal({
           draftId,
         });
         if (result.ok) {
-          // The parent unmounts this modal on close, so there's no one left to read
-          // `statusMessage` — skip setting it and just refresh + close.
+          // No success status text to set here — the parent unmounts this modal on close, so
+          // there'd be no one left to read it. Just refresh and close.
           router.refresh();
           onClose();
           return;
@@ -4679,11 +4763,16 @@ export type { TradeModalProps, ManualPickEntry } from './TradeModal';
 
 - [ ] **Step 6: Wire the "Log Trade" entry point into `DossierCard.tsx`**
 
-Add `onLogTrade: (teamId: number) => void;` to `DossierCardProps` and accept it in the destructured props. Read the file first: `DossierCard`'s card face is a `role="button"` element with its own `onClick`/`onKeyDown` spanning the whole card (toggling the roster detail view). **Do not nest the Log Trade button inside that element** — a button inside a `role="button"` container is both an accessibility violation (nested interactive controls) and a functional bug (clicking it also fires the card's own toggle handler). Place it as a sibling, in whatever footer/action row exists outside that element's closing tag, and stop the click from bubbling as defense-in-depth in case a future edit moves it inside anyway:
+Add `onLogTrade: (teamId: number) => void;` to `DossierCardProps` and accept it in the destructured props. Read the file first: `DossierCard`'s card face is a `role="button"` element with its own `onClick`/`onKeyDown` spanning the whole card (toggling the roster detail view), and the file has no existing footer/action row and imports no button primitive of its own today — `BidHistoryPanel.tsx` (the file this plan's UI tasks are already modeled on for HARD-010 conventions) imports `Button` from `@/components/ui/button`; do the same here rather than a bare `<button>`. **Do not nest the Log Trade button inside the `role="button"` card face** — a button inside a `role="button"` container is both an accessibility violation (nested interactive controls) and a functional bug (clicking it also fires the card's own toggle handler). Add it as a new sibling element after that element's closing tag (inside the outer card `<div>`), and stop the click from bubbling as defense-in-depth in case a future edit moves it inside anyway:
 
 ```tsx
-<button
+import { Button } from '@/components/ui/button';
+
+// ...
+
+<Button
   type="button"
+  size="sm"
   data-testid={`dossier-log-trade-${team.id}`}
   onClick={(event) => {
     event.stopPropagation();
@@ -4691,10 +4780,8 @@ Add `onLogTrade: (teamId: number) => void;` to `DossierCardProps` and accept it 
   }}
 >
   Log Trade
-</button>
+</Button>;
 ```
-
-(match this to whichever existing button primitive the rest of the file already imports for its own action buttons, once you've confirmed what that is by reading the file — don't introduce a second one.)
 
 Fix `src/__tests__/DossierCard.test.tsx`: every one of its `<DossierCard>` render calls will fail to typecheck once `onLogTrade` becomes required. The file already declares `const noop = () => {};` (line 83) and every render call ends with an `onToggle={...}` line. Add `onLogTrade={noop}` immediately after every `onToggle={...}` line:
 
@@ -4865,6 +4952,20 @@ Fix the two existing test surfaces that break from these new required props:
    ```bash
    perl -0777 -pi -e 's/(<RosterTracker\b(?:(?!\/>).)*?)\/>/$1{...TRADE_PROPS} \/>/gs' src/__tests__/RosterTracker.test.tsx
    ```
+
+   **This alone is not enough — the whole suite will fail to run, not just individual assertions.** `RosterTracker.tsx` now statically imports `TradeModal`, which statically imports `logTrade` from `@/lib/actions`. `actions.ts` imports `revalidatePath` from `next/cache`, which throws `ReferenceError: TextEncoder is not defined` under this file's plain jsdom environment — the same reason every other test that renders a component depending on `@/lib/actions` (`BidHistoryPanel.test.tsx`, `criticalRouteLandmarks.test.tsx`, etc.) already mocks it, and this file, previously having no such dependency, does not. Add the mock, and extend the existing `next/navigation` mock with `useRouter` (needed once `TradeModal.tsx`'s `router.refresh()` runs):
+
+   ```ts
+   jest.mock('@/lib/actions', () => ({ logTrade: jest.fn() }));
+
+   jest.mock('next/navigation', () => ({
+     usePathname: () => '/draft/1/teams',
+     useSearchParams: () => new URLSearchParams(mockSearch),
+     useRouter: () => ({ refresh: jest.fn() }),
+   }));
+   ```
+
+   (extend the file's existing `next/navigation` mock in place — don't add a second `jest.mock('next/navigation', ...)` call, Jest only honors one per module.)
 
    Run `pnpm test RosterTracker` afterward and confirm the pre-existing assertions are unaffected — spot-check a couple of the resulting render calls by eye (e.g. around the multi-prop calls at the `startingLineup` and `mockDesktop` tests) to confirm the regex placed `{...TRADE_PROPS}` before the closing `/>` correctly rather than mangling an existing prop line.
 
@@ -5352,20 +5453,20 @@ Expected: typecheck, lint, format, and unit tests all pass.
 - [ ] **Step 2: Real-Postgres integration suite**
 
 Run: `pnpm test:integration`
-Expected: all `.postgres.test.ts` files pass, including the three new ones from Tasks 8, 15 (covered inline in Task 14/15's mocked tests — no dedicated postgres file was added for delete/restore chaining; if manual review during Task 14/15 execution decides real-Postgres coverage is warranted for `PICK_ALREADY_RETRADED` chaining specifically, add `src/__tests__/integration/tradeChaining.postgres.test.ts` covering: create trade A→B, create trade B→C for the same pick, attempt delete on A→B, expect `PICK_ALREADY_RETRADED`) and Task 19.
+Expected: all `.postgres.test.ts` files pass, including the three new ones from Tasks 8, 15 (covered inline in Task 14/15's mocked tests — no dedicated postgres file was added for delete/restore chaining; if manual review during Task 14/15 execution decides real-Postgres coverage is warranted for `PICK_ALREADY_RETRADED` chaining specifically, add `src/__tests__/integration/tradeChaining.postgres.test.ts` covering: create a trade where A sends budget to B for a pick, create a second trade where A sends that same pick to C for budget, attempt to delete the first trade, expect `PICK_ALREADY_RETRADED`) and Task 19.
 
 - [ ] **Step 3: Manual end-to-end walkthrough**
 
-Run `make dev` against a local draft with at least 3 teams and `futurePickAuctionMode: NONE`:
+Run `make dev` against a local draft with at least 3 teams and `futurePickAuctionMode: NONE`. Uses budget-sends-to/pick-sends-to language throughout, not "A→B" arrows — arrow notation is exactly what caused an earlier draft of this walkthrough to describe the wrong team as holding the pick after each step (`budgetTeamId` is the team that ends up holding the pick; `pickTeamId` is the team that gives it up, per `resolvePickHolder`, Task 5).
 
-1. Open `/draft/[draftId]/teams`, click "Log Trade" on Team A's card.
+1. Open `/draft/[draftId]/teams`, click "Log Trade" on Team A's card. Leave the default direction radio ("sending budget, receiving picks") selected, so A is the budget-sender.
 2. Select Team B as counterparty, enter a budget amount, check one of Team B's currently-generated-year picks.
-3. Submit — confirm the trade appears in the history list and both teams' remaining budget updates on `/teams`, `/budget`, and (if either team is the signed-in owner) the value sheet.
-4. Attempt a bid for the team that received budget that would only be legal with the trade's budget included — confirm it's accepted.
-5. Log a second trade re-trading the same pick from Team B to Team C.
-6. Attempt to delete the first trade (A→B) — confirm it's rejected with `PICK_ALREADY_RETRADED`.
-7. Delete the second trade (B→C) first, then delete the first (A→B) — confirm both succeed, and after each delete confirm the pick's holder matches `resolvePickHolder`'s fallback chain: after deleting B→C, it should resolve back to B (via the still-active A→B trade); after also deleting A→B, it should resolve to its origin team by default.
-8. Restore the first trade within 30 minutes — confirm it succeeds and Team B holds the pick again.
+3. Submit — confirm the trade appears in the history list, and confirm on `/teams` that **A** now holds the pick it just checked (not B) — this is the direct behavioral check for the ownership-direction fix in Tasks 5-6. Confirm both teams' remaining budget updates on `/teams`, `/budget`, and (if either team is the signed-in owner) the value sheet.
+4. Attempt a bid for Team B (the team that received budget) that would only be legal with the trade's budget included — confirm it's accepted.
+5. Log a second trade: open Team A's card, select Team C as counterparty, this time choose the "sending picks, receiving budget" radio (A is now the pick-sender, since A holds the pick from step 3), and select that same pick.
+6. Attempt to delete the first trade (A pays B) — confirm it's rejected with `PICK_ALREADY_RETRADED`, since the second trade (A sends the pick to C) still actively references it.
+7. Delete the second trade (A sends pick to C) first, then delete the first (A pays B) — confirm both succeed, and after each delete confirm the pick's holder matches `resolvePickHolder`'s fallback chain: after deleting the second trade, it should resolve back to **A** (via the still-active first trade, since A is that trade's `budgetTeamId`); after also deleting the first trade, it should resolve to its origin team by default.
+8. Restore the first trade (A pays B) within 30 minutes — confirm it succeeds and **A** holds the pick again.
 
 Kill the dev server when done (global rule: kill background dev servers when done).
 

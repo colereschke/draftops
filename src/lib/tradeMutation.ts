@@ -211,3 +211,71 @@ export async function updateTradeRecord(
     return { tradeId: updated.id };
   });
 }
+
+async function getTransactionTimestamp(tx: Prisma.TransactionClient): Promise<Date> {
+  const clock = await tx.$queryRaw<Array<{ now: Date }>>`SELECT transaction_timestamp() AS now`;
+  return clock[0].now;
+}
+
+async function assertNoLaterTradeRetradesAnyPick(
+  tx: Prisma.TransactionClient,
+  draftId: number,
+  trade: { id: number; createdAt: Date },
+  picks: Array<{ originTeamId: number; futurePickYear: number; futurePickRound: number }>,
+): Promise<void> {
+  for (const pick of picks) {
+    const laterTrade = await tx.tradePickAsset.findFirst({
+      where: {
+        draftId,
+        originTeamId: pick.originTeamId,
+        futurePickYear: pick.futurePickYear,
+        futurePickRound: pick.futurePickRound,
+        trade: { deletedAt: null, createdAt: { gt: trade.createdAt } },
+      },
+      select: { id: true },
+    });
+    if (laterTrade) throw new DraftMutationFailure('PICK_ALREADY_RETRADED');
+  }
+}
+
+export interface DeleteTradeRecordInput {
+  userId: string;
+  draftId: number;
+  tradeId: number;
+}
+
+export async function deleteTradeRecord(
+  input: DeleteTradeRecordInput,
+): Promise<DraftMutationResult<null>> {
+  if (!isPositiveSafeInteger(input.draftId) || !isPositiveSafeInteger(input.tradeId)) {
+    return { ok: false, code: 'INVALID_INPUT' };
+  }
+
+  return withActiveOwnedDraftMutation(input.userId, input.draftId, async (tx, draft) => {
+    const existing = await tx.trade.findFirst({
+      where: { id: input.tradeId, draftId: draft.id, deletedAt: null },
+      include: { pickAssets: true },
+    });
+    if (!existing) throw new DraftMutationFailure('TRADE_NOT_FOUND');
+
+    await assertNoLaterTradeRetradesAnyPick(tx, draft.id, existing, existing.pickAssets);
+    await assertTeamCanAbsorbBudgetChange(tx, draft, existing.pickTeamId, 0, existing.id);
+
+    const transactionTimestamp = await getTransactionTimestamp(tx);
+    const deleted = await tx.trade.update({
+      where: { id: existing.id },
+      data: { deletedAt: transactionTimestamp, updatedAt: transactionTimestamp },
+    });
+
+    await createTradeAuditEvent(tx, {
+      draftId: draft.id,
+      tradeId: deleted.id,
+      actorId: input.userId,
+      type: 'DELETE',
+      before: toTradeSnapshot(existing as AuditableTrade),
+      after: toTradeSnapshot(deleted as AuditableTrade),
+    });
+
+    return null;
+  });
+}

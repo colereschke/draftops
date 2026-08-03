@@ -1,4 +1,4 @@
-import { createTradeRecord, updateTradeRecord } from '@/lib/tradeMutation';
+import { createTradeRecord, updateTradeRecord, deleteTradeRecord } from '@/lib/tradeMutation';
 
 const mockTransaction = jest.fn();
 const mockExecuteRaw = jest.fn();
@@ -198,5 +198,54 @@ describe('updateTradeRecord', () => {
     expect(mockTradeUpdate).toHaveBeenCalledWith(
       expect.objectContaining({ data: expect.objectContaining({ notes: 'Pre-deadline swap' }) }),
     );
+  });
+});
+
+const EXISTING_TRADE_WITH_PICKS = {
+  ...EXISTING_TRADE,
+  pickAssets: [{ originTeamId: 9, futurePickYear: 2028, futurePickRound: 1 }],
+};
+
+describe('deleteTradeRecord', () => {
+  beforeEach(() => {
+    mockTradeFindFirst.mockResolvedValue(EXISTING_TRADE_WITH_PICKS);
+    mockTradePickAssetFindFirst.mockResolvedValue(null); // no later trade re-trades this pick
+    mockTradeUpdate.mockResolvedValue({
+      ...EXISTING_TRADE,
+      deletedAt: new Date('2026-08-02T00:00:00.000Z'),
+    });
+  });
+
+  it('soft-deletes when pickTeam remains legal and nothing re-traded the picks', async () => {
+    const result = await deleteTradeRecord({ userId: 'owner-1', draftId: 4, tradeId: 501 });
+    expect(result).toEqual({ ok: true, data: null });
+    expect(mockTradeUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ deletedAt: expect.any(Date) }) }),
+    );
+  });
+
+  it('rejects with PICK_ALREADY_RETRADED when a later trade names one of its picks', async () => {
+    mockTradePickAssetFindFirst.mockResolvedValue({ id: 900 }); // a later trade references this pick
+    const result = await deleteTradeRecord({ userId: 'owner-1', draftId: 4, tradeId: 501 });
+    expect(result).toEqual({ ok: false, code: 'PICK_ALREADY_RETRADED' });
+  });
+
+  it('rejects with TRADE_EXCEEDS_BUDGET when pickTeam already spent the received budget', async () => {
+    mockTeamFindFirst.mockImplementation(({ where }: { where: { id: number } }) =>
+      Promise.resolve({ id: where.id, budget: 1000 }),
+    );
+    mockAuctionFindMany.mockImplementation(({ where }: { where: { teamId: number } }) =>
+      Promise.resolve(
+        where.teamId === 9 ? [{ price: 1050, position: 'QB' }] : [], // pickTeam already spent past raw budget, relying on the trade's +80
+      ),
+    );
+    const result = await deleteTradeRecord({ userId: 'owner-1', draftId: 4, tradeId: 501 });
+    expect(result).toEqual({ ok: false, code: 'TRADE_EXCEEDS_BUDGET' });
+  });
+
+  it('rejects with TRADE_NOT_FOUND for a missing or already-deleted trade', async () => {
+    mockTradeFindFirst.mockResolvedValue(null);
+    const result = await deleteTradeRecord({ userId: 'owner-1', draftId: 4, tradeId: 999 });
+    expect(result).toEqual({ ok: false, code: 'TRADE_NOT_FOUND' });
   });
 });

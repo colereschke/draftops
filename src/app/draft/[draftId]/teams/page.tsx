@@ -66,9 +66,10 @@ export default async function TeamsPage({ params }: { params: Promise<{ draftId:
       ownerHandle={draft.ownerTeam?.handle ?? null}
       startingLineup={startingLineup}
       draftId={draftId}
-      tradeTeams={rawTeams}
+      tradeTeams={rawTeams.map(({ id, handle, displayName }) => ({ id, handle, displayName }))}
       generatedPickYear={generatedPickYear}
       tradeablePicksByTeamId={tradeablePicksByTeamId}
+      isReadOnly={draft.status === 'COMPLETE'}
     />
   );
 }

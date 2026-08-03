@@ -279,3 +279,71 @@ export async function deleteTradeRecord(
     return null;
   });
 }
+
+export interface RestoreTradeRecordInput {
+  userId: string;
+  draftId: number;
+  tradeId: number;
+}
+
+export async function restoreTradeRecord(
+  input: RestoreTradeRecordInput,
+): Promise<DraftMutationResult<{ tradeId: number }>> {
+  if (!isPositiveSafeInteger(input.draftId) || !isPositiveSafeInteger(input.tradeId)) {
+    return { ok: false, code: 'INVALID_INPUT' };
+  }
+
+  return withActiveOwnedDraftMutation(input.userId, input.draftId, async (tx, draft) => {
+    const trade = await tx.trade.findFirst({
+      where: { id: input.tradeId, draftId: draft.id },
+      include: { pickAssets: true },
+    });
+    if (!trade) throw new DraftMutationFailure('TRADE_NOT_FOUND');
+    if (trade.deletedAt === null) throw new DraftMutationFailure('TRADE_NOT_DELETED');
+
+    const transactionTimestamp = await getTransactionTimestamp(tx);
+    if (trade.deletedAt.getTime() <= transactionTimestamp.getTime() - 30 * 60 * 1000) {
+      throw new DraftMutationFailure('RESTORE_WINDOW_EXPIRED');
+    }
+
+    // Restore re-establishes a pick assertion that may since have been superseded — re-check both
+    // failure modes, not just PICK_NOT_HELD, so a later active re-trade surfaces its specific code.
+    await assertNoLaterTradeRetradesAnyPick(
+      tx,
+      draft.id,
+      trade,
+      trade.pickAssets.map((asset) => ({
+        originTeamId: asset.originTeamId,
+        futurePickYear: asset.futurePickYear,
+        futurePickRound: asset.futurePickRound,
+      })),
+    );
+    await assertPicksCurrentlyHeldBy(
+      tx,
+      draft.id,
+      trade.pickTeamId,
+      trade.pickAssets.map((asset) => ({
+        originTeamId: asset.originTeamId,
+        futurePickYear: asset.futurePickYear,
+        futurePickRound: asset.futurePickRound as 1 | 2 | 3,
+      })),
+    );
+    await assertTeamCanAbsorbBudgetChange(tx, draft, trade.budgetTeamId, -trade.budgetAmount);
+
+    const restored = await tx.trade.update({
+      where: { id: trade.id },
+      data: { deletedAt: null },
+    });
+
+    await createTradeAuditEvent(tx, {
+      draftId: draft.id,
+      tradeId: restored.id,
+      actorId: input.userId,
+      type: 'RESTORE',
+      before: toTradeSnapshot(trade as AuditableTrade),
+      after: toTradeSnapshot(restored as AuditableTrade),
+    });
+
+    return { tradeId: restored.id };
+  });
+}

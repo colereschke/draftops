@@ -109,7 +109,11 @@ export default async function TeamsPage({ params }: { params: Promise<{ draftId:
         tradeablePicksByTeamId={tradeablePicksByTeamId}
         isReadOnly={draft.status === 'COMPLETE'}
       />
-      <TradeHistoryList draftId={draftId} trades={tradeHistory} />
+      <TradeHistoryList
+        draftId={draftId}
+        trades={tradeHistory}
+        isReadOnly={draft.status === 'COMPLETE'}
+      />
     </>
   );
 }

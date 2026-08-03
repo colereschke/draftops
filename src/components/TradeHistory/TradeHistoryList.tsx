@@ -41,6 +41,11 @@ export interface TradeHistoryListProps {
   draftId: number;
   trades: TradeHistoryEntry[];
   /**
+   * Required (not optional), matching BidHistoryPanel's convention. Hides — never merely
+   * disables — the Edit/Remove/Confirm-Remove/Keep/Restore controls on a completed draft.
+   */
+  isReadOnly: boolean;
+  /**
    * Test-only clock pin. When supplied, the 1-second tick is skipped so restore-window
    * expiration is deterministic. Production always leaves this undefined and uses the real,
    * ticking clock.
@@ -54,7 +59,12 @@ function describePicks(picks: TradeHistoryEntry['picks']): string {
     .join(', ');
 }
 
-export default function TradeHistoryList({ draftId, trades, nowMs }: TradeHistoryListProps) {
+export default function TradeHistoryList({
+  draftId,
+  trades,
+  isReadOnly,
+  nowMs,
+}: TradeHistoryListProps) {
   const router = useRouter();
   const [now, setNow] = useState(() => new Date(nowMs ?? Date.now()));
   const [confirmingId, setConfirmingId] = useState<number | null>(null);
@@ -80,6 +90,13 @@ export default function TradeHistoryList({ draftId, trades, nowMs }: TradeHistor
   }
 
   function handleDelete(tradeId: number) {
+    if (isReadOnly || isPending) return;
+    // Clear synchronously, before the transition starts: setting React state to the same
+    // string as last time produces no DOM mutation, so a second identical failure would
+    // otherwise never re-announce to the aria-live region or the visible row error. Matches
+    // BidHistoryPanel.tsx:73's placement.
+    setStatusMessage('');
+    setRowError(tradeId, null);
     startTransition(async () => {
       try {
         const result = await deleteTrade({ id: tradeId, draftId });
@@ -101,6 +118,9 @@ export default function TradeHistoryList({ draftId, trades, nowMs }: TradeHistor
   }
 
   function handleRestore(tradeId: number) {
+    if (isReadOnly || isPending) return;
+    setStatusMessage('');
+    setRowError(tradeId, null);
     startTransition(async () => {
       try {
         const result = await restoreTrade({ id: tradeId, draftId });
@@ -132,6 +152,9 @@ export default function TradeHistoryList({ draftId, trades, nowMs }: TradeHistor
   }
 
   function handleSaveEdit(tradeId: number) {
+    if (isReadOnly || isPending) return;
+    setStatusMessage('');
+    setRowError(tradeId, null);
     const parsedAmount = Number(editAmount);
     if (!Number.isInteger(parsedAmount) || parsedAmount <= 0) {
       setRowError(tradeId, 'Enter a valid, positive budget amount.');
@@ -216,9 +239,11 @@ export default function TradeHistoryList({ draftId, trades, nowMs }: TradeHistor
                   </span>
 
                   <div className="flex flex-wrap items-center gap-2">
-                    {/* Gated on `!isDeleted` too: if a refresh soft-deletes the row mid-edit,
-                        the amount field must not linger next to the Restore button. */}
-                    {!isDeleted && editingId === trade.id ? (
+                    {/* Hidden entirely (not disabled) on a completed draft, matching the repo's
+                        isReadOnly convention (BidHistoryPanel's Restore button, DossierCard's
+                        Log Trade button). Also gated on `!isDeleted`: if a refresh soft-deletes
+                        the row mid-edit, the amount field must not linger next to Restore. */}
+                    {!isDeleted && !isReadOnly && editingId === trade.id ? (
                       <>
                         <label
                           htmlFor={`trade-history-edit-amount-${trade.id}`}
@@ -257,7 +282,7 @@ export default function TradeHistoryList({ draftId, trades, nowMs }: TradeHistor
                       </>
                     ) : null}
 
-                    {!isDeleted && editingId !== trade.id ? (
+                    {!isDeleted && !isReadOnly && editingId !== trade.id ? (
                       confirmingId === trade.id ? (
                         <>
                           <button
@@ -308,7 +333,14 @@ export default function TradeHistoryList({ draftId, trades, nowMs }: TradeHistor
                     ) : null}
 
                     {isDeleted &&
-                      (restoreExpired ? (
+                      (isReadOnly ? (
+                        <span
+                          data-testid={`trade-history-readonly-${trade.id}`}
+                          className="text-xs text-muted-foreground"
+                        >
+                          This completed draft is read-only.
+                        </span>
+                      ) : restoreExpired ? (
                         <span
                           data-testid={`trade-history-expired-${trade.id}`}
                           className="text-xs text-muted-foreground"

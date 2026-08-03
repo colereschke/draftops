@@ -56,7 +56,12 @@ construction rather than patching around them — see "Budget Effect," "Bid Muta
   `futurePickAssets.ts` — a row with no `futurePickYear`/`futurePickRound`/`futurePickOriginHandle`
   metadata, from before the per-origin generator existed). Ownership resolution requires that
   metadata; a draft still carrying legacy rows cannot trade those specific picks. New drafts already
-  exclude these rows (`excludeStaticFuturePickRows` in `actions.ts`).
+  exclude these rows (`excludeStaticFuturePickRows` in `actions.ts`). Legacy static rows are likewise
+  excluded from the dynamic-valuation `futureCapital` signal: the current-holdings snapshot is built
+  from `resolveAllPickHolders`, which only sees rows carrying `futurePickAssetKind`
+  (`'package'`/`'pick'`), so a legacy row won at auction can no longer contribute capital the way
+  the old buy-side accumulation did. This matches their existing exclusion from trading and is a stated
+  scope decision, not a bug.
 - A `/teams` or `/budget` aggregate "total draft capital" column. This spec makes the underlying
   data queryable; a dedicated aggregate view is future work (#8a-adjacent), not required here.
 

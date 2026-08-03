@@ -17,7 +17,13 @@ export type DraftMutationCode =
   | 'ROSTER_FULL'
   | 'BID_EXCEEDS_MAX'
   | 'NO_RANKING_SET'
-  | 'DUPLICATE_TEAM';
+  | 'DUPLICATE_TEAM'
+  | 'TRADE_NOT_FOUND'
+  | 'TRADE_NOT_DELETED'
+  | 'TRADE_EXCEEDS_BUDGET'
+  | 'PICK_NOT_HELD'
+  | 'PICK_ALREADY_RETRADED'
+  | 'PICK_HAS_ACTIVE_TRADES';
 
 export type DraftMutationResult<T> = { ok: true; data: T } | { ok: false; code: DraftMutationCode };
 

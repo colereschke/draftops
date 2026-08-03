@@ -221,3 +221,17 @@ describe('completeOwnedDraft', () => {
     expect(mockDraftUpdate).not.toHaveBeenCalled();
   });
 });
+
+describe('new trade mutation codes', () => {
+  it.each([
+    'TRADE_NOT_FOUND',
+    'TRADE_NOT_DELETED',
+    'TRADE_EXCEEDS_BUDGET',
+    'PICK_NOT_HELD',
+    'PICK_ALREADY_RETRADED',
+    'PICK_HAS_ACTIVE_TRADES',
+  ] as const)('constructs a DraftMutationFailure with code %s', (code) => {
+    const failure = new DraftMutationFailure(code);
+    expect(failure.code).toBe(code);
+  });
+});

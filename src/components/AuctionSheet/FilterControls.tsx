@@ -92,6 +92,7 @@ export default function FilterControls({
         </ToggleGroup>
 
         <Input
+          data-testid="player-search"
           value={search}
           onChange={(e) => onSearchChange(e.target.value)}
           placeholder="Search player or team..."

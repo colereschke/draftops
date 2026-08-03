@@ -1,4 +1,4 @@
-import { createTradeRecord } from '@/lib/tradeMutation';
+import { createTradeRecord, updateTradeRecord } from '@/lib/tradeMutation';
 
 const mockTransaction = jest.fn();
 const mockExecuteRaw = jest.fn();
@@ -127,5 +127,76 @@ describe('createTradeRecord', () => {
     );
     const result = await createTradeRecord(BASE_INPUT); // 50 - 80 < 0
     expect(result).toEqual({ ok: false, code: 'TRADE_EXCEEDS_BUDGET' });
+  });
+});
+
+const EXISTING_TRADE = {
+  id: 501,
+  draftId: 4,
+  budgetTeamId: 7,
+  pickTeamId: 9,
+  budgetAmount: 80,
+  notes: null,
+  createdAt: new Date('2026-08-01T00:00:00.000Z'),
+  updatedAt: new Date('2026-08-01T00:00:00.000Z'),
+  deletedAt: null,
+};
+
+describe('updateTradeRecord', () => {
+  beforeEach(() => {
+    mockTradeFindFirst.mockResolvedValue(EXISTING_TRADE);
+    mockTradeUpdate.mockResolvedValue({ ...EXISTING_TRADE, budgetAmount: 60 });
+  });
+
+  it('updates budgetAmount when both teams remain legal', async () => {
+    const result = await updateTradeRecord({
+      userId: 'owner-1',
+      draftId: 4,
+      tradeId: 501,
+      budgetAmount: 60,
+    });
+    expect(result).toEqual({ ok: true, data: { tradeId: 501 } });
+    expect(mockTradeUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ budgetAmount: 60 }) }),
+    );
+  });
+
+  it('rejects with TRADE_EXCEEDS_BUDGET when the new amount exceeds budgetTeam capacity', async () => {
+    mockTeamFindFirst.mockImplementation(({ where }: { where: { id: number } }) =>
+      Promise.resolve({ id: where.id, budget: 50 }),
+    );
+    const result = await updateTradeRecord({
+      userId: 'owner-1',
+      draftId: 4,
+      tradeId: 501,
+      budgetAmount: 60,
+    });
+    expect(result).toEqual({ ok: false, code: 'TRADE_EXCEEDS_BUDGET' });
+  });
+
+  it('rejects with TRADE_NOT_FOUND for a missing or deleted trade', async () => {
+    mockTradeFindFirst.mockResolvedValue(null);
+    const result = await updateTradeRecord({
+      userId: 'owner-1',
+      draftId: 4,
+      tradeId: 999,
+      budgetAmount: 60,
+    });
+    expect(result).toEqual({ ok: false, code: 'TRADE_NOT_FOUND' });
+  });
+
+  it('preserves existing notes when the caller updates only the amount', async () => {
+    mockTradeFindFirst.mockResolvedValue({ ...EXISTING_TRADE, notes: 'Pre-deadline swap' });
+    const result = await updateTradeRecord({
+      userId: 'owner-1',
+      draftId: 4,
+      tradeId: 501,
+      budgetAmount: 60,
+      // notes intentionally omitted — this is the shape TradeHistoryList's amount-only edit sends
+    });
+    expect(result).toEqual({ ok: true, data: { tradeId: 501 } });
+    expect(mockTradeUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ notes: 'Pre-deadline swap' }) }),
+    );
   });
 });

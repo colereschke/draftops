@@ -147,3 +147,67 @@ export async function createTradeRecord(
     return { tradeId: trade.id };
   });
 }
+
+export interface UpdateTradeRecordInput {
+  userId: string;
+  draftId: number;
+  tradeId: number;
+  budgetAmount: number;
+  notes?: string;
+}
+
+function hasValidUpdateInput(input: UpdateTradeRecordInput): boolean {
+  return (
+    isPositiveSafeInteger(input.draftId) &&
+    isPositiveSafeInteger(input.tradeId) &&
+    isPositiveSafeInteger(input.budgetAmount)
+  );
+}
+
+export async function updateTradeRecord(
+  input: UpdateTradeRecordInput,
+): Promise<DraftMutationResult<{ tradeId: number }>> {
+  if (!hasValidUpdateInput(input)) return { ok: false, code: 'INVALID_INPUT' };
+
+  return withActiveOwnedDraftMutation(input.userId, input.draftId, async (tx, draft) => {
+    const existing = await tx.trade.findFirst({
+      where: { id: input.tradeId, draftId: draft.id, deletedAt: null },
+    });
+    if (!existing) throw new DraftMutationFailure('TRADE_NOT_FOUND');
+
+    await assertTeamCanAbsorbBudgetChange(
+      tx,
+      draft,
+      existing.budgetTeamId,
+      -input.budgetAmount,
+      existing.id,
+    );
+    await assertTeamCanAbsorbBudgetChange(
+      tx,
+      draft,
+      existing.pickTeamId,
+      input.budgetAmount,
+      existing.id,
+    );
+
+    const updated = await tx.trade.update({
+      where: { id: existing.id },
+      // `input.notes` is optional — the UI's amount-only edit flow doesn't always resend notes, and
+      // `?? null` here would silently wipe them on every amount correction. Falling back to the
+      // existing value means "notes omitted" preserves them, while an explicit `''` (deliberately
+      // clearing them) still passes through, since `??` only substitutes on `null`/`undefined`.
+      data: { budgetAmount: input.budgetAmount, notes: input.notes ?? existing.notes },
+    });
+
+    await createTradeAuditEvent(tx, {
+      draftId: draft.id,
+      tradeId: updated.id,
+      actorId: input.userId,
+      type: 'UPDATE',
+      before: toTradeSnapshot(existing as AuditableTrade),
+      after: toTradeSnapshot(updated as AuditableTrade),
+    });
+
+    return { tradeId: updated.id };
+  });
+}

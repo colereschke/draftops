@@ -76,17 +76,24 @@ export async function completeOwnedDraft(
       if (!draft) throw new DraftMutationFailure('NOT_FOUND');
 
       if (draft.status === 'ACTIVE') {
-        const auctionResults = await tx.auctionResult.findMany({
-          where: { draftId: draft.id, deletedAt: null },
-          orderBy: { id: 'asc' },
-        });
+        const [auctionResults, trades] = await Promise.all([
+          tx.auctionResult.findMany({
+            where: { draftId: draft.id, deletedAt: null },
+            orderBy: { id: 'asc' },
+          }),
+          tx.trade.findMany({
+            where: { draftId: draft.id, deletedAt: null },
+            include: { pickAssets: true },
+            orderBy: { id: 'asc' },
+          }),
+        ]);
         const payload = JSON.parse(
-          JSON.stringify({ draft, auctionResults }),
+          JSON.stringify({ draft, auctionResults, trades }),
         ) as Prisma.InputJsonValue;
         await tx.draftCompletionSnapshot.create({
           data: {
             draftId: draft.id,
-            schemaVersion: 1,
+            schemaVersion: 2,
             payload,
           },
         });

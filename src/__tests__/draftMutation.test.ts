@@ -9,6 +9,7 @@ const mockExecuteRaw = jest.fn();
 const mockDraftFindFirst = jest.fn();
 const mockDraftUpdate = jest.fn();
 const mockAuctionResultFindMany = jest.fn();
+const mockTradeFindMany = jest.fn();
 const mockSnapshotCreate = jest.fn();
 
 const mockTx = {
@@ -19,6 +20,9 @@ const mockTx = {
   },
   auctionResult: {
     findMany: mockAuctionResultFindMany,
+  },
+  trade: {
+    findMany: mockTradeFindMany,
   },
   draftCompletionSnapshot: {
     create: mockSnapshotCreate,
@@ -54,6 +58,7 @@ beforeEach(() => {
   mockDraftFindFirst.mockResolvedValue(ACTIVE_DRAFT);
   mockDraftUpdate.mockResolvedValue({ ...ACTIVE_DRAFT, status: 'COMPLETE' });
   mockAuctionResultFindMany.mockResolvedValue([]);
+  mockTradeFindMany.mockResolvedValue([]);
   mockSnapshotCreate.mockResolvedValue({ id: 1, draftId: 4 });
   mockTransaction.mockImplementation((operation: (tx: typeof mockTx) => Promise<unknown>) =>
     operation(mockTx),
@@ -164,7 +169,7 @@ describe('completeOwnedDraft', () => {
     expect(mockSnapshotCreate).toHaveBeenCalledWith({
       data: expect.objectContaining({
         draftId: 4,
-        schemaVersion: 1,
+        schemaVersion: 2,
         payload: expect.objectContaining({
           draft: expect.objectContaining({ id: ACTIVE_DRAFT.id, status: 'ACTIVE' }),
           auctionResults: [
@@ -179,6 +184,61 @@ describe('completeOwnedDraft', () => {
     expect(mockSnapshotCreate.mock.invocationCallOrder[0]).toBeLessThan(
       mockDraftUpdate.mock.invocationCallOrder[0],
     );
+  });
+
+  it('captures active trades with pick assets in the version 2 completion snapshot', async () => {
+    const activeTrade = {
+      id: 21,
+      draftId: 4,
+      budgetTeamId: 7,
+      pickTeamId: 9,
+      budgetAmount: 75,
+      notes: '2028 capital',
+      createdAt: new Date('2026-07-23T12:00:00.000Z'),
+      updatedAt: new Date('2026-07-23T13:00:00.000Z'),
+      deletedAt: null,
+      pickAssets: [
+        {
+          id: 31,
+          tradeId: 21,
+          draftId: 4,
+          originTeamId: 9,
+          futurePickYear: 2028,
+          futurePickRound: 1,
+        },
+      ],
+    };
+    mockTradeFindMany.mockResolvedValue([activeTrade]);
+
+    await expect(completeOwnedDraft('owner-1', 4)).resolves.toEqual({ ok: true, data: null });
+
+    expect(mockTradeFindMany).toHaveBeenCalledWith({
+      where: { draftId: 4, deletedAt: null },
+      include: { pickAssets: true },
+      orderBy: { id: 'asc' },
+    });
+    expect(mockSnapshotCreate).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        draftId: 4,
+        schemaVersion: 2,
+        payload: expect.objectContaining({
+          auctionResults: [],
+          trades: [
+            expect.objectContaining({
+              id: activeTrade.id,
+              createdAt: activeTrade.createdAt.toISOString(),
+              pickAssets: [
+                expect.objectContaining({
+                  originTeamId: 9,
+                  futurePickYear: 2028,
+                  futurePickRound: 1,
+                }),
+              ],
+            }),
+          ],
+        }),
+      }),
+    });
   });
 
   it('rolls back completion when snapshot creation fails', async () => {

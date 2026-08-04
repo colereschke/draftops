@@ -60,6 +60,8 @@ describe('serializeDraftExport', () => {
           occurredAt: new Date('2026-07-21T15:00:00.000Z'),
         },
       ],
+      activeTrades: [],
+      tradeAuditEvents: [],
       completionSnapshot: {
         schemaVersion: 1,
         capturedAt: new Date('2026-07-22T12:00:00.000Z'),
@@ -92,6 +94,102 @@ describe('serializeDraftExport', () => {
       schemaVersion: 1,
       capturedAt: '2026-07-22T12:00:00.000Z',
       payload: { draftId: 4 },
+    });
+  });
+
+  it('exports active trades with pick assets and deterministically ordered trade audit history', () => {
+    const exported = serializeDraftExport({
+      draft: {
+        id: 4,
+        name: 'Startup',
+        status: 'ACTIVE',
+        budget: 1000,
+        teamCount: 12,
+        rosterSize: 30,
+        playerValueSourceBudget: 1000,
+        startingLineup: null,
+        scoringSettings: null,
+        targetRoster: null,
+        futurePickAuctionMode: 'PACKAGES',
+        sleeperLeagueId: null,
+        activeProjectionValueSetId: null,
+      },
+      bids: [],
+      auditEvents: [],
+      activeTrades: [
+        {
+          id: 21,
+          draftId: 4,
+          budgetTeamId: 7,
+          pickTeamId: 9,
+          budgetAmount: 75,
+          notes: '2028 capital',
+          createdAt: new Date('2026-07-23T12:00:00.000Z'),
+          updatedAt: new Date('2026-07-23T13:00:00.000Z'),
+          deletedAt: null,
+          pickAssets: [
+            {
+              id: 31,
+              tradeId: 21,
+              draftId: 4,
+              originTeamId: 9,
+              futurePickYear: 2028,
+              futurePickRound: 1,
+            },
+          ],
+        },
+      ],
+      tradeAuditEvents: [
+        {
+          id: 8,
+          draftId: 4,
+          tradeId: 21,
+          actorId: 'owner',
+          type: 'UPDATE',
+          before: null,
+          after: { budgetAmount: 75 },
+          occurredAt: new Date('2026-07-23T15:00:00.000Z'),
+        },
+        {
+          id: 3,
+          draftId: 4,
+          tradeId: 21,
+          actorId: 'owner',
+          type: 'CREATE',
+          before: null,
+          after: { budgetAmount: 50 },
+          occurredAt: new Date('2026-07-23T15:00:00.000Z'),
+        },
+      ],
+      completionSnapshot: null,
+    });
+
+    expect(exported.activeTrades).toEqual([
+      {
+        id: 21,
+        draftId: 4,
+        budgetTeamId: 7,
+        pickTeamId: 9,
+        budgetAmount: 75,
+        notes: '2028 capital',
+        createdAt: '2026-07-23T12:00:00.000Z',
+        updatedAt: '2026-07-23T13:00:00.000Z',
+        deletedAt: null,
+        pickAssets: [
+          {
+            id: 31,
+            tradeId: 21,
+            draftId: 4,
+            originTeamId: 9,
+            futurePickYear: 2028,
+            futurePickRound: 1,
+          },
+        ],
+      },
+    ]);
+    expect(exported.tradeAuditEvents.map((event) => event.id)).toEqual([3, 8]);
+    expect(exported.tradeAuditEvents[0]).toMatchObject({
+      occurredAt: '2026-07-23T15:00:00.000Z',
     });
   });
 });

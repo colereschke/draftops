@@ -34,6 +34,39 @@ export interface ExportableAuditEvent {
   occurredAt: Date;
 }
 
+export interface ExportableTradePickAsset {
+  id: number;
+  tradeId: number;
+  draftId: number;
+  originTeamId: number;
+  futurePickYear: number;
+  futurePickRound: number;
+}
+
+export interface ExportableTrade {
+  id: number;
+  draftId: number;
+  budgetTeamId: number;
+  pickTeamId: number;
+  budgetAmount: number;
+  notes: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+  deletedAt: Date | null;
+  pickAssets: ExportableTradePickAsset[];
+}
+
+export interface ExportableTradeAuditEvent {
+  id: number;
+  draftId: number;
+  tradeId: number;
+  actorId: string;
+  type: BidAuditEventType;
+  before: Prisma.JsonValue | null;
+  after: Prisma.JsonValue | null;
+  occurredAt: Date;
+}
+
 export interface ExportableCompletionSnapshot {
   schemaVersion: number;
   capturedAt: Date;
@@ -60,6 +93,8 @@ export interface DraftExportInput {
   draft: ExportableDraft;
   bids: ExportableBid[];
   auditEvents: ExportableAuditEvent[];
+  activeTrades: ExportableTrade[];
+  tradeAuditEvents: ExportableTradeAuditEvent[];
   completionSnapshot: ExportableCompletionSnapshot | null;
 }
 
@@ -74,6 +109,14 @@ export interface DraftExport {
     }
   >;
   auditEvents: Array<Omit<ExportableAuditEvent, 'occurredAt'> & { occurredAt: string }>;
+  activeTrades: Array<
+    Omit<ExportableTrade, 'createdAt' | 'updatedAt' | 'deletedAt'> & {
+      createdAt: string;
+      updatedAt: string;
+      deletedAt: string | null;
+    }
+  >;
+  tradeAuditEvents: Array<Omit<ExportableTradeAuditEvent, 'occurredAt'> & { occurredAt: string }>;
   completionSnapshot: {
     schemaVersion: number;
     capturedAt: string;
@@ -92,6 +135,18 @@ export function serializeDraftExport(input: DraftExportInput): DraftExport {
       supersededAt: bid.supersededAt?.toISOString() ?? null,
     })),
     auditEvents: [...input.auditEvents]
+      .sort((left, right) => {
+        const occurredAtDifference = left.occurredAt.getTime() - right.occurredAt.getTime();
+        return occurredAtDifference || left.id - right.id;
+      })
+      .map((event) => ({ ...event, occurredAt: event.occurredAt.toISOString() })),
+    activeTrades: input.activeTrades.map((trade) => ({
+      ...trade,
+      createdAt: trade.createdAt.toISOString(),
+      updatedAt: trade.updatedAt.toISOString(),
+      deletedAt: trade.deletedAt?.toISOString() ?? null,
+    })),
+    tradeAuditEvents: [...input.tradeAuditEvents]
       .sort((left, right) => {
         const occurredAtDifference = left.occurredAt.getTime() - right.occurredAt.getTime();
         return occurredAtDifference || left.id - right.id;

@@ -5,13 +5,7 @@ import prettierConfig from 'eslint-config-prettier';
 
 const config = [
   {
-    ignores: [
-      'existing_project_docs/**',
-      '.claude/worktrees/**',
-      '.claire/worktrees/**',
-      '.worktrees/**',
-      'coverage/**',
-    ],
+    ignores: ['.claude/worktrees/**', '.claire/worktrees/**', '.worktrees/**', 'coverage/**'],
   },
   ...nextConfig,
   ...nextTypescript,

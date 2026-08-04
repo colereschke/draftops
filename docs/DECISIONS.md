@@ -325,6 +325,24 @@ no restore path at all — rejected as insufficient for the common accidental-de
 
 ## Security & Hardening
 
+## Codebase Structure
+
+### Behavior-preserving decomposition follows characterization boundaries (HARD-022, 2026-08-03)
+
+**Decision:** Decompose oversized draft-form, auction-workspace, Sleeper-sync, and
+projection-application modules along tested behavior boundaries, leaving domain behavior and
+transaction contracts unchanged.
+
+**Why:** These modules had accumulated unrelated state, rendering, orchestration, and persistence
+concerns. Characterization tests make the existing contracts explicit before extraction, while
+focused modules reduce review risk and make future changes easier to localize.
+
+**Alternatives considered:** A broad rewrite or behavior changes during decomposition — rejected
+because the hardening work had already established sensitive lifecycle, valuation, and transaction
+invariants that should not be reinterpreted during cleanup.
+
+**Status:** Active.
+
 ### CSP ships report-only before enforcement (HARD-019, PR #80, 2026-07-28)
 
 **Decision:** Add security headers and a Content-Security-Policy in report-only mode first,

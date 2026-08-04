@@ -3,6 +3,9 @@
 Local Python ETL for generating projection CSVs from Mike Clay's 2026 NFL Projection Guide and the
 Sleeper NFL player database.
 
+For the persisted data model, active-value contract, and projection architecture, see
+[`docs/projections-architecture.md`](../../docs/projections-architecture.md).
+
 ## Setup
 
 ```bash
@@ -62,7 +65,7 @@ IDs so rankings values can be joined to projection values:
 
 ```bash
 uv run python -m draftops_projections.match_etr_values \
-  --etr-csv existing_project_docs/auction-tool/src/Dynasty_Rankings.csv \
+  --etr-csv data/source/etr-dynasty-rankings.csv \
   --sleeper-json data/raw/sleeper_players.json \
   --output-csv data/generated/etr_sleeper_matches.csv
 ```

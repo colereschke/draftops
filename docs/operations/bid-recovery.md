@@ -70,7 +70,8 @@ point-in-time recovery (PITR). This is an operator procedure, not an application
 2. In Neon, create a **new branch** restored to a point immediately before the bad write. Never
    overwrite, rewind, or repoint the production branch during investigation.
 3. Connect tooling only to that restored branch. Verify its schema includes the HARD-011
-   migrations before reading data.
+   migrations and the budget-for-picks migration that creates `Trade`, `TradePickAsset`, and
+   `TradeAuditEvent` before reading data.
 4. Run the validation queries below against the restored branch and compare their output with the
    production JSON export. Determine the smallest safe correction (normally a targeted replay or
    a manually reviewed SQL change), rather than promoting the restored branch wholesale.
@@ -104,7 +105,7 @@ Perform this drill periodically on a non-production Neon branch:
 ## Validation queries
 
 Set `:draft_id` to the affected numeric draft ID in `psql` (for example,
-`\\set draft_id 42`). Run these against the production branch for a baseline and the restored
+`\set draft_id 42`). Run these against the production branch for a baseline and the restored
 branch for comparison.
 
 ```sql

@@ -912,7 +912,7 @@ directly in production, so the dependency only matters locally.
 
 ## Roadmap / Deferred Decisions
 
-### Budget-for-picks trading uses an immutable ledger and read-time ownership (#10, 2026-08-04)
+### Budget-for-picks trading uses a durable, audited ledger and read-time ownership (#10, 2026-08-04)
 
 **Decision:** Shipped budget-for-picks trading as `Trade`, `TradePickAsset`, and
 `TradeAuditEvent` records rather than an `AuctionResult` or a general tradeable-asset system.

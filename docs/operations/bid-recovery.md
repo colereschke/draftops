@@ -13,9 +13,11 @@ The draft owner can download the current records while signed in:
 
 Both endpoints are owner-authorized, return an attachment, and are deliberately
 `Cache-Control: no-store`. Save the JSON export before making an operational change. It
-contains draft settings, active bids, active trades (including their round-level pick assets), the
-ordered bid and trade audit histories, and the completion snapshot when one exists. The CSV is a
-spreadsheet-safe view of active bids only; it is not a recovery archive.
+contains draft settings, active bids, every trade record (active and soft-deleted) with its
+deterministically ordered round-level pick assets, the ordered bid and trade audit histories, and
+the completion snapshot when one exists. `activeTrades` remains as a compatibility view derived
+from the complete `trades` collection. The CSV is a spreadsheet-safe view of active bids only; it
+is not a recovery archive.
 
 ## In-app restoration
 
@@ -38,9 +40,9 @@ restored only while the draft is `ACTIVE`, the requester owns it, and PostgreSQL
 clock is strictly within 30 minutes of `deletedAt`. Restoration also rechecks that the selling team
 currently holds every pick, no later active trade has re-traded one of those picks, and the
 budget-sending team can still afford the budget transfer. Delete uses the same safeguards, so a
-trade that has a later active re-trade cannot be removed first. Active trades therefore appear in
-the JSON archive alongside their complete ordered `CREATE`, `UPDATE`, `DELETE`, and `RESTORE`
-history; the active-trade list alone is not a recovery record.
+trade that has a later active re-trade cannot be removed first. All trades therefore appear in the
+JSON archive alongside their complete ordered `CREATE`, `UPDATE`, `DELETE`, and `RESTORE` history;
+the derived active-trade list alone is not a recovery record.
 
 ## Completion snapshot and audit boundary
 
@@ -128,7 +130,6 @@ ORDER BY type;
 SELECT id, "budgetTeamId", "pickTeamId", "budgetAmount", "createdAt", "deletedAt"
 FROM "Trade"
 WHERE "draftId" = :draft_id
-  AND "deletedAt" IS NULL
 ORDER BY "createdAt", id;
 
 SELECT tpa."tradeId", tpa."originTeamId", tpa."futurePickYear", tpa."futurePickRound",

@@ -6,9 +6,13 @@ import { getActiveDraftPlayers } from '@/lib/activeDraftPlayers';
 import { computeDraftTeamStats } from '@/lib/computeDraftTeamStats';
 import { computeTendencies } from '@/lib/tendencies';
 import { getTradeBudgetDeltaByTeamId } from '@/lib/tradeBudget';
-import { getTradeablePicksForAllTeams } from '@/lib/tradePicker';
+import { buildTradeablePicksForAllTeams } from '@/lib/tradePicker';
 import type { CurrentPickHolding } from '@/lib/pickOwnership';
-import { buildCurrentPickHoldings, resolveAllPickHolders } from '@/lib/pickOwnership';
+import {
+  buildCurrentPickHoldings,
+  getGeneratedPickYear,
+  resolveAllPickHolders,
+} from '@/lib/pickOwnership';
 import RosterTracker from '@/components/RosterTracker';
 import TradeHistoryList, { type TradeHistoryEntry } from '@/components/TradeHistory';
 import { fromPrismaFuturePickMode } from '@/lib/futurePickAssets';
@@ -48,6 +52,8 @@ export default async function TeamsPage({ params }: { params: Promise<{ draftId:
     bids,
     startingLineup,
     futurePickAuctionMode: fromPrismaFuturePickMode(draft.futurePickAuctionMode),
+    preFetchedTeams: rawTeams,
+    preResolvedPicks: resolvedPicksPromise,
   });
 
   const tendencies = computeTendencies(rawTeams, players);
@@ -62,10 +68,15 @@ export default async function TeamsPage({ params }: { params: Promise<{ draftId:
   // Batch loader — resolves the generated-pick year and every team's tradeable picks in one
   // pass. A per-team getTradeablePicksForTeam loop would re-run resolveAllPickHolders once
   // per team (an N+1 across 12 teams).
-  const [{ generatedPickYear, tradeablePicksByTeamId }, resolvedPicks] = await Promise.all([
-    getTradeablePicksForAllTeams(getPrisma(), draftId),
+  const [generatedPickYear, resolvedPicks] = await Promise.all([
+    getGeneratedPickYear(getPrisma(), draftId),
     resolvedPicksPromise,
   ]);
+  const tradeablePicksByTeamId = buildTradeablePicksForAllTeams(
+    rawTeams,
+    generatedPickYear,
+    resolvedPicks,
+  );
   const pickHoldingsByTeamId: Record<number, CurrentPickHolding[]> = Object.fromEntries(
     rawTeams.map((team) => [team.id, []]),
   );

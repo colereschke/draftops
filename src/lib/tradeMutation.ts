@@ -6,7 +6,8 @@ import {
   type DraftMutationResult,
 } from '@/lib/draftMutation';
 import { createTradeAuditEvent, toTradeSnapshot, type AuditableTrade } from '@/lib/tradeAudit';
-import { resolvePickHolder } from '@/lib/pickOwnership';
+import { getGeneratedPickYear, resolvePickHolder } from '@/lib/pickOwnership';
+import { getNextFuturePickYear } from '@/lib/futurePickAssets';
 import { getTradeBudgetDeltaByTeamId } from '@/lib/tradeBudget';
 import { countsTowardRoster } from '@/lib/rosterPolicy';
 
@@ -99,6 +100,18 @@ async function assertPicksCurrentlyHeldBy(
   }
 }
 
+async function assertPickYearsAreTradeable(
+  tx: Prisma.TransactionClient,
+  draft: Draft,
+  picks: TradePickInput[],
+): Promise<void> {
+  const generatedPickYear = await getGeneratedPickYear(tx, draft.id);
+  const earliestTradeableYear = generatedPickYear ?? getNextFuturePickYear(draft.createdAt);
+  if (picks.some((pick) => pick.futurePickYear < earliestTradeableYear)) {
+    throw new DraftMutationFailure('INVALID_INPUT');
+  }
+}
+
 export async function createTradeRecord(
   input: CreateTradeRecordInput,
 ): Promise<DraftMutationResult<{ tradeId: number }>> {
@@ -106,13 +119,7 @@ export async function createTradeRecord(
   if (input.budgetTeamId === input.pickTeamId) return { ok: false, code: 'TEAM_NOT_FOUND' };
 
   return withActiveOwnedDraftMutation(input.userId, input.draftId, async (tx, draft) => {
-    // Note on why there's no separate "year must be after the generated year for off-book entries"
-    // check here: `resolvePickHolder` resolves ANY (origin, year, round) correctly regardless of
-    // whether the year happens to match the currently-generated pool or not — it isn't a distinct
-    // code path, just a different outcome at step 2 vs step 3. `hasValidCreateInput` already rejects
-    // non-positive/non-integer years. The client-side "after the generated year" constraint (Task 21)
-    // exists to keep the picker's two categories visually unambiguous, not because the mutation would
-    // behave incorrectly without it — so no additional server check is needed, and none is added here.
+    await assertPickYearsAreTradeable(tx, draft, input.picks);
     await assertPicksCurrentlyHeldBy(tx, draft.id, input.pickTeamId, input.picks);
     await assertTeamCanAbsorbBudgetChange(tx, draft, input.budgetTeamId, -input.budgetAmount);
 
@@ -230,7 +237,13 @@ async function assertNoLaterTradeRetradesAnyPick(
         originTeamId: pick.originTeamId,
         futurePickYear: pick.futurePickYear,
         futurePickRound: pick.futurePickRound,
-        trade: { deletedAt: null, createdAt: { gt: trade.createdAt } },
+        trade: {
+          deletedAt: null,
+          OR: [
+            { createdAt: { gt: trade.createdAt } },
+            { createdAt: trade.createdAt, id: { gt: trade.id } },
+          ],
+        },
       },
       select: { id: true },
     });

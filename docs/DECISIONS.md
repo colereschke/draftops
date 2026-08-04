@@ -910,7 +910,7 @@ directly in production, so the dependency only matters locally.
 
 **Status:** Active.
 
-## Roadmap / Deferred Decisions
+## Active Product Decisions
 
 ### Budget-for-picks trading uses a durable, audited ledger and read-time ownership (#10, 2026-08-04)
 
@@ -932,7 +932,10 @@ Trade mutations are active-draft, owner-authorized transactions with ordered `CR
 the database transaction clock, provided it does not conflict with a later re-trade, current pick
 ownership, or budget legality. The JSON export includes active trades and the ordered trade audit
 history. Completion snapshots are schema version 2 and atomically capture the draft, active auction
-results, and active trades before the draft becomes `COMPLETE`.
+results, and active trades before the draft becomes `COMPLETE`. The live JSON recovery archive
+retains every active and soft-deleted trade with its round-level assets, while preserving a derived
+`activeTrades` compatibility view; ownership ordering uses `(createdAt, id)` so equal database
+timestamps remain deterministic.
 
 **Why:** The existing budget-delta seam made a narrow ledger the lowest-risk way to make trade
 budget effects binding everywhere rather than only in a presentation view. Read-time resolution
@@ -949,6 +952,8 @@ budget-for-picks safer.
 
 **Status:** Active. Recovery, audit boundaries, and PITR validation are documented in
 `docs/operations/bid-recovery.md`.
+
+## Roadmap / Deferred Decisions
 
 ### Threat-board position-override resync behavior (2026-07-08)
 

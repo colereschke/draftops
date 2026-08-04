@@ -50,6 +50,22 @@ const ACTIVE_TRADE: ExportableTrade = {
   ],
 };
 
+const DELETED_TRADE: ExportableTrade = {
+  ...ACTIVE_TRADE,
+  id: 20,
+  deletedAt: new Date('2026-07-24T12:00:00.000Z'),
+  pickAssets: [
+    {
+      id: 30,
+      tradeId: 20,
+      draftId: 4,
+      originTeamId: 9,
+      futurePickYear: 2028,
+      futurePickRound: 2,
+    },
+  ],
+};
+
 const TRADE_AUDIT_EVENTS: ExportableTradeAuditEvent[] = [
   {
     id: 8,
@@ -91,7 +107,7 @@ const TRADE_EXPORT_INPUT: DraftExportInput = {
   },
   bids: [],
   auditEvents: [],
-  activeTrades: [ACTIVE_TRADE],
+  trades: [ACTIVE_TRADE, DELETED_TRADE],
   tradeAuditEvents: TRADE_AUDIT_EVENTS,
   completionSnapshot: null,
 };
@@ -135,7 +151,7 @@ describe('serializeDraftExport', () => {
           occurredAt: new Date('2026-07-21T15:00:00.000Z'),
         },
       ],
-      activeTrades: [],
+      trades: [],
       tradeAuditEvents: [],
       completionSnapshot: {
         schemaVersion: 1,
@@ -198,6 +214,18 @@ describe('serializeDraftExport', () => {
         ],
       },
     ]);
+    expect(exported.trades).toHaveLength(2);
+    expect(exported.trades[0]).toMatchObject({
+      id: 20,
+      deletedAt: '2026-07-24T12:00:00.000Z',
+      pickAssets: [
+        {
+          originTeamId: 9,
+          futurePickYear: 2028,
+          futurePickRound: 2,
+        },
+      ],
+    });
     expect(exported.tradeAuditEvents.map((event) => event.id)).toEqual([3, 8]);
     expect(exported.tradeAuditEvents[0]).toMatchObject({
       occurredAt: '2026-07-23T15:00:00.000Z',

@@ -22,7 +22,13 @@ export default function TeamDetailPane({
       data-testid="team-detail-pane"
       className="rounded-lg border border-border-subtle bg-card px-4 pt-3 pb-3.5"
     >
-      <DossierFace team={team} tendency={tendency} isOwner={isOwner} testIdSuffix="-detail" />
+      <DossierFace
+        team={team}
+        tendency={tendency}
+        isOwner={isOwner}
+        currentPackageCount={pickHoldings.filter((holding) => holding.isIntactPackage).length}
+        testIdSuffix="-detail"
+      />
       <div className="mt-3 border-t border-border-subtle pt-2.5">
         <TeamRosterDetail results={team.results} pickHoldings={pickHoldings} />
       </div>

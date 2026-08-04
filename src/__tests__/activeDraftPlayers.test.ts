@@ -129,6 +129,21 @@ describe('getActiveDraftPlayers', () => {
     expect(players[0].valueSource).toBe('fallback');
   });
 
+  it('reuses prefetched teams and resolved ownership without duplicate ownership queries', async () => {
+    mockDraftFindUnique.mockResolvedValue({ activeProjectionValueSetId: null });
+    mockPlayerFindMany.mockResolvedValue([dbPlayer()]);
+
+    await getActiveDraftPlayers({
+      ...input,
+      preFetchedTeams: [{ id: 7, handle: 'owner' }],
+      preResolvedPicks: [],
+    });
+
+    expect(mockTeamFindMany).not.toHaveBeenCalled();
+    expect(mockTradePickAssetFindMany).not.toHaveBeenCalled();
+    expect(mockAuctionResultFindMany).not.toHaveBeenCalled();
+  });
+
   it('applies dynamic pick values before auction-mode filtering', async () => {
     mockPlayerFindMany.mockResolvedValue([
       dbPlayer({ name: 'Origin QB', nflTeam: 'origin' }),

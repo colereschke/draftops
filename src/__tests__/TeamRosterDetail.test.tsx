@@ -402,9 +402,9 @@ describe('TeamRosterDetail', () => {
     render(<TeamRosterDetail results={results} pickHoldings={pickHoldings} />);
 
     expect(screen.getByTestId('roster-group-QB')).toHaveTextContent('$200');
-    expect(screen.getByText('Patrick Mahomes')).toBeInTheDocument();
-    expect(screen.queryByText('Alpha pick package')).not.toBeInTheDocument();
-    expect(screen.queryByText('Beta 2027 1st')).not.toBeInTheDocument();
+    expect(screen.getByTestId('roster-entry-1')).toHaveTextContent('Patrick Mahomes');
+    expect(screen.queryByTestId('roster-entry-2')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('roster-entry-3')).not.toBeInTheDocument();
     expect(screen.queryByTestId('roster-group-PKG')).not.toBeInTheDocument();
     expect(screen.queryByTestId('roster-group-PICK')).not.toBeInTheDocument();
     expect(screen.getByTestId('draft-capital-1-2027-1-2-3')).toHaveTextContent(
@@ -427,7 +427,7 @@ describe('TeamRosterDetail', () => {
 
     render(<TeamRosterDetail results={[]} pickHoldings={pickHoldings} />);
 
-    expect(screen.queryByText('No players won yet.')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('roster-empty')).not.toBeInTheDocument();
     expect(screen.getByTestId('draft-capital-1-2028-2')).toHaveTextContent('2028 alpha 2nd');
   });
 });

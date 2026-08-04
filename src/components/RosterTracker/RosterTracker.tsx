@@ -194,7 +194,9 @@ export default function RosterTracker({
 
   const totalTeams = teams.length;
   const activeManagers = tendencies.filter((t) => t.buys > 0).length;
-  const packagesHeld = teams.reduce((sum, t) => sum + t.pkgCount, 0);
+  const packagesHeld = Object.values(pickHoldingsByTeamId)
+    .flat()
+    .filter((holding) => holding.isIntactPackage).length;
 
   return (
     <main
@@ -219,7 +221,7 @@ export default function RosterTracker({
               <h1 className="font-label m-0 text-2xl leading-none font-bold tracking-tight text-foreground">
                 Team Rosters
               </h1>
-              <div className="mt-1.5 text-[11px] text-secondary-fg">
+              <div data-testid="roster-summary" className="mt-1.5 text-[11px] text-secondary-fg">
                 How each manager buys — lean, appetite, and discipline. {activeManagers} active
                 {packagesHeld > 0 &&
                   ` · ${packagesHeld} pick package${packagesHeld > 1 ? 's' : ''} held`}

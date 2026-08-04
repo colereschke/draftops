@@ -1,5 +1,6 @@
 import type { Prisma, PrismaClient } from '@prisma/client';
 import { getGeneratedPickYear, resolveAllPickHolders } from '@/lib/pickOwnership';
+import type { ResolvedPick, TeamIdentity } from '@/lib/pickOwnership';
 
 type PrismaClientLike = Prisma.TransactionClient | PrismaClient;
 
@@ -8,6 +9,34 @@ export interface KnownPickOption {
   originHandle: string;
   futurePickYear: number;
   futurePickRound: 1 | 2 | 3;
+}
+
+export function buildTradeablePicksForAllTeams(
+  teams: TeamIdentity[],
+  generatedPickYear: number | null,
+  resolvedPicks: ResolvedPick[],
+): Record<number, KnownPickOption[]> {
+  if (generatedPickYear === null) return {};
+  const teamHandleById = new Map(teams.map((team) => [team.id, team.handle]));
+  const touchedHolderByKey = new Map(
+    resolvedPicks
+      .filter((pick) => pick.futurePickYear === generatedPickYear)
+      .map((pick) => [`${pick.originTeamId}:${pick.futurePickRound}`, pick.holderTeamId]),
+  );
+  const tradeablePicksByTeamId: Record<number, KnownPickOption[]> = {};
+  for (const team of teams) tradeablePicksByTeamId[team.id] = [];
+  for (const team of teams) {
+    for (const round of [1, 2, 3] as const) {
+      const holderTeamId = touchedHolderByKey.get(`${team.id}:${round}`) ?? team.id;
+      tradeablePicksByTeamId[holderTeamId]?.push({
+        originTeamId: team.id,
+        originHandle: teamHandleById.get(team.id) ?? '',
+        futurePickYear: generatedPickYear,
+        futurePickRound: round,
+      });
+    }
+  }
+  return tradeablePicksByTeamId;
 }
 
 export async function getTradeablePicksForTeam(
@@ -59,25 +88,10 @@ export async function getTradeablePicksForAllTeams(
     client.team.findMany({ where: { draftId }, select: { id: true, handle: true } }),
     resolveAllPickHolders(client, draftId),
   ]);
-  const teamHandleById = new Map(teams.map((team) => [team.id, team.handle]));
-  const touchedHolderByKey = new Map(
-    resolvedPicks
-      .filter((pick) => pick.futurePickYear === generatedPickYear)
-      .map((pick) => [`${pick.originTeamId}:${pick.futurePickRound}`, pick.holderTeamId]),
+  const tradeablePicksByTeamId = buildTradeablePicksForAllTeams(
+    teams,
+    generatedPickYear,
+    resolvedPicks,
   );
-
-  const tradeablePicksByTeamId: Record<number, KnownPickOption[]> = {};
-  for (const team of teams) tradeablePicksByTeamId[team.id] = [];
-  for (const team of teams) {
-    for (const round of [1, 2, 3] as const) {
-      const holderTeamId = touchedHolderByKey.get(`${team.id}:${round}`) ?? team.id;
-      tradeablePicksByTeamId[holderTeamId]?.push({
-        originTeamId: team.id,
-        originHandle: teamHandleById.get(team.id) ?? '',
-        futurePickYear: generatedPickYear,
-        futurePickRound: round,
-      });
-    }
-  }
   return { generatedPickYear, tradeablePicksByTeamId };
 }

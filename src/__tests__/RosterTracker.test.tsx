@@ -211,6 +211,28 @@ describe('RosterTracker', () => {
     expect(screen.getByTestId('draft-capital-1-2027-1')).toHaveTextContent('2027 coreschke 1st');
   });
 
+  it('summarizes current intact packages instead of historical package wins', () => {
+    const holding: CurrentPickHolding = {
+      originTeamId: 2,
+      originHandle: 'rival_b',
+      futurePickYear: 2027,
+      holderTeamId: 1,
+      isIntactPackage: true,
+      rounds: [1, 2, 3],
+    };
+    render(
+      <RosterTracker
+        teams={[makeTeam({ pkgCount: 4 })]}
+        tendencies={[makeTendency()]}
+        ownerHandle="coreschke"
+        {...TRADE_PROPS}
+        pickHoldingsByTeamId={{ 1: [holding] }}
+      />,
+    );
+    expect(screen.getByTestId('roster-summary')).toHaveTextContent('1 pick package held');
+    expect(screen.getByTestId('roster-summary')).not.toHaveTextContent('4 pick packages held');
+  });
+
   it('reflects the lineup format truthfully instead of a hardcoded Superflex label', () => {
     render(
       <RosterTracker

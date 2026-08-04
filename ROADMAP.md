@@ -628,10 +628,7 @@ or player matching logic.
 
 ## 10. Budget-for-Picks Trading
 
-**Blocks:** nothing downstream yet
-**Blocked by:** #3 (per-draft teams), #5a (`Player`/pick rows live on a draft); tightly coupled to #8
-(dynamic pick valuation) and #8's deferred first-class-asset model
-**Parallelizable with:** #6 (UI-only), #9 (roster sync)
+**Status:** Shipped in PR #105
 
 Some leagues let teams trade a slice of their remaining auction **budget** for another team's
 **future draft picks** mid-auction (in either direction). DraftOps needs to record these transfers
@@ -643,26 +640,18 @@ multi-user negotiation flow.
 A's effective budget by $80, increments B's by $80, and moves that pick's value/ownership from B to
 A.
 
-### What breaks the current model (and must change)
+### Shipped design
 
-1. **Fixed-budget invariant.** Today every team shares one `draft.budget`, and
-   `remaining = budget - spent`, `buyingPower = remaining - (rosterSize - rosterCount)` assume it.
-   Budget transfers require a per-team **net budget delta** (sum of dollars traded in/out) threaded
-   through both `computeTeamStats` implementations (`src/lib/budget.ts`, `src/lib/computeTeamStats.ts`),
-   `src/lib/threat.ts` (`maxBid`), and the `/budget` threat board. New effective form:
-   `remaining = budget + budgetDelta - spent`.
-2. **Trades aren't "wins."** A transfer is not an `AuctionResult`, so it doesn't fit the
-   `Player` + `AuctionResult` shape. Two paths:
-   - **(a) Adjustment layer** — a lightweight `BudgetTransfer`/`PickTransfer` ledger keyed to
-     `draftId` + `teamId`, applied on top of the existing model at query time. Smaller change; keeps
-     picks as `Player` rows.
-   - **(b) First-class assets** — promote future picks to real assets with origin team, current
-     owner, and transfer history. This is the "Long-term asset model option" #8 explicitly deferred;
-     this item is the first concrete forcing function for it.
-3. **The 2028 package isn't in the auction pool.** The startup pool excludes 2028 picks, so there is
-   no biddable `Player` row to transfer. Trading it means representing pick assets that exist
-   **outside** the auction entirely — which pushes toward path (b), or at minimum a way to
-   materialize a tradeable non-auction pick asset.
+1. `Trade`, `TradePickAsset`, and `TradeAuditEvent` form a durable, soft-deletable ledger.
+2. `getTradeBudgetDeltaByTeamId` applies net budget deltas to remaining budget, buying power,
+   threat ranking, and bid legality.
+3. Pick ownership is derived at read time from `(createdAt, id)`-ordered active trades, then auction
+   wins, then origin ownership. This supports generated-pool and later off-book picks without a
+   mutable owner field.
+4. Current holdings feed roster summaries, trade entry, and dynamic pick valuation. Auction wins
+   remain historical accounting records.
+5. JSON recovery exports all trades with pick assets plus both audit histories. Draft completion
+   snapshots remain active-only schema version 2 records.
 
 ### Coupling to #8
 
@@ -672,16 +661,6 @@ This feature is what actually makes **current holder ≠ origin team**. #8b alre
 - Pick **value** (from #8/#8b) stays anchored to the **origin** team's posture/roster quality.
 - Pick **ownership/buying-power impact** follows the **current holder** after a trade.
 - Keep those two separate — a traded pick's value shouldn't recompute off the acquiring team's roster.
-
-### Open design decisions (resolve in brainstorming/spec)
-
-- Adjustment ledger (2a) vs. first-class assets (2b) — the 2028-package gap and #8 coupling both
-  argue for (b), but (a) may be enough for a first pass if 2028 picks are handled as a special case.
-- How pick-for-pick and multi-asset trades are entered (a trade builder vs. one transfer per row).
-- Whether traded budget is capped/validated against a team's current `remaining` at trade time, and
-  how to handle editing/reversing a logged trade.
-- UI surface: likely a trade-entry modal plus a per-team ledger; budget deltas surfaced on `/teams`
-  and `/budget` so the numbers are explainable, not silently shifted.
 
 ---
 
@@ -713,7 +692,7 @@ This feature is what actually makes **current holder ≠ origin team**. #8b alre
         ↓
 #8b Dynamic pick valuation
         ↓
-#10 Budget-for-picks trading   ← coupled to #8; likely forces first-class pick assets
+#10 Budget-for-picks trading   ✓ shipped
 
 #6 UI redesign runs in parallel where it does not touch valuation logic.
 ```

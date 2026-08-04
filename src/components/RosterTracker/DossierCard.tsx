@@ -76,7 +76,12 @@ export default function DossierCard({
             )}
           />
         )}
-        <DossierFace team={team} tendency={tendency} isOwner={isOwner} />
+        <DossierFace
+          team={team}
+          tendency={tendency}
+          isOwner={isOwner}
+          currentPackageCount={pickHoldings.filter((holding) => holding.isIntactPackage).length}
+        />
       </div>
 
       {/* Sibling of the role="button" face — never nested inside it. A button inside a

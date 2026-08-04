@@ -26,7 +26,7 @@ export async function resolvePickHolder(
       futurePickRound,
       trade: { deletedAt: null },
     },
-    orderBy: { trade: { createdAt: 'desc' } },
+    orderBy: [{ trade: { createdAt: 'desc' } }, { tradeId: 'desc' }],
     select: { tradeId: true, trade: { select: { budgetTeamId: true } } },
   });
   if (latestTrade) {
@@ -60,7 +60,7 @@ export async function resolvePickHolder(
       },
     },
     select: { id: true, teamId: true },
-    orderBy: { createdAt: 'desc' }, // deterministic: if both a PKG and a matching PICK row somehow
+    orderBy: [{ createdAt: 'desc' }, { id: 'desc' }], // deterministic: if both a PKG and a matching PICK row somehow
     // both have live wins for the same round (e.g. futurePickAuctionMode changed mid-draft), the
     // most recent one wins, rather than leaving it to whatever order Postgres happens to return
   });
@@ -133,7 +133,7 @@ export async function resolveAllPickHolders(
           },
         },
       },
-      orderBy: { createdAt: 'asc' }, // ascending, so the later `auctionByKey.set` for a duplicate
+      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }], // ascending, so the later `auctionByKey.set` for a duplicate
       // key (see below) deterministically keeps the most recent win, matching resolvePickHolder's
       // single-row equivalent
     }),
@@ -146,7 +146,7 @@ export async function resolveAllPickHolders(
   // Sort ascending by trade.createdAt so each key ends up holding its most recent trade —
   // a later Map.set for the same key simply overwrites the earlier one.
   const sortedAssets = [...tradedAssets].sort(
-    (a, b) => a.trade.createdAt.getTime() - b.trade.createdAt.getTime(),
+    (a, b) => a.trade.createdAt.getTime() - b.trade.createdAt.getTime() || a.tradeId - b.tradeId,
   );
   const latestTradeByKey = new Map<string, ResolvedPick>();
   for (const asset of sortedAssets) {

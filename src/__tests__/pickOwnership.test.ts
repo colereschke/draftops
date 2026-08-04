@@ -43,6 +43,11 @@ describe('resolvePickHolder', () => {
     const result = await resolvePickHolder(client, 1, 3, 2027, 1);
     expect(result).toEqual({ holderTeamId: 9, eventKind: 'trade', eventId: 42 });
     expect(mockTeamFindFirst).not.toHaveBeenCalled();
+    expect(mockTradePickAssetFindFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        orderBy: [{ trade: { createdAt: 'desc' } }, { tradeId: 'desc' }],
+      }),
+    );
   });
 
   it('falls back to the auction win when no trade exists', async () => {
@@ -51,6 +56,9 @@ describe('resolvePickHolder', () => {
     mockAuctionResultFindFirst.mockResolvedValue({ id: 501, teamId: 6 });
     const result = await resolvePickHolder(client, 1, 3, 2027, 1);
     expect(result).toEqual({ holderTeamId: 6, eventKind: 'auction', eventId: 501 });
+    expect(mockAuctionResultFindFirst).toHaveBeenCalledWith(
+      expect.objectContaining({ orderBy: [{ createdAt: 'desc' }, { id: 'desc' }] }),
+    );
   });
 
   it('falls back to the origin team when neither exists', async () => {
@@ -141,6 +149,42 @@ describe('resolveAllPickHolders', () => {
       eventKind: 'auction',
       eventId: 501,
     });
+  });
+
+  it('uses the larger trade id for equal-timestamp multi-hop trades', async () => {
+    const createdAt = new Date('2026-08-01T00:00:00.000Z');
+    mockTradePickAssetFindMany.mockResolvedValue([
+      {
+        originTeamId: 3,
+        futurePickYear: 2027,
+        futurePickRound: 1,
+        tradeId: 43,
+        trade: { budgetTeamId: 11, createdAt },
+      },
+      {
+        originTeamId: 3,
+        futurePickYear: 2027,
+        futurePickRound: 1,
+        tradeId: 42,
+        trade: { budgetTeamId: 9, createdAt },
+      },
+    ]);
+    mockAuctionResultFindMany.mockResolvedValue([]);
+    mockTeamFindMany.mockResolvedValue([{ id: 3, handle: 'origin-team' }]);
+
+    await expect(resolveAllPickHolders(client, 1)).resolves.toEqual([
+      {
+        originTeamId: 3,
+        futurePickYear: 2027,
+        futurePickRound: 1,
+        holderTeamId: 11,
+        eventKind: 'trade',
+        eventId: 43,
+      },
+    ]);
+    expect(mockAuctionResultFindMany).toHaveBeenCalledWith(
+      expect.objectContaining({ orderBy: [{ createdAt: 'asc' }, { id: 'asc' }] }),
+    );
   });
 });
 

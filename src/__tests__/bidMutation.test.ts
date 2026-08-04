@@ -712,7 +712,7 @@ describe('PICK_HAS_ACTIVE_TRADES guard', () => {
       originTeamId: 7,
       futurePickYear: 2027,
       futurePickRound: { in: [1, 2, 3] },
-      trade: { deletedAt: null, createdAt: { gt: PKG_BID.createdAt } },
+      trade: { deletedAt: null, createdAt: { gte: PKG_BID.createdAt } },
     },
     select: { id: true },
   };
@@ -744,7 +744,7 @@ describe('PICK_HAS_ACTIVE_TRADES guard', () => {
       originTeamId: 7,
       futurePickYear: 2028,
       futurePickRound: { in: [2] },
-      trade: { deletedAt: null, createdAt: { gt: PICK_BID.createdAt } },
+      trade: { deletedAt: null, createdAt: { gte: PICK_BID.createdAt } },
     },
     select: { id: true },
   };

@@ -26,29 +26,36 @@ export async function GET(
   const draft = await getDraft(session.user.id, draftId);
   if (!draft) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
-  const [bids, auditEvents, activeTrades, tradeAuditEvents, completionSnapshot] = await Promise.all(
-    [
-      getPrisma().auctionResult.findMany({
-        where: { draftId, deletedAt: null },
-        include: { team: { select: { id: true, handle: true, displayName: true } } },
-        orderBy: { id: 'asc' },
-      }),
-      getPrisma().bidAuditEvent.findMany({
-        where: { draftId },
-        orderBy: [{ occurredAt: 'asc' }, { id: 'asc' }],
-      }),
-      getPrisma().trade.findMany({
-        where: { draftId, deletedAt: null },
-        include: { pickAssets: true },
-        orderBy: { id: 'asc' },
-      }),
-      getPrisma().tradeAuditEvent.findMany({
-        where: { draftId },
-        orderBy: [{ occurredAt: 'asc' }, { id: 'asc' }],
-      }),
-      getPrisma().draftCompletionSnapshot.findUnique({ where: { draftId } }),
-    ],
-  );
+  const [bids, auditEvents, trades, tradeAuditEvents, completionSnapshot] = await Promise.all([
+    getPrisma().auctionResult.findMany({
+      where: { draftId, deletedAt: null },
+      include: { team: { select: { id: true, handle: true, displayName: true } } },
+      orderBy: { id: 'asc' },
+    }),
+    getPrisma().bidAuditEvent.findMany({
+      where: { draftId },
+      orderBy: [{ occurredAt: 'asc' }, { id: 'asc' }],
+    }),
+    getPrisma().trade.findMany({
+      where: { draftId },
+      include: {
+        pickAssets: {
+          orderBy: [
+            { originTeamId: 'asc' },
+            { futurePickYear: 'asc' },
+            { futurePickRound: 'asc' },
+            { id: 'asc' },
+          ],
+        },
+      },
+      orderBy: { id: 'asc' },
+    }),
+    getPrisma().tradeAuditEvent.findMany({
+      where: { draftId },
+      orderBy: [{ occurredAt: 'asc' }, { id: 'asc' }],
+    }),
+    getPrisma().draftCompletionSnapshot.findUnique({ where: { draftId } }),
+  ]);
 
   const body = JSON.stringify(
     serializeDraftExport({
@@ -69,7 +76,7 @@ export async function GET(
       },
       bids,
       auditEvents,
-      activeTrades,
+      trades,
       tradeAuditEvents,
       completionSnapshot,
     }),

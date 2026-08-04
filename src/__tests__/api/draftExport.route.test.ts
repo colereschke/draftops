@@ -92,6 +92,22 @@ const ACTIVE_TRADE: ExportableTrade = {
   ],
 };
 
+const DELETED_TRADE: ExportableTrade = {
+  ...ACTIVE_TRADE,
+  id: 20,
+  deletedAt: new Date('2026-07-24T12:00:00.000Z'),
+  pickAssets: [
+    {
+      id: 30,
+      tradeId: 20,
+      draftId: 4,
+      originTeamId: 9,
+      futurePickYear: 2028,
+      futurePickRound: 2,
+    },
+  ],
+};
+
 const TRADE_AUDIT_EVENTS: ExportableTradeAuditEvent[] = [
   {
     id: 8,
@@ -127,6 +143,20 @@ const EXPECTED_JSON_EXPORT: DraftExport = {
     },
   ],
   auditEvents: [],
+  trades: [
+    {
+      ...DELETED_TRADE,
+      createdAt: '2026-07-23T12:00:00.000Z',
+      updatedAt: '2026-07-23T13:00:00.000Z',
+      deletedAt: '2026-07-24T12:00:00.000Z',
+    },
+    {
+      ...ACTIVE_TRADE,
+      createdAt: '2026-07-23T12:00:00.000Z',
+      updatedAt: '2026-07-23T13:00:00.000Z',
+      deletedAt: null,
+    },
+  ],
   activeTrades: [
     {
       ...ACTIVE_TRADE,
@@ -154,7 +184,7 @@ beforeEach(() => {
   mockGetDraft.mockResolvedValue(DRAFT);
   mockAuctionFindMany.mockResolvedValue([BID]);
   mockAuditFindMany.mockResolvedValue([]);
-  mockTradeFindMany.mockResolvedValue([ACTIVE_TRADE]);
+  mockTradeFindMany.mockResolvedValue([ACTIVE_TRADE, DELETED_TRADE]);
   mockTradeAuditFindMany.mockResolvedValue(TRADE_AUDIT_EVENTS);
   mockSnapshotFindUnique.mockResolvedValue(null);
 });
@@ -191,8 +221,17 @@ describe('draft export routes', () => {
       orderBy: [{ occurredAt: 'asc' }, { id: 'asc' }],
     });
     expect(mockTradeFindMany).toHaveBeenCalledWith({
-      where: { draftId: 4, deletedAt: null },
-      include: { pickAssets: true },
+      where: { draftId: 4 },
+      include: {
+        pickAssets: {
+          orderBy: [
+            { originTeamId: 'asc' },
+            { futurePickYear: 'asc' },
+            { futurePickRound: 'asc' },
+            { id: 'asc' },
+          ],
+        },
+      },
       orderBy: { id: 'asc' },
     });
     expect(mockTradeAuditFindMany).toHaveBeenCalledWith({

@@ -1,4 +1,8 @@
-import { getTradeablePicksForAllTeams, getTradeablePicksForTeam } from '@/lib/tradePicker';
+import {
+  buildTradeablePicksForAllTeams,
+  getTradeablePicksForAllTeams,
+  getTradeablePicksForTeam,
+} from '@/lib/tradePicker';
 
 const mockGetGeneratedPickYear = jest.fn();
 const mockResolveAllPickHolders = jest.fn();
@@ -45,6 +49,21 @@ describe('getTradeablePicksForTeam', () => {
 });
 
 describe('getTradeablePicksForAllTeams', () => {
+  it('can reuse already-resolved teams-page ownership without issuing database queries', () => {
+    const result = buildTradeablePicksForAllTeams([{ id: 9, handle: 'origin-team' }], 2027, [
+      {
+        originTeamId: 9,
+        futurePickYear: 2027,
+        futurePickRound: 1,
+        holderTeamId: 9,
+        eventKind: 'trade',
+        eventId: 1,
+      },
+    ]);
+    expect(result[9]).toHaveLength(3);
+    expect(mockTeamFindMany).not.toHaveBeenCalled();
+    expect(mockResolveAllPickHolders).not.toHaveBeenCalled();
+  });
   it('returns an empty map when no future-pick year has been generated', async () => {
     mockGetGeneratedPickYear.mockResolvedValue(null);
     const result = await getTradeablePicksForAllTeams(client, 1);

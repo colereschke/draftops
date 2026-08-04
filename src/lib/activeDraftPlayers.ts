@@ -2,7 +2,7 @@ import { getPrisma } from '@/lib/db';
 import { applyDynamicPickValues } from '@/lib/dynamicPickValues';
 import { filterFuturePickAssetsForMode } from '@/lib/futurePickAssets';
 import { mapPlayersWithDraftValues } from '@/lib/playerValueMapping';
-import { resolveAllPickHolders } from '@/lib/pickOwnership';
+import { resolveAllPickHolders, type ResolvedPick, type TeamIdentity } from '@/lib/pickOwnership';
 import { computeFutureCapitalByHandle, loadGeneratedYearBaselines } from '@/lib/pickCapital';
 import { DEFAULT_RANKING_SOURCE_BUDGET, getBudgetScale } from '@/lib/valuationBudget';
 import type { FuturePickAuctionMode, Player, StartingSlot } from '@/types';
@@ -18,6 +18,8 @@ export interface GetActiveDraftPlayersInput {
   startingLineup: StartingSlot[];
   futurePickAuctionMode: FuturePickAuctionMode;
   bids: ActiveValueBidInput[];
+  preFetchedTeams?: TeamIdentity[] | Promise<TeamIdentity[]>;
+  preResolvedPicks?: ResolvedPick[] | Promise<ResolvedPick[]>;
 }
 
 export async function getActiveDraftPlayers({
@@ -25,13 +27,21 @@ export async function getActiveDraftPlayers({
   startingLineup,
   futurePickAuctionMode,
   bids,
+  preFetchedTeams,
+  preResolvedPicks,
 }: GetActiveDraftPlayersInput): Promise<Player[]> {
   // Shared with resolveAllPickHolders below (via the same in-flight promise) so the team list is
   // only fetched once, not twice, on this 20s-polled read path.
-  const teamsPromise = getPrisma().team.findMany({
-    where: { draftId },
-    select: { id: true, handle: true },
-  });
+  const teamsPromise = Promise.resolve(
+    preFetchedTeams ??
+      getPrisma().team.findMany({
+        where: { draftId },
+        select: { id: true, handle: true },
+      }),
+  );
+  const resolvedPicksPromise = Promise.resolve(
+    preResolvedPicks ?? resolveAllPickHolders(getPrisma(), draftId, teamsPromise),
+  );
 
   const [players, draft, teams, resolvedPicks] = await Promise.all([
     getPrisma().player.findMany({ where: { draftId }, orderBy: { sfRank: 'asc' } }),
@@ -40,7 +50,7 @@ export async function getActiveDraftPlayers({
       select: { activeProjectionValueSetId: true, playerValueSourceBudget: true, budget: true },
     }),
     teamsPromise,
-    resolveAllPickHolders(getPrisma(), draftId, teamsPromise),
+    resolvedPicksPromise,
   ]);
 
   // Derived from the already-fetched `players` batch (same draftId-scoped query the removed

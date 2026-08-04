@@ -10,6 +10,7 @@ export interface DossierFaceProps {
   team: TeamWithRoster;
   tendency: ManagerTendency;
   isOwner: boolean;
+  currentPackageCount?: number;
   // Appended to every internal data-testid so the same team's face can render
   // twice in the DOM at once (list pane + detail pane) without colliding.
   testIdSuffix?: string;
@@ -51,6 +52,7 @@ export default function DossierFace({
   team,
   tendency,
   isOwner,
+  currentPackageCount = 0,
   testIdSuffix = '',
 }: DossierFaceProps) {
   const habit = strongestHabit(tendency);
@@ -71,10 +73,10 @@ export default function DossierFace({
         {team.displayName && (
           <span className="text-[11px] text-muted-foreground">{team.displayName}</span>
         )}
-        {team.pkgCount > 0 && (
+        {currentPackageCount > 0 && (
           <span
             data-testid={`dossier-pkg-${team.id}${testIdSuffix}`}
-            title={`Holds ${team.pkgCount} pick package${team.pkgCount > 1 ? 's' : ''}`}
+            title={`Holds ${currentPackageCount} pick package${currentPackageCount > 1 ? 's' : ''}`}
             className="font-label rounded text-[9px] font-bold tracking-wide"
             style={{
               background: POS_COLORS.PKG.badge,
@@ -82,7 +84,7 @@ export default function DossierFace({
               padding: '2px 5px',
             }}
           >
-            {team.pkgCount}× PKG
+            {currentPackageCount}× PKG
           </span>
         )}
       </div>

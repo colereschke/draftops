@@ -215,12 +215,30 @@ describe('DossierCard', () => {
   it('shows a pick-package badge on the face when the team holds packages', () => {
     render(
       <DossierCard
-        team={team({ pkgCount: 2 })}
+        team={team({ pkgCount: 0 })}
         tendency={tendency()}
         isOwner={false}
         isExpanded={false}
         onToggle={noop}
         onLogTrade={noop}
+        pickHoldings={[
+          {
+            originTeamId: 1,
+            originHandle: 'team-a',
+            futurePickYear: 2027,
+            holderTeamId: 1,
+            isIntactPackage: true,
+            rounds: [1, 2, 3],
+          },
+          {
+            originTeamId: 2,
+            originHandle: 'team-b',
+            futurePickYear: 2027,
+            holderTeamId: 1,
+            isIntactPackage: true,
+            rounds: [1, 2, 3],
+          },
+        ]}
       />,
     );
     expect(screen.getByTestId('dossier-pkg-1')).toHaveTextContent('2× PKG');
@@ -229,7 +247,7 @@ describe('DossierCard', () => {
   it('omits the package badge when the team holds none', () => {
     render(
       <DossierCard
-        team={team({ pkgCount: 0 })}
+        team={team({ pkgCount: 3 })}
         tendency={tendency()}
         isOwner={false}
         isExpanded={false}

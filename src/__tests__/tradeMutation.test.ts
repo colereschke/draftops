@@ -18,6 +18,7 @@ const mockTradePickAssetFindFirst = jest.fn();
 const mockTradeCreate = jest.fn();
 const mockTradeUpdate = jest.fn(); // used by Tasks 13-15
 const mockTradeAuditCreate = jest.fn();
+const mockPlayerAggregate = jest.fn();
 
 const mockTx = {
   $executeRaw: mockExecuteRaw,
@@ -33,6 +34,7 @@ const mockTx = {
   },
   tradePickAsset: { findFirst: mockTradePickAssetFindFirst },
   tradeAuditEvent: { create: mockTradeAuditCreate },
+  player: { aggregate: mockPlayerAggregate },
 };
 
 jest.mock('@/lib/db', () => ({
@@ -45,6 +47,7 @@ const ACTIVE_DRAFT = {
   ownerTeamId: 7,
   status: 'ACTIVE',
   rosterSize: 30,
+  createdAt: new Date('2026-01-01T00:00:00.000Z'),
 };
 
 const BASE_INPUT = {
@@ -63,6 +66,7 @@ beforeEach(() => {
   );
   mockQueryRaw.mockResolvedValue([{ now: new Date('2026-08-02T00:00:00.000Z') }]);
   mockDraftFindFirst.mockResolvedValue(ACTIVE_DRAFT);
+  mockPlayerAggregate.mockResolvedValue({ _max: { futurePickYear: 2028 } });
   // Includes both `budget` (for assertTeamCanAbsorbBudgetChange) and `handle` (for
   // resolvePickHolder's origin-team lookup) — the same mock now backs both call sites.
   mockTeamFindFirst.mockImplementation(({ where }: { where: { id: number } }) =>
@@ -132,6 +136,26 @@ describe('createTradeRecord', () => {
     );
     const result = await createTradeRecord(BASE_INPUT); // 50 - 80 < 0
     expect(result).toEqual({ ok: false, code: 'TRADE_EXCEEDS_BUDGET' });
+  });
+
+  it('rejects a past-year pick before ownership or budget transfer checks', async () => {
+    const result = await createTradeRecord({
+      ...BASE_INPUT,
+      picks: [{ originTeamId: 9, futurePickYear: 2027, futurePickRound: 1 }],
+    });
+    expect(result).toEqual({ ok: false, code: 'INVALID_INPUT' });
+    expect(mockTradePickAssetFindFirst).not.toHaveBeenCalled();
+    expect(mockTradeCreate).not.toHaveBeenCalled();
+  });
+
+  it('uses the draft-created future-year boundary when no pick pool was generated', async () => {
+    mockPlayerAggregate.mockResolvedValue({ _max: { futurePickYear: null } });
+    const result = await createTradeRecord({
+      ...BASE_INPUT,
+      picks: [{ originTeamId: 9, futurePickYear: 2026, futurePickRound: 1 }],
+    });
+    expect(result).toEqual({ ok: false, code: 'INVALID_INPUT' });
+    expect(mockTradeCreate).not.toHaveBeenCalled();
   });
 });
 
@@ -233,6 +257,19 @@ describe('deleteTradeRecord', () => {
     mockTradePickAssetFindFirst.mockResolvedValue({ id: 900 }); // a later trade references this pick
     const result = await deleteTradeRecord({ userId: 'owner-1', draftId: 4, tradeId: 501 });
     expect(result).toEqual({ ok: false, code: 'PICK_ALREADY_RETRADED' });
+    expect(mockTradePickAssetFindFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          trade: {
+            deletedAt: null,
+            OR: [
+              { createdAt: { gt: EXISTING_TRADE.createdAt } },
+              { createdAt: EXISTING_TRADE.createdAt, id: { gt: EXISTING_TRADE.id } },
+            ],
+          },
+        }),
+      }),
+    );
   });
 
   it('rejects with TRADE_EXCEEDS_BUDGET when pickTeam already spent the received budget', async () => {
@@ -286,6 +323,19 @@ describe('restoreTradeRecord', () => {
     mockTradePickAssetFindFirst.mockResolvedValue({ id: 900 });
     const result = await restoreTradeRecord({ userId: 'owner-1', draftId: 4, tradeId: 501 });
     expect(result).toEqual({ ok: false, code: 'PICK_ALREADY_RETRADED' });
+    expect(mockTradePickAssetFindFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          trade: {
+            deletedAt: null,
+            OR: [
+              { createdAt: { gt: EXISTING_TRADE.createdAt } },
+              { createdAt: EXISTING_TRADE.createdAt, id: { gt: EXISTING_TRADE.id } },
+            ],
+          },
+        }),
+      }),
+    );
   });
 
   it('rejects with PICK_NOT_HELD when the pick was won at auction by a different team since deletion', async () => {

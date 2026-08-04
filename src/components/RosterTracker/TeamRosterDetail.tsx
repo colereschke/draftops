@@ -20,7 +20,11 @@ export default function TeamRosterDetail({ results, pickHoldings = [] }: TeamRos
   );
 
   if (playerResults.length === 0 && pickHoldings.length === 0) {
-    return <div className="text-xs text-muted-foreground italic">No players won yet.</div>;
+    return (
+      <div data-testid="roster-empty" className="text-xs text-muted-foreground italic">
+        No players won yet.
+      </div>
+    );
   }
 
   const groups = GROUP_ORDER.map((pos) => ({
@@ -59,6 +63,7 @@ export default function TeamRosterDetail({ results, pickHoldings = [] }: TeamRos
                 return (
                   <div
                     key={result.id}
+                    data-testid={`roster-entry-${result.id}`}
                     className="flex items-center gap-2.5 rounded-r border border-l-0 border-border-subtle bg-card px-2 py-[5px]"
                     style={{ borderLeft: `3px solid ${c.accent}` }}
                   >

@@ -127,7 +127,9 @@ async function assertNoLaterTradeDependsOnBid(
       originTeamId: origin.id,
       futurePickYear: playerRow.futurePickYear,
       futurePickRound: { in: rounds },
-      trade: { deletedAt: null, createdAt: { gt: bid.createdAt } },
+      // Trade IDs and auction-result IDs come from different sequences, so an equal timestamp
+      // must be treated as dependent rather than attempting an invalid cross-table ID tie-break.
+      trade: { deletedAt: null, createdAt: { gte: bid.createdAt } },
     },
     select: { id: true },
   });

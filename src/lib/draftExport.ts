@@ -93,7 +93,7 @@ export interface DraftExportInput {
   draft: ExportableDraft;
   bids: ExportableBid[];
   auditEvents: ExportableAuditEvent[];
-  activeTrades: ExportableTrade[];
+  trades: ExportableTrade[];
   tradeAuditEvents: ExportableTradeAuditEvent[];
   completionSnapshot: ExportableCompletionSnapshot | null;
 }
@@ -109,6 +109,13 @@ export interface DraftExport {
     }
   >;
   auditEvents: Array<Omit<ExportableAuditEvent, 'occurredAt'> & { occurredAt: string }>;
+  trades: Array<
+    Omit<ExportableTrade, 'createdAt' | 'updatedAt' | 'deletedAt'> & {
+      createdAt: string;
+      updatedAt: string;
+      deletedAt: string | null;
+    }
+  >;
   activeTrades: Array<
     Omit<ExportableTrade, 'createdAt' | 'updatedAt' | 'deletedAt'> & {
       createdAt: string;
@@ -125,6 +132,19 @@ export interface DraftExport {
 }
 
 export function serializeDraftExport(input: DraftExportInput): DraftExport {
+  const serializeTrade = (trade: ExportableTrade) => ({
+    ...trade,
+    createdAt: trade.createdAt.toISOString(),
+    updatedAt: trade.updatedAt.toISOString(),
+    deletedAt: trade.deletedAt?.toISOString() ?? null,
+    pickAssets: [...trade.pickAssets].sort(
+      (left, right) =>
+        left.originTeamId - right.originTeamId ||
+        left.futurePickYear - right.futurePickYear ||
+        left.futurePickRound - right.futurePickRound ||
+        left.id - right.id,
+    ),
+  });
   return {
     draft: input.draft,
     activeBids: input.bids.map((bid) => ({
@@ -140,12 +160,11 @@ export function serializeDraftExport(input: DraftExportInput): DraftExport {
         return occurredAtDifference || left.id - right.id;
       })
       .map((event) => ({ ...event, occurredAt: event.occurredAt.toISOString() })),
-    activeTrades: input.activeTrades.map((trade) => ({
-      ...trade,
-      createdAt: trade.createdAt.toISOString(),
-      updatedAt: trade.updatedAt.toISOString(),
-      deletedAt: trade.deletedAt?.toISOString() ?? null,
-    })),
+    trades: [...input.trades].sort((left, right) => left.id - right.id).map(serializeTrade),
+    activeTrades: input.trades
+      .filter((trade) => trade.deletedAt === null)
+      .sort((left, right) => left.id - right.id)
+      .map(serializeTrade),
     tradeAuditEvents: [...input.tradeAuditEvents]
       .sort((left, right) => {
         const occurredAtDifference = left.occurredAt.getTime() - right.occurredAt.getTime();

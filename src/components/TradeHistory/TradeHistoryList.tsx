@@ -59,6 +59,10 @@ function describePicks(picks: TradeHistoryEntry['picks']): string {
     .join(', ');
 }
 
+function formatTradeTimestamp(createdAt: string): string {
+  return `${new Date(createdAt).toISOString().slice(0, 16).replace('T', ' ')} UTC`;
+}
+
 export default function TradeHistoryList({
   draftId,
   trades,
@@ -236,6 +240,13 @@ export default function TradeHistoryList({
                     <span className="font-semibold">{trade.pickTeamHandle}</span>
                     <span className="text-muted-foreground"> for </span>
                     <span>{describePicks(trade.picks)}</span>
+                    <time
+                      data-testid={`trade-history-timestamp-${trade.id}`}
+                      dateTime={trade.createdAt}
+                      className="ml-2 font-mono text-[11px] text-muted-foreground tabular-nums"
+                    >
+                      {formatTradeTimestamp(trade.createdAt)}
+                    </time>
                   </span>
 
                   <div className="flex flex-wrap items-center gap-2">

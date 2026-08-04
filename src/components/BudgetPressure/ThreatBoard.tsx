@@ -158,13 +158,27 @@ export default function ThreatBoard({
                   {row.team.displayName ?? row.team.handle}
                 </span>
               </div>
-              <span
-                data-testid={`threat-mobile-bid-${row.team.handle}`}
-                className="font-mono text-[13px] font-bold tabular-nums"
-                style={{ color: maxBidColor(row.bid) }}
-              >
-                ${row.bid}
-              </span>
+              <div className="flex items-baseline gap-1.5">
+                <span
+                  data-testid={`threat-mobile-bid-${row.team.handle}`}
+                  className="font-mono text-[13px] font-bold tabular-nums"
+                  style={{ color: maxBidColor(row.bid) }}
+                >
+                  ${row.bid}
+                </span>
+                {row.team.netBudgetDelta !== 0 && (
+                  <span
+                    data-testid={`threat-mobile-trade-delta-${row.team.handle}`}
+                    className="font-mono text-[10px] tabular-nums"
+                    style={{
+                      color: row.team.netBudgetDelta > 0 ? 'var(--age-young)' : 'var(--age-old)',
+                    }}
+                  >
+                    {row.team.netBudgetDelta > 0 ? '+' : ''}
+                    {row.team.netBudgetDelta} trades
+                  </span>
+                )}
+              </div>
             </div>
             <div className="mt-1.5 flex items-center gap-2.5">
               <span
@@ -241,6 +255,18 @@ export default function ThreatBoard({
                   style={{ color: maxBidColor(row.bid) }}
                 >
                   ${row.bid}
+                  {row.team.netBudgetDelta !== 0 && (
+                    <span
+                      data-testid={`threat-trade-delta-${row.team.handle}`}
+                      className="ml-1.5 text-[10px] font-normal"
+                      style={{
+                        color: row.team.netBudgetDelta > 0 ? 'var(--age-young)' : 'var(--age-old)',
+                      }}
+                    >
+                      {row.team.netBudgetDelta > 0 ? '+' : ''}
+                      {row.team.netBudgetDelta} trades
+                    </span>
+                  )}
                 </TableCell>
                 <TableCell
                   className="font-label text-center text-[11px] tracking-wide uppercase"

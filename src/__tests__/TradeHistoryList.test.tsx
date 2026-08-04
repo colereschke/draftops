@@ -48,6 +48,15 @@ describe('TradeHistoryList', () => {
     expect(row).toHaveTextContent('team-b 2028 round 1');
   });
 
+  it('renders the trade timestamp as a semantic UTC time element', () => {
+    render(<TradeHistoryList draftId={4} trades={[TRADE]} isReadOnly={false} nowMs={NOW} />);
+
+    const timestamp = screen.getByTestId('trade-history-timestamp-501');
+    expect(timestamp.tagName).toBe('TIME');
+    expect(timestamp).toHaveAttribute('dateTime', '2026-08-01T00:00:00.000Z');
+    expect(timestamp).toHaveTextContent('2026-08-01 00:00 UTC');
+  });
+
   it('shows an empty state when no trades exist', () => {
     render(<TradeHistoryList draftId={4} trades={[]} isReadOnly={false} nowMs={NOW} />);
 

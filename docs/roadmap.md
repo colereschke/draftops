@@ -88,6 +88,20 @@ If permission is obtained, scope a separate design around import cadence, immuta
 snapshots, staleness and coverage validation, provenance in the UI, failure/fallback behavior, and
 whether source selection belongs at the draft or user level.
 
+### `FEAT-012` — Sleeper-assisted trade prefill
+
+**Status:** Planned; depends on the shipped Sleeper roster mapping and budget-for-picks ledger.
+
+Use Sleeper's transaction history to detect `draft_picks` changing rosters and pre-fill a DraftOps
+trade with the mapped teams plus each pick's origin, season, and round. Detection is advisory: it
+must open an operator-reviewable draft in the existing trade flow and must never create or mutate a
+DraftOps trade in the background.
+
+Sleeper does not carry DraftOps auction-budget consideration, so the operator must enter a positive
+budget amount and confirm the complete trade before it is persisted. A focused design should define
+transaction polling, deduplication, unsupported transaction handling, and how already-recorded or
+partially matched transfers are presented without interrupting the existing catch-up workflow.
+
 ### Dynamic pick valuation follow-up
 
 **Status:** Partial baseline shipped; richer signals deferred.
@@ -118,6 +132,10 @@ These are not scheduled until trading and feedback provide stronger product sign
 
 ```text
 FEAT-006 UI polish ── next planned product work
+
+FEAT-009 Sleeper roster mapping ──┐
+                                  ├── FEAT-012 Sleeper-assisted trade prefill
+FEAT-010 budget-for-picks trading ┘
 
 OPS-002 monitoring and feedback can proceed independently once production traffic is available.
 

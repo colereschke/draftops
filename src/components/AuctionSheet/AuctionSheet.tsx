@@ -37,6 +37,7 @@ interface AuctionSheetProps {
   draftId: number;
   ownerHandle: string | null;
   ownerBudget: number;
+  ownerBudgetDelta: number;
   scoringSettings: ScoringSettings;
   teamCount: number;
   budget: number;
@@ -56,6 +57,7 @@ export default function AuctionSheet({
   draftId,
   ownerHandle,
   ownerBudget,
+  ownerBudgetDelta,
   scoringSettings,
   teamCount,
   budget,
@@ -192,7 +194,7 @@ export default function AuctionSheet({
       );
   }
 
-  const remaining = ownerBudget - mySpent;
+  const remaining = ownerBudget + ownerBudgetDelta - mySpent;
 
   const filtered = useMemo(
     () =>
@@ -236,6 +238,7 @@ export default function AuctionSheet({
       <div data-onboarding-target="value-sheet">
         <AuctionHeader
           ownerBudget={ownerBudget}
+          ownerBudgetDelta={ownerBudgetDelta}
           mySpent={mySpent}
           remaining={remaining}
           posStats={posStats}

@@ -5,6 +5,7 @@ import type { DeletedBid } from '@/components/BidHistory/BidHistoryPanel';
 import type { ClaimedBid, LeagueTeam } from '@/types';
 import { auth } from '@/auth';
 import { getDraft } from '@/lib/draft';
+import { getTradeBudgetDeltaByTeamId } from '@/lib/tradeBudget';
 import { getActiveDraftPlayers } from '@/lib/activeDraftPlayers';
 import { fromPrismaFuturePickMode } from '@/lib/futurePickAssets';
 import { computeSpreads } from '@/lib/valueSpread';
@@ -100,6 +101,11 @@ export default async function DraftHomePage({ params }: { params: Promise<{ draf
     sleeperRosterIds.every((rosterId) => rosterId !== null) &&
     new Set(sleeperRosterIds).size === sleeperRosterIds.length;
 
+  const ownerBudgetDeltaByTeamId = await getTradeBudgetDeltaByTeamId(getPrisma(), draftId);
+  const ownerBudgetDelta = draft.ownerTeamId
+    ? (ownerBudgetDeltaByTeamId.get(draft.ownerTeamId) ?? 0)
+    : 0;
+
   return (
     <AuctionSheet
       players={players}
@@ -109,6 +115,7 @@ export default async function DraftHomePage({ params }: { params: Promise<{ draf
       draftId={draftId}
       ownerHandle={draft.ownerTeam?.handle ?? null}
       ownerBudget={draft.ownerTeam?.budget ?? 1000}
+      ownerBudgetDelta={ownerBudgetDelta}
       scoringSettings={(draft.scoringSettings ?? DEFAULT_SCORING_SETTINGS) as ScoringSettings}
       teamCount={draft.teamCount}
       budget={draft.budget}

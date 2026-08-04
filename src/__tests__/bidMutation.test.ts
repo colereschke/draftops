@@ -18,6 +18,8 @@ const mockAuctionUpdate = jest.fn();
 const mockAuctionDeleteMany = jest.fn();
 const mockNominationDeleteMany = jest.fn();
 const mockAuditCreate = jest.fn();
+const mockTradeFindMany = jest.fn();
+const mockTradePickAssetFindFirst = jest.fn();
 
 const mockTx = {
   $executeRaw: mockExecuteRaw,
@@ -34,6 +36,8 @@ const mockTx = {
   },
   bidAuditEvent: { create: mockAuditCreate },
   nominatedPlayer: { deleteMany: mockNominationDeleteMany },
+  trade: { findMany: mockTradeFindMany },
+  tradePickAsset: { findFirst: mockTradePickAssetFindFirst },
 };
 
 jest.mock('@/lib/db', () => ({
@@ -84,6 +88,8 @@ beforeEach(() => {
   mockPlayerFindFirst.mockResolvedValue(PLAYER);
   mockAuctionFindFirst.mockResolvedValue(null);
   mockAuctionFindMany.mockResolvedValue([]);
+  mockTradeFindMany.mockResolvedValue([]);
+  mockTradePickAssetFindFirst.mockResolvedValue(null);
   mockAuctionCreate.mockResolvedValue({
     id: 99,
     draftId: 4,
@@ -353,6 +359,37 @@ describe('createBidRecord', () => {
 
     await expect(createBidRecord(CREATE_INPUT)).rejects.toThrow('audit write failed');
     expect(mockNominationDeleteMany).not.toHaveBeenCalled();
+  });
+
+  it('allows a bid that would exceed raw budget but is covered by a positive trade delta', async () => {
+    mockTeamFindFirst.mockResolvedValue({ id: 7, budget: 100 });
+    mockAuctionFindMany.mockResolvedValue([]);
+    mockTradeFindMany.mockResolvedValue([{ budgetTeamId: 1, pickTeamId: 7, budgetAmount: 50 }]);
+
+    const result = await createBidRecord({ ...CREATE_INPUT, price: 130 });
+
+    expect(result.ok).toBe(true); // 100 + 50 - 130 = 20 >= requiredRosterDollars
+  });
+
+  it('blocks a bid that raw budget alone would allow but a negative trade delta forbids', async () => {
+    mockTeamFindFirst.mockResolvedValue({ id: 7, budget: 100 });
+    mockAuctionFindMany.mockResolvedValue([]);
+    mockTradeFindMany.mockResolvedValue([{ budgetTeamId: 7, pickTeamId: 1, budgetAmount: 50 }]);
+
+    const result = await createBidRecord({ ...CREATE_INPUT, price: 90 });
+
+    expect(result).toEqual({ ok: false, code: 'BID_EXCEEDS_MAX' }); // 100 - 50 - 90 = -40 < 0
+  });
+
+  it('accepts a pre-fetched budget delta map instead of querying inside the transaction', async () => {
+    mockTeamFindFirst.mockResolvedValue({ id: 7, budget: 100 });
+    mockAuctionFindMany.mockResolvedValue([]);
+    const prefetched = new Map([[7, 50]]);
+
+    const result = await createBidRecord({ ...CREATE_INPUT, price: 130 }, prefetched);
+
+    expect(result.ok).toBe(true); // 100 + 50 - 130 = 20 >= 0
+    expect(mockTradeFindMany).not.toHaveBeenCalled();
   });
 });
 
@@ -640,5 +677,163 @@ describe('restoreBidRecord', () => {
     });
     expect(mockQueryRaw).not.toHaveBeenCalled();
     expect(mockAuctionUpdate).not.toHaveBeenCalled();
+  });
+});
+
+describe('PICK_HAS_ACTIVE_TRADES guard', () => {
+  const PKG_BID = {
+    id: 55,
+    draftId: 4,
+    playerId: 20,
+    player: "team-b's 2027 package",
+    position: 'PKG',
+    nflTeam: '',
+    price: 109,
+    sfRank: 900,
+    notes: null,
+    teamId: 7,
+    createdAt: new Date('2026-07-01T00:00:00.000Z'),
+    updatedAt: new Date('2026-07-01T00:00:00.000Z'),
+    deletedAt: null,
+    supersededAt: null,
+  };
+  const PKG_PLAYER_ROW = {
+    futurePickOriginHandle: 'team-b',
+    futurePickYear: 2027,
+    futurePickRound: null,
+  };
+  const DELETED_SNAPSHOT = { ...PKG_BID, deletedAt: new Date('2026-07-19T12:20:00.000Z') };
+
+  // team.findFirst is stubbed once for the whole file (mockTeamFindFirst), so it also answers
+  // the guard's origin-team lookup; the outer beforeEach default resolves it to { id: 7 }.
+  const EXPECTED_PKG_QUERY = {
+    where: {
+      draftId: 4,
+      originTeamId: 7,
+      futurePickYear: 2027,
+      futurePickRound: { in: [1, 2, 3] },
+      trade: { deletedAt: null, createdAt: { gte: PKG_BID.createdAt } },
+    },
+    select: { id: true },
+  };
+
+  const PICK_BID = {
+    id: 56,
+    draftId: 4,
+    playerId: 21,
+    player: "team-c's 2028 2nd",
+    position: 'PICK',
+    nflTeam: '',
+    price: 40,
+    sfRank: 900,
+    notes: null,
+    teamId: 7,
+    createdAt: new Date('2026-07-02T00:00:00.000Z'),
+    updatedAt: new Date('2026-07-02T00:00:00.000Z'),
+    deletedAt: null,
+    supersededAt: null,
+  };
+  const PICK_PLAYER_ROW = {
+    futurePickOriginHandle: 'team-c',
+    futurePickYear: 2028,
+    futurePickRound: 2,
+  };
+  const EXPECTED_PICK_QUERY = {
+    where: {
+      draftId: 4,
+      originTeamId: 7,
+      futurePickYear: 2028,
+      futurePickRound: { in: [2] },
+      trade: { deletedAt: null, createdAt: { gte: PICK_BID.createdAt } },
+    },
+    select: { id: true },
+  };
+
+  beforeEach(() => {
+    mockAuctionFindFirst.mockResolvedValue(PKG_BID);
+    mockPlayerFindFirst.mockResolvedValue(PKG_PLAYER_ROW);
+    mockQueryRaw.mockResolvedValue([{ now: new Date('2026-07-19T12:20:00.000Z') }]);
+    mockAuctionUpdate.mockResolvedValue(DELETED_SNAPSHOT);
+  });
+
+  it('blocks deleting a PKG win when a later trade names one of its rounds, querying all three PKG rounds', async () => {
+    // A real query filtering on trade.createdAt > bid.createdAt would find this row;
+    // the mock returns it directly to simulate that outcome.
+    mockTradePickAssetFindFirst.mockResolvedValue({ id: 900 });
+
+    const result = await deleteBidRecord({ userId: 'owner-1', draftId: 4, bidId: 55 });
+
+    expect(result).toEqual({ ok: false, code: 'PICK_HAS_ACTIVE_TRADES' });
+    expect(mockTradePickAssetFindFirst).toHaveBeenCalledWith(EXPECTED_PKG_QUERY);
+  });
+
+  it('allows deleting a PKG win when the guard query finds no matching later trade', async () => {
+    mockTradePickAssetFindFirst.mockResolvedValue(null);
+
+    const result = await deleteBidRecord({ userId: 'owner-1', draftId: 4, bidId: 55 });
+
+    expect(result.ok).toBe(true);
+    expect(mockTradePickAssetFindFirst).toHaveBeenCalledWith(EXPECTED_PKG_QUERY);
+  });
+
+  it('blocks deleting a PICK win when a later trade names its single round', async () => {
+    mockAuctionFindFirst.mockResolvedValue(PICK_BID);
+    mockPlayerFindFirst.mockResolvedValue(PICK_PLAYER_ROW);
+    mockAuctionUpdate.mockResolvedValue({
+      ...PICK_BID,
+      deletedAt: new Date('2026-07-19T12:20:00.000Z'),
+    });
+    mockTradePickAssetFindFirst.mockResolvedValue({ id: 901 });
+
+    const result = await deleteBidRecord({ userId: 'owner-1', draftId: 4, bidId: 56 });
+
+    expect(result).toEqual({ ok: false, code: 'PICK_HAS_ACTIVE_TRADES' });
+    expect(mockTradePickAssetFindFirst).toHaveBeenCalledWith(EXPECTED_PICK_QUERY);
+  });
+
+  it('allows deleting a PICK win when the guard query for its single round finds no later trade', async () => {
+    mockAuctionFindFirst.mockResolvedValue(PICK_BID);
+    mockPlayerFindFirst.mockResolvedValue(PICK_PLAYER_ROW);
+    mockAuctionUpdate.mockResolvedValue({
+      ...PICK_BID,
+      deletedAt: new Date('2026-07-19T12:20:00.000Z'),
+    });
+    mockTradePickAssetFindFirst.mockResolvedValue(null);
+
+    const result = await deleteBidRecord({ userId: 'owner-1', draftId: 4, bidId: 56 });
+
+    expect(result.ok).toBe(true);
+    expect(mockTradePickAssetFindFirst).toHaveBeenCalledWith(EXPECTED_PICK_QUERY);
+  });
+
+  it('blocks reassigning a PKG win to a different team when a later trade depends on it', async () => {
+    mockTradePickAssetFindFirst.mockResolvedValue({ id: 900 });
+
+    const result = await updateBidRecord({
+      userId: 'owner-1',
+      draftId: 4,
+      bidId: 55,
+      teamId: 11, // different from PKG_BID.teamId (7)
+      price: PKG_BID.price,
+    });
+
+    expect(result).toEqual({ ok: false, code: 'PICK_HAS_ACTIVE_TRADES' });
+    expect(mockTradePickAssetFindFirst).toHaveBeenCalledWith(EXPECTED_PKG_QUERY);
+  });
+
+  it('does not run the guard when updateBidRecord keeps the same teamId', async () => {
+    mockTradePickAssetFindFirst.mockResolvedValue({ id: 900 }); // would block if checked
+    mockAuctionUpdate.mockResolvedValue({ ...PKG_BID, price: 120 });
+
+    const result = await updateBidRecord({
+      userId: 'owner-1',
+      draftId: 4,
+      bidId: 55,
+      teamId: PKG_BID.teamId, // unchanged — a price correction, not a reassignment
+      price: 120,
+    });
+
+    expect(result.ok).toBe(true);
+    expect(mockTradePickAssetFindFirst).not.toHaveBeenCalled();
   });
 });

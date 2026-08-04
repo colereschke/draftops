@@ -3,12 +3,40 @@ import {
   completeOwnedDraft,
   withActiveOwnedDraftMutation,
 } from '@/lib/draftMutation';
+import type { AuctionResult, Draft, Trade, TradePickAsset } from '@prisma/client';
+
+interface TradeWithPickAssets extends Trade {
+  pickAssets: TradePickAsset[];
+}
+
+type SerializedDraft = Omit<Draft, 'createdAt'> & { createdAt: string };
+type SerializedAuctionResult = Omit<
+  AuctionResult,
+  'createdAt' | 'updatedAt' | 'deletedAt' | 'supersededAt'
+> & {
+  createdAt: string;
+  updatedAt: string;
+  deletedAt: string | null;
+  supersededAt: string | null;
+};
+type SerializedTrade = Omit<TradeWithPickAssets, 'createdAt' | 'updatedAt' | 'deletedAt'> & {
+  createdAt: string;
+  updatedAt: string;
+  deletedAt: string | null;
+};
+
+interface CompletionSnapshotV2Payload {
+  draft: SerializedDraft;
+  auctionResults: SerializedAuctionResult[];
+  trades: SerializedTrade[];
+}
 
 const mockTransaction = jest.fn();
 const mockExecuteRaw = jest.fn();
 const mockDraftFindFirst = jest.fn();
 const mockDraftUpdate = jest.fn();
 const mockAuctionResultFindMany = jest.fn();
+const mockTradeFindMany = jest.fn();
 const mockSnapshotCreate = jest.fn();
 
 const mockTx = {
@@ -19,6 +47,9 @@ const mockTx = {
   },
   auctionResult: {
     findMany: mockAuctionResultFindMany,
+  },
+  trade: {
+    findMany: mockTradeFindMany,
   },
   draftCompletionSnapshot: {
     create: mockSnapshotCreate,
@@ -31,7 +62,7 @@ jest.mock('@/lib/db', () => ({
   }),
 }));
 
-const ACTIVE_DRAFT = {
+const ACTIVE_DRAFT: Draft = {
   id: 4,
   name: 'Integrity Draft',
   ownerId: 'owner-1',
@@ -41,11 +72,13 @@ const ACTIVE_DRAFT = {
   teamCount: 12,
   rosterSize: 30,
   budget: 1000,
+  playerValueSourceBudget: 1000,
   startingLineup: null,
   scoringSettings: null,
   targetRoster: null,
   futurePickAuctionMode: 'PACKAGES',
   sleeperLeagueId: 'league-1',
+  activeProjectionValueSetId: null,
 };
 
 beforeEach(() => {
@@ -54,6 +87,7 @@ beforeEach(() => {
   mockDraftFindFirst.mockResolvedValue(ACTIVE_DRAFT);
   mockDraftUpdate.mockResolvedValue({ ...ACTIVE_DRAFT, status: 'COMPLETE' });
   mockAuctionResultFindMany.mockResolvedValue([]);
+  mockTradeFindMany.mockResolvedValue([]);
   mockSnapshotCreate.mockResolvedValue({ id: 1, draftId: 4 });
   mockTransaction.mockImplementation((operation: (tx: typeof mockTx) => Promise<unknown>) =>
     operation(mockTx),
@@ -138,8 +172,8 @@ describe('withActiveOwnedDraftMutation', () => {
 });
 
 describe('completeOwnedDraft', () => {
-  it('captures active bids in a versioned snapshot before completing the draft', async () => {
-    const activeBid = {
+  it('captures a complete version 2 recovery payload before completing the draft', async () => {
+    const activeBid: AuctionResult = {
       id: 12,
       draftId: 4,
       player: 'Josh Allen',
@@ -147,13 +181,57 @@ describe('completeOwnedDraft', () => {
       position: 'QB',
       nflTeam: 'BUF',
       price: 120,
+      sfRank: null,
+      notes: null,
       teamId: 7,
       createdAt: new Date('2026-07-16T01:00:00.000Z'),
       updatedAt: new Date('2026-07-16T01:00:00.000Z'),
       deletedAt: null,
       supersededAt: null,
     };
+    const activeTrade: TradeWithPickAssets = {
+      id: 21,
+      draftId: 4,
+      budgetTeamId: 7,
+      pickTeamId: 9,
+      budgetAmount: 75,
+      notes: '2028 capital',
+      createdAt: new Date('2026-07-23T12:00:00.000Z'),
+      updatedAt: new Date('2026-07-23T13:00:00.000Z'),
+      deletedAt: null,
+      pickAssets: [
+        {
+          id: 31,
+          tradeId: 21,
+          draftId: 4,
+          originTeamId: 9,
+          futurePickYear: 2028,
+          futurePickRound: 1,
+        },
+      ],
+    };
+    const payload: CompletionSnapshotV2Payload = {
+      draft: { ...ACTIVE_DRAFT, createdAt: ACTIVE_DRAFT.createdAt.toISOString() },
+      auctionResults: [
+        {
+          ...activeBid,
+          createdAt: activeBid.createdAt.toISOString(),
+          updatedAt: activeBid.updatedAt.toISOString(),
+          deletedAt: null,
+          supersededAt: null,
+        },
+      ],
+      trades: [
+        {
+          ...activeTrade,
+          createdAt: activeTrade.createdAt.toISOString(),
+          updatedAt: activeTrade.updatedAt.toISOString(),
+          deletedAt: null,
+        },
+      ],
+    };
     mockAuctionResultFindMany.mockResolvedValue([activeBid]);
+    mockTradeFindMany.mockResolvedValue([activeTrade]);
 
     await expect(completeOwnedDraft('owner-1', 4)).resolves.toEqual({ ok: true, data: null });
 
@@ -161,20 +239,17 @@ describe('completeOwnedDraft', () => {
       where: { draftId: 4, deletedAt: null },
       orderBy: { id: 'asc' },
     });
+    expect(mockTradeFindMany).toHaveBeenCalledWith({
+      where: { draftId: 4, deletedAt: null },
+      include: { pickAssets: true },
+      orderBy: { id: 'asc' },
+    });
     expect(mockSnapshotCreate).toHaveBeenCalledWith({
-      data: expect.objectContaining({
+      data: {
         draftId: 4,
-        schemaVersion: 1,
-        payload: expect.objectContaining({
-          draft: expect.objectContaining({ id: ACTIVE_DRAFT.id, status: 'ACTIVE' }),
-          auctionResults: [
-            expect.objectContaining({
-              id: activeBid.id,
-              createdAt: activeBid.createdAt.toISOString(),
-            }),
-          ],
-        }),
-      }),
+        schemaVersion: 2,
+        payload,
+      },
     });
     expect(mockSnapshotCreate.mock.invocationCallOrder[0]).toBeLessThan(
       mockDraftUpdate.mock.invocationCallOrder[0],
@@ -219,5 +294,19 @@ describe('completeOwnedDraft', () => {
       code: 'NOT_FOUND',
     });
     expect(mockDraftUpdate).not.toHaveBeenCalled();
+  });
+});
+
+describe('new trade mutation codes', () => {
+  it.each([
+    'TRADE_NOT_FOUND',
+    'TRADE_NOT_DELETED',
+    'TRADE_EXCEEDS_BUDGET',
+    'PICK_NOT_HELD',
+    'PICK_ALREADY_RETRADED',
+    'PICK_HAS_ACTIVE_TRADES',
+  ] as const)('constructs a DraftMutationFailure with code %s', (code) => {
+    const failure = new DraftMutationFailure(code);
+    expect(failure.code).toBe(code);
   });
 });

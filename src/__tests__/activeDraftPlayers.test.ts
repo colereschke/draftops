@@ -2,19 +2,37 @@
  * @jest-environment node
  */
 import { getActiveDraftPlayers } from '@/lib/activeDraftPlayers';
+import { computeFutureCapitalByHandle } from '@/lib/pickCapital';
 import type { StartingSlot } from '@/types';
 
+// Wrap (not replace) the real implementation so every other test in this file keeps exercising
+// real future-capital behavior; only this file's one fallbackScale-focused test inspects calls.
+jest.mock('@/lib/pickCapital', () => {
+  const actual = jest.requireActual('@/lib/pickCapital');
+  return { ...actual, computeFutureCapitalByHandle: jest.fn(actual.computeFutureCapitalByHandle) };
+});
+
 const mockPlayerFindMany = jest.fn();
+const mockPlayerAggregate = jest.fn();
 const mockDraftPlayerValueFindMany = jest.fn();
 const mockDraftFindUnique = jest.fn();
+const mockTeamFindMany = jest.fn();
+const mockTradePickAssetFindMany = jest.fn();
+const mockAuctionResultFindMany = jest.fn();
 
 jest.mock('@/lib/db', () => ({
   getPrisma: () => ({
     draft: { findUnique: (...args: unknown[]) => mockDraftFindUnique(...args) },
-    player: { findMany: (...args: unknown[]) => mockPlayerFindMany(...args) },
+    player: {
+      findMany: (...args: unknown[]) => mockPlayerFindMany(...args),
+      aggregate: (...args: unknown[]) => mockPlayerAggregate(...args),
+    },
     draftPlayerValue: {
       findMany: (...args: unknown[]) => mockDraftPlayerValueFindMany(...args),
     },
+    team: { findMany: (...args: unknown[]) => mockTeamFindMany(...args) },
+    tradePickAsset: { findMany: (...args: unknown[]) => mockTradePickAssetFindMany(...args) },
+    auctionResult: { findMany: (...args: unknown[]) => mockAuctionResultFindMany(...args) },
   }),
 }));
 
@@ -51,6 +69,10 @@ const input = {
 beforeEach(() => {
   jest.clearAllMocks();
   mockDraftFindUnique.mockResolvedValue({ activeProjectionValueSetId: 11 });
+  mockTeamFindMany.mockResolvedValue([]);
+  mockPlayerAggregate.mockResolvedValue({ _max: { futurePickYear: null } });
+  mockTradePickAssetFindMany.mockResolvedValue([]);
+  mockAuctionResultFindMany.mockResolvedValue([]);
 });
 
 describe('getActiveDraftPlayers', () => {
@@ -105,6 +127,21 @@ describe('getActiveDraftPlayers', () => {
     expect(mockDraftPlayerValueFindMany).not.toHaveBeenCalled();
     expect(players[0].budget).toBe(150);
     expect(players[0].valueSource).toBe('fallback');
+  });
+
+  it('reuses prefetched teams and resolved ownership without duplicate ownership queries', async () => {
+    mockDraftFindUnique.mockResolvedValue({ activeProjectionValueSetId: null });
+    mockPlayerFindMany.mockResolvedValue([dbPlayer()]);
+
+    await getActiveDraftPlayers({
+      ...input,
+      preFetchedTeams: [{ id: 7, handle: 'owner' }],
+      preResolvedPicks: [],
+    });
+
+    expect(mockTeamFindMany).not.toHaveBeenCalled();
+    expect(mockTradePickAssetFindMany).not.toHaveBeenCalled();
+    expect(mockAuctionResultFindMany).not.toHaveBeenCalled();
   });
 
   it('applies dynamic pick values before auction-mode filtering', async () => {
@@ -180,6 +217,26 @@ describe('getActiveDraftPlayers', () => {
     const players = await getActiveDraftPlayers({ ...input, futurePickAuctionMode });
 
     expect(players.map((player) => player.player)).toEqual(names);
+  });
+
+  it('scales the no-generated-year-data future-capital fallback against the $1,000 source economy, not playerValueSourceBudget', async () => {
+    // PACKAGE_BASELINE/ROUND_BASELINES are hardcoded constants always denominated in the $1,000
+    // ranking-source economy (see the inline comment in activeDraftPlayers.ts), so the fallback
+    // scale must be draftBudget / DEFAULT_RANKING_SOURCE_BUDGET (2000 / 1000 = 2) — never
+    // draftBudget / playerValueSourceBudget (2000 / 500 = 4), even though a draft's real
+    // playerValueSourceBudget is 1000 for every ranking source in this codebase today.
+    mockDraftFindUnique.mockResolvedValue({
+      activeProjectionValueSetId: null,
+      playerValueSourceBudget: 500,
+      budget: 2000,
+    });
+    mockPlayerFindMany.mockResolvedValue([dbPlayer()]);
+
+    await getActiveDraftPlayers(input);
+
+    expect(computeFutureCapitalByHandle).toHaveBeenCalledWith(
+      expect.objectContaining({ fallbackScale: 2 }),
+    );
   });
 
   it('propagates player query failures', async () => {

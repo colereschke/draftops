@@ -1,5 +1,6 @@
 import { render, screen } from '@testing-library/react';
 import TeamRosterDetail from '@/components/RosterTracker/TeamRosterDetail';
+import type { CurrentPickHolding } from '@/lib/pickOwnership';
 import type { RosterEntry } from '@/types';
 
 describe('TeamRosterDetail', () => {
@@ -338,5 +339,95 @@ describe('TeamRosterDetail', () => {
 
     expect(playerOneRow).toHaveTextContent('—');
     expect(playerTwoRow).toHaveTextContent('—');
+  });
+
+  it('shows current draft capital while keeping auction player rows and prices intact', () => {
+    const results: RosterEntry[] = [
+      {
+        id: 1,
+        playerId: 1,
+        player: 'Patrick Mahomes',
+        position: 'QB',
+        nflTeam: 'KC',
+        price: 200,
+        sfRank: 1,
+        teamId: 1,
+        teamHandle: 'alpha',
+        delta: 20,
+      },
+      {
+        id: 2,
+        playerId: 2,
+        player: 'Alpha pick package',
+        position: 'PKG',
+        nflTeam: 'FA',
+        price: 112,
+        sfRank: null,
+        teamId: 1,
+        teamHandle: 'alpha',
+        delta: null,
+      },
+      {
+        id: 3,
+        playerId: 3,
+        player: 'Beta 2027 1st',
+        position: 'PICK',
+        nflTeam: 'FA',
+        price: 50,
+        sfRank: null,
+        teamId: 1,
+        teamHandle: 'alpha',
+        delta: null,
+      },
+    ];
+    const pickHoldings: CurrentPickHolding[] = [
+      {
+        originTeamId: 1,
+        originHandle: 'alpha',
+        futurePickYear: 2027,
+        holderTeamId: 2,
+        isIntactPackage: true,
+        rounds: [1, 2, 3],
+      },
+      {
+        originTeamId: 2,
+        originHandle: 'beta',
+        futurePickYear: 2027,
+        holderTeamId: 2,
+        isIntactPackage: false,
+        rounds: [1],
+      },
+    ];
+
+    render(<TeamRosterDetail results={results} pickHoldings={pickHoldings} />);
+
+    expect(screen.getByTestId('roster-group-QB')).toHaveTextContent('$200');
+    expect(screen.getByTestId('roster-entry-1')).toHaveTextContent('Patrick Mahomes');
+    expect(screen.queryByTestId('roster-entry-2')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('roster-entry-3')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('roster-group-PKG')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('roster-group-PICK')).not.toBeInTheDocument();
+    expect(screen.getByTestId('draft-capital-1-2027-1-2-3')).toHaveTextContent(
+      '2027 alpha package',
+    );
+    expect(screen.getByTestId('draft-capital-2-2027-1')).toHaveTextContent('2027 beta 1st');
+  });
+
+  it('does not show the empty roster message when current draft capital is held', () => {
+    const pickHoldings: CurrentPickHolding[] = [
+      {
+        originTeamId: 1,
+        originHandle: 'alpha',
+        futurePickYear: 2028,
+        holderTeamId: 2,
+        isIntactPackage: false,
+        rounds: [2],
+      },
+    ];
+
+    render(<TeamRosterDetail results={[]} pickHoldings={pickHoldings} />);
+
+    expect(screen.queryByTestId('roster-empty')).not.toBeInTheDocument();
+    expect(screen.getByTestId('draft-capital-1-2028-2')).toHaveTextContent('2028 alpha 2nd');
   });
 });

@@ -61,6 +61,7 @@ export interface TeamStats {
   rosterRemaining: number;
   buyingPower: number;
   pkgCount: number;
+  netBudgetDelta: number;
   avgAge: number | null;
 }
 

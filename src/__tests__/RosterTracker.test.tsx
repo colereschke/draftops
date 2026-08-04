@@ -1,6 +1,7 @@
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import RosterTracker from '@/components/RosterTracker/RosterTracker';
+import type { CurrentPickHolding } from '@/lib/pickOwnership';
 import type { TeamWithRoster } from '@/types';
 import type { ManagerTendency } from '@/lib/tendencies';
 
@@ -9,7 +10,21 @@ let mockSearch = '';
 jest.mock('next/navigation', () => ({
   usePathname: () => '/draft/1/teams',
   useSearchParams: () => new URLSearchParams(mockSearch),
+  useRouter: () => ({ refresh: jest.fn() }),
 }));
+
+// RosterTracker now statically imports TradeModal, which imports `@/lib/actions`;
+// that module pulls in `next/cache`, which blows up under plain jsdom.
+jest.mock('@/lib/actions', () => ({ logTrade: jest.fn() }));
+
+// None of the pre-existing assertions exercise trade behavior, so empty defaults suffice.
+const TRADE_PROPS = {
+  draftId: 1,
+  tradeTeams: [],
+  generatedPickYear: null,
+  tradeablePicksByTeamId: {},
+  pickHoldingsByTeamId: {},
+};
 
 const makeTeam = (over: Partial<TeamWithRoster> = {}): TeamWithRoster => ({
   id: 1,
@@ -22,6 +37,7 @@ const makeTeam = (over: Partial<TeamWithRoster> = {}): TeamWithRoster => ({
   rosterRemaining: 28,
   buyingPower: 660,
   pkgCount: 1,
+  netBudgetDelta: 0,
   avgAge: null,
   results: [
     {
@@ -116,18 +132,105 @@ describe('RosterTracker', () => {
   it('renders a dossier card per team and pins the owner first', () => {
     const teams = [makeTeam({ id: 2, handle: 'rival_b', displayName: 'B' }), makeTeam()];
     const tendencies = [makeTendency({ teamId: 2, handle: 'rival_b' }), makeTendency()];
-    render(<RosterTracker teams={teams} tendencies={tendencies} ownerHandle="coreschke" />);
+    render(
+      <RosterTracker
+        teams={teams}
+        tendencies={tendencies}
+        ownerHandle="coreschke"
+        {...TRADE_PROPS}
+      />,
+    );
     const cards = screen.getAllByTestId(/^dossier-card-/);
     expect(cards).toHaveLength(2);
     expect(cards[0]).toHaveAttribute('data-testid', 'dossier-card-1'); // owner pinned first
   });
 
+  it('hides the Log Trade control on every card when isReadOnly is true', () => {
+    const teams = [makeTeam({ id: 2, handle: 'rival_b', displayName: 'B' }), makeTeam()];
+    const tendencies = [makeTendency({ teamId: 2, handle: 'rival_b' }), makeTendency()];
+    render(
+      <RosterTracker
+        teams={teams}
+        tendencies={tendencies}
+        ownerHandle="coreschke"
+        {...TRADE_PROPS}
+        isReadOnly
+      />,
+    );
+    expect(screen.queryByTestId('dossier-log-trade-1')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('dossier-log-trade-2')).not.toBeInTheDocument();
+  });
+
   it('expands a card to reveal the grouped roster drawer', async () => {
     render(
-      <RosterTracker teams={[makeTeam()]} tendencies={[makeTendency()]} ownerHandle="coreschke" />,
+      <RosterTracker
+        teams={[makeTeam()]}
+        tendencies={[makeTendency()]}
+        ownerHandle="coreschke"
+        {...TRADE_PROPS}
+      />,
     );
     await userEvent.click(screen.getByTestId('dossier-expand-1'));
     expect(screen.getByTestId('roster-group-QB')).toBeInTheDocument();
+  });
+
+  it('shows draft capital only on the team that currently holds a traded pick', async () => {
+    const pickHoldings: CurrentPickHolding[] = [
+      {
+        originTeamId: 1,
+        originHandle: 'coreschke',
+        futurePickYear: 2027,
+        holderTeamId: 2,
+        isIntactPackage: false,
+        rounds: [1],
+      },
+    ];
+    const teams = [
+      makeTeam({ id: 1, handle: 'coreschke', results: [] }),
+      makeTeam({ id: 2, handle: 'rival_b', displayName: 'B', results: [] }),
+    ];
+    const tendencies = [
+      makeTendency({ teamId: 1, handle: 'coreschke' }),
+      makeTendency({ teamId: 2, handle: 'rival_b' }),
+    ];
+
+    render(
+      <RosterTracker
+        teams={teams}
+        tendencies={tendencies}
+        ownerHandle="coreschke"
+        {...TRADE_PROPS}
+        pickHoldingsByTeamId={{ 2: pickHoldings }}
+      />,
+    );
+
+    await userEvent.click(screen.getByTestId('dossier-expand-1'));
+    expect(screen.queryByTestId('draft-capital-1-2027-1')).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByTestId('dossier-expand-2'));
+    expect(screen.getByTestId('draft-capital-1-2027-1')).toHaveTextContent('2027 coreschke 1st');
+  });
+
+  it('summarizes current intact packages instead of historical package wins', () => {
+    const holding: CurrentPickHolding = {
+      originTeamId: 2,
+      originHandle: 'rival_b',
+      futurePickYear: 2027,
+      holderTeamId: 1,
+      isIntactPackage: true,
+      rounds: [1, 2, 3],
+    };
+    render(
+      <RosterTracker
+        teams={[makeTeam({ pkgCount: 4 })]}
+        tendencies={[makeTendency()]}
+        ownerHandle="coreschke"
+        {...TRADE_PROPS}
+        pickHoldingsByTeamId={{ 1: [holding] }}
+      />,
+    );
+    expect(screen.getByTestId('roster-summary')).toHaveTextContent('1 pick package held');
+    expect(screen.getByTestId('roster-summary')).not.toHaveTextContent('4 pick packages held');
   });
 
   it('reflects the lineup format truthfully instead of a hardcoded Superflex label', () => {
@@ -137,6 +240,7 @@ describe('RosterTracker', () => {
         tendencies={[makeTendency()]}
         ownerHandle="coreschke"
         startingLineup={['QB', 'RB', 'RB', 'WR', 'WR', 'TE', 'FLEX']}
+        {...TRADE_PROPS}
       />,
     );
     expect(screen.getByText('1-Team · 1QB · Manager Scouting')).toBeInTheDocument();
@@ -144,7 +248,12 @@ describe('RosterTracker', () => {
 
   it('defaults to Superflex when no starting lineup is provided', () => {
     render(
-      <RosterTracker teams={[makeTeam()]} tendencies={[makeTendency()]} ownerHandle="coreschke" />,
+      <RosterTracker
+        teams={[makeTeam()]}
+        tendencies={[makeTendency()]}
+        ownerHandle="coreschke"
+        {...TRADE_PROPS}
+      />,
     );
     expect(screen.getByText('1-Team · Superflex · Manager Scouting')).toBeInTheDocument();
   });
@@ -159,7 +268,9 @@ describe('RosterTracker', () => {
         makeTendency({ teamId: 2, handle: 'lowSpend', totalSpend: 100 }),
         makeTendency({ teamId: 3, handle: 'highSpend', totalSpend: 900 }),
       ];
-      render(<RosterTracker teams={teams} tendencies={tendencies} ownerHandle={null} />);
+      render(
+        <RosterTracker teams={teams} tendencies={tendencies} ownerHandle={null} {...TRADE_PROPS} />,
+      );
       const cards = screen.getAllByTestId(/^dossier-card-/);
       expect(cards[0]).toHaveAttribute('data-testid', 'dossier-card-3'); // highest spend first
       expect(cards[1]).toHaveAttribute('data-testid', 'dossier-card-2');
@@ -175,7 +286,9 @@ describe('RosterTracker', () => {
         makeTendency({ teamId: 2, handle: 'lowSpend', totalSpend: 100 }),
         makeTendency({ teamId: 3, handle: 'highSpend', totalSpend: 900 }),
       ];
-      render(<RosterTracker teams={teams} tendencies={tendencies} ownerHandle={null} />);
+      render(
+        <RosterTracker teams={teams} tendencies={tendencies} ownerHandle={null} {...TRADE_PROPS} />,
+      );
 
       // Spend is already the active default sort — clicking it again reverses to ascending.
       await user.click(screen.getByTestId('dossier-sort-spend'));
@@ -207,7 +320,14 @@ describe('RosterTracker', () => {
           overallOverPct: 0.5,
         }),
       ];
-      render(<RosterTracker teams={teams} tendencies={tendencies} ownerHandle="coreschke" />);
+      render(
+        <RosterTracker
+          teams={teams}
+          tendencies={tendencies}
+          ownerHandle="coreschke"
+          {...TRADE_PROPS}
+        />,
+      );
 
       await user.click(screen.getByTestId('dossier-sort-aggression'));
 
@@ -232,7 +352,9 @@ describe('RosterTracker', () => {
         }),
         makeTendency({ teamId: 3, handle: 'thin', aggression: 'neutral', overallOverPct: null }),
       ];
-      render(<RosterTracker teams={teams} tendencies={tendencies} ownerHandle={null} />);
+      render(
+        <RosterTracker teams={teams} tendencies={tendencies} ownerHandle={null} {...TRADE_PROPS} />,
+      );
 
       await user.click(screen.getByTestId('dossier-sort-aggression'));
 
@@ -257,7 +379,9 @@ describe('RosterTracker', () => {
         makeTendency({ teamId: 2, handle: 'fewBuys', buys: 5 }),
         makeTendency({ teamId: 3, handle: 'manyBuys', buys: 22 }),
       ];
-      render(<RosterTracker teams={teams} tendencies={tendencies} ownerHandle={null} />);
+      render(
+        <RosterTracker teams={teams} tendencies={tendencies} ownerHandle={null} {...TRADE_PROPS} />,
+      );
 
       await user.click(screen.getByTestId('dossier-sort-buys'));
 
@@ -278,7 +402,9 @@ describe('RosterTracker', () => {
         makeTendency({ teamId: 3, handle: 'younger' }),
         makeTendency({ teamId: 4, handle: 'unknown' }),
       ];
-      render(<RosterTracker teams={teams} tendencies={tendencies} ownerHandle={null} />);
+      render(
+        <RosterTracker teams={teams} tendencies={tendencies} ownerHandle={null} {...TRADE_PROPS} />,
+      );
 
       await user.click(screen.getByTestId('dossier-sort-age'));
 
@@ -300,7 +426,9 @@ describe('RosterTracker', () => {
         makeTendency({ teamId: 3, handle: 'younger' }),
         makeTendency({ teamId: 4, handle: 'unknown' }),
       ];
-      render(<RosterTracker teams={teams} tendencies={tendencies} ownerHandle={null} />);
+      render(
+        <RosterTracker teams={teams} tendencies={tendencies} ownerHandle={null} {...TRADE_PROPS} />,
+      );
 
       // Age's default is ascending — one click on it (already active by clicking once) reverses
       // to descending (oldest first). Click Age first to activate, then again to reverse.
@@ -337,7 +465,9 @@ describe('RosterTracker', () => {
           },
         }),
       ];
-      render(<RosterTracker teams={teams} tendencies={tendencies} ownerHandle={null} />);
+      render(
+        <RosterTracker teams={teams} tendencies={tendencies} ownerHandle={null} {...TRADE_PROPS} />,
+      );
 
       await user.click(screen.getByTestId('dossier-sort-RB'));
 
@@ -371,7 +501,14 @@ describe('RosterTracker', () => {
       mockDesktop();
       const teams = [makeTeam({ id: 2, handle: 'rival_b', displayName: 'B' }), makeTeam()];
       const tendencies = [makeTendency({ teamId: 2, handle: 'rival_b' }), makeTendency()];
-      render(<RosterTracker teams={teams} tendencies={tendencies} ownerHandle="coreschke" />);
+      render(
+        <RosterTracker
+          teams={teams}
+          tendencies={tendencies}
+          ownerHandle="coreschke"
+          {...TRADE_PROPS}
+        />,
+      );
       expect(screen.getByTestId('team-detail-pane')).toBeInTheDocument();
       expect(screen.getByTestId('dossier-lean-1-detail')).toBeInTheDocument();
     });
@@ -380,7 +517,14 @@ describe('RosterTracker', () => {
       mockDesktop();
       const teams = [makeTeam({ id: 2, handle: 'rival_b', displayName: 'B' }), makeTeam()];
       const tendencies = [makeTendency({ teamId: 2, handle: 'rival_b' }), makeTendency()];
-      render(<RosterTracker teams={teams} tendencies={tendencies} ownerHandle="coreschke" />);
+      render(
+        <RosterTracker
+          teams={teams}
+          tendencies={tendencies}
+          ownerHandle="coreschke"
+          {...TRADE_PROPS}
+        />,
+      );
       await userEvent.click(screen.getByTestId('dossier-expand-2'));
       expect(screen.getByTestId('team-detail-pane')).toHaveTextContent('rival_b');
     });
@@ -392,6 +536,7 @@ describe('RosterTracker', () => {
           teams={[makeTeam()]}
           tendencies={[makeTendency()]}
           ownerHandle="coreschke"
+          {...TRADE_PROPS}
         />,
       );
       await userEvent.click(screen.getByTestId('dossier-expand-1'));
@@ -412,7 +557,14 @@ describe('RosterTracker', () => {
       const teams = [makeTeam({ id: 2, handle: 'rival_b', displayName: 'B' }), makeTeam()];
       const tendencies = [makeTendency({ teamId: 2, handle: 'rival_b' }), makeTendency()];
       window.history.replaceState(null, '', '/draft/1/teams');
-      render(<RosterTracker teams={teams} tendencies={tendencies} ownerHandle="coreschke" />);
+      render(
+        <RosterTracker
+          teams={teams}
+          tendencies={tendencies}
+          ownerHandle="coreschke"
+          {...TRADE_PROPS}
+        />,
+      );
       await userEvent.click(screen.getByTestId('dossier-expand-2'));
       expect(window.location.search).toBe('?team=2');
     });
@@ -423,7 +575,14 @@ describe('RosterTracker', () => {
       const teams = [makeTeam({ id: 2, handle: 'rival_b', displayName: 'B' }), makeTeam()];
       const tendencies = [makeTendency({ teamId: 2, handle: 'rival_b' }), makeTendency()];
       window.history.replaceState(null, '', '/draft/1/teams?team=2');
-      render(<RosterTracker teams={teams} tendencies={tendencies} ownerHandle="coreschke" />);
+      render(
+        <RosterTracker
+          teams={teams}
+          tendencies={tendencies}
+          ownerHandle="coreschke"
+          {...TRADE_PROPS}
+        />,
+      );
       expect(screen.getByTestId('team-detail-pane')).toHaveTextContent('rival_b');
     });
   });

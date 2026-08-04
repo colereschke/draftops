@@ -18,6 +18,7 @@ import { reconcileSleeperRosters } from '@/lib/sleeperRosterSync';
 import type { SleeperRosterPreview } from '@/lib/sleeperRosterSync';
 import { DraftMutationFailure, withActiveOwnedDraftMutation } from '@/lib/draftMutation';
 import { createBidInTransaction } from '@/lib/bidMutation';
+import { getTradeBudgetDeltaByTeamId } from '@/lib/tradeBudget';
 
 export interface SleeperRosterMappingInput {
   teamId: number;
@@ -391,6 +392,7 @@ export async function logSleeperRosterCatchUp(input: {
         'already_logged' | 'assignment_changed' | 'roster_full' | 'bid_exceeds_max';
       const conflictByPlayerId = new Map<number, ConflictReason>();
       const createdPlayerIdSet = new Set<number>();
+      const budgetDeltaByTeamId = await getTradeBudgetDeltaByTeamId(tx, lockedDraft.id);
       for (const entry of input.entries) {
         if (loggedPlayerIds.has(entry.playerId)) {
           conflictByPlayerId.set(entry.playerId, 'already_logged');
@@ -408,12 +410,12 @@ export async function logSleeperRosterCatchUp(input: {
           continue;
         }
         try {
-          await createBidInTransaction(tx, lockedDraft, {
-            player,
-            teamId: team.id,
-            price: entry.price,
-            actorId: draft.userId,
-          });
+          await createBidInTransaction(
+            tx,
+            lockedDraft,
+            { player, teamId: team.id, price: entry.price, actorId: draft.userId },
+            budgetDeltaByTeamId,
+          );
           createdPlayerIdSet.add(player.id);
         } catch (error) {
           if (error instanceof DraftMutationFailure) {

@@ -4,7 +4,7 @@ import ThreatBoard from '@/components/BudgetPressure/ThreatBoard';
 import type { TeamStats } from '@/types';
 import type { ManagerTendency, Appetite, AppetitePos } from '@/lib/tendencies';
 
-const stats = (id: number, handle: string, buyingPower: number): TeamStats => ({
+const stats = (id: number, handle: string, buyingPower: number, netBudgetDelta = 0): TeamStats => ({
   id,
   handle,
   displayName: handle,
@@ -15,6 +15,7 @@ const stats = (id: number, handle: string, buyingPower: number): TeamStats => ({
   rosterRemaining: 20,
   buyingPower,
   pkgCount: 0,
+  netBudgetDelta,
   avgAge: null,
 });
 
@@ -139,6 +140,42 @@ describe('ThreatBoard', () => {
     );
     // buyingPower 10 → maxBid 11 (<50) → red.
     expect(screen.getByTestId('threat-bid-broke')).toHaveStyle({ color: 'var(--age-old)' });
+  });
+
+  it('explains nonzero trade budget deltas beside max bid on desktop and mobile', () => {
+    const tradeAdjustedTeams = [
+      stats(1, 'budget-receiver', 312, 80),
+      stats(2, 'budget-sender', 340, -60),
+      stats(3, 'no-trade', 190),
+    ];
+    const tradeAdjustedTendencies = [
+      tend(1, 'budget-receiver', 'neutral'),
+      tend(2, 'budget-sender', 'neutral'),
+      tend(3, 'no-trade', 'neutral'),
+    ];
+
+    render(
+      <ThreatBoard
+        teams={tradeAdjustedTeams}
+        tendencies={tradeAdjustedTendencies}
+        livePosition="WR"
+        liveName="Puka Nacua"
+        ownerHandle="no-trade"
+      />,
+    );
+
+    expect(screen.getByTestId('threat-trade-delta-budget-receiver')).toHaveTextContent(
+      '+80 trades',
+    );
+    expect(screen.getByTestId('threat-trade-delta-budget-sender')).toHaveTextContent('-60 trades');
+    expect(screen.queryByTestId('threat-trade-delta-no-trade')).not.toBeInTheDocument();
+    expect(screen.getByTestId('threat-mobile-trade-delta-budget-receiver')).toHaveTextContent(
+      '+80 trades',
+    );
+    expect(screen.getByTestId('threat-mobile-trade-delta-budget-sender')).toHaveTextContent(
+      '-60 trades',
+    );
+    expect(screen.queryByTestId('threat-mobile-trade-delta-no-trade')).not.toBeInTheDocument();
   });
 
   it('shows no re-sync pill when the board already matches the live nomination', () => {

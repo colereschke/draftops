@@ -25,6 +25,7 @@ const mockAuctionCreateManyAndReturn = jest.fn();
 const mockBidAuditCreate = jest.fn();
 const mockNominationDeleteMany = jest.fn();
 const mockWithActiveOwnedDraftMutation = jest.fn();
+const mockTradeFindMany = jest.fn();
 
 jest.mock('@/auth', () => ({ auth: () => mockAuth() }));
 jest.mock('@/lib/draft', () => ({ getDraft: (...args: unknown[]) => mockGetDraft(...args) }));
@@ -104,6 +105,7 @@ function transactionClient() {
       create: mockAuctionCreate,
       createManyAndReturn: mockAuctionCreateManyAndReturn,
     },
+    trade: { findMany: mockTradeFindMany },
     bidAuditEvent: { create: mockBidAuditCreate },
     nominatedPlayer: { deleteMany: mockNominationDeleteMany },
   };
@@ -120,6 +122,7 @@ beforeEach(() => {
   mockTeamFindFirst.mockResolvedValue({ id: TEAM.id, budget: 1000 });
   mockPlayerFindMany.mockResolvedValue([PLAYER]);
   mockAuctionFindMany.mockResolvedValue([]);
+  mockTradeFindMany.mockResolvedValue([]);
   mockAuctionCreate.mockImplementation((args: { data: Record<string, unknown> }) =>
     Promise.resolve({
       id: 99,

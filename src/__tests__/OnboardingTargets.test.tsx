@@ -108,6 +108,7 @@ const TEAM_STATS: TeamStats = {
   rosterRemaining: 30,
   buyingPower: 970,
   pkgCount: 0,
+  netBudgetDelta: 0,
   avgAge: null,
 };
 const TENDENCY: ManagerTendency = {
@@ -221,6 +222,7 @@ describe('onboarding targets', () => {
         draftId={5}
         ownerHandle={TEAM.handle}
         ownerBudget={1000}
+        ownerBudgetDelta={0}
         scoringSettings={DEFAULT_SCORING_SETTINGS}
         teamCount={DEFAULT_TEAM_COUNT}
         budget={DEFAULT_BUDGET}
@@ -245,7 +247,15 @@ describe('onboarding targets', () => {
     ).toBeInTheDocument();
 
     render(
-      <RosterTracker teams={[ROSTER_TEAM]} tendencies={[TENDENCY]} ownerHandle={TEAM.handle} />,
+      <RosterTracker
+        teams={[ROSTER_TEAM]}
+        tendencies={[TENDENCY]}
+        ownerHandle={TEAM.handle}
+        draftId={5}
+        tradeTeams={[TEAM]}
+        generatedPickYear={null}
+        tradeablePicksByTeamId={{}}
+      />,
     );
     expect(document.querySelector('[data-onboarding-target="team-rosters"]')).toBeInTheDocument();
 

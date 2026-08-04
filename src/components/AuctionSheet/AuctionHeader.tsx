@@ -19,6 +19,7 @@ function teCaptionClause(scoringSettings: ScoringSettings): string {
 
 interface AuctionHeaderProps {
   ownerBudget: number;
+  ownerBudgetDelta: number;
   mySpent: number;
   remaining: number;
   posStats: Record<'QB' | 'RB' | 'WR' | 'TE', { count: number; total: number }>;
@@ -35,6 +36,7 @@ const MARKET_POSITIONS = ['QB', 'RB', 'WR', 'TE'] as const;
 
 export default function AuctionHeader({
   ownerBudget,
+  ownerBudgetDelta,
   mySpent,
   remaining,
   posStats,
@@ -72,7 +74,16 @@ export default function AuctionHeader({
         </section>
 
         <section className="grid min-w-full grid-cols-3 gap-2 lg:min-w-[420px]">
-          <MetricCard label="Budget" value={ownerBudget} tone="var(--text-primary)" />
+          <MetricCard
+            label={
+              ownerBudgetDelta === 0
+                ? 'Budget'
+                : `Budget (${ownerBudgetDelta > 0 ? '+' : ''}$${ownerBudgetDelta} trade)`
+            }
+            value={ownerBudget + ownerBudgetDelta}
+            tone="var(--text-primary)"
+            testId="budget-metric"
+          />
           <MetricCard label="Spent" value={mySpent} tone="var(--pos-wr)" />
           <MetricCard
             label="Remaining"
@@ -133,15 +144,23 @@ interface MetricCardProps {
   label: string;
   value: number;
   tone: string;
+  testId?: string;
 }
 
-function MetricCard({ label, value, tone }: MetricCardProps) {
+function MetricCard({ label, value, tone, testId }: MetricCardProps) {
   return (
     <div className="rounded-lg border border-border-subtle bg-card px-3 py-3">
-      <div className="font-label text-[10px] tracking-[1.7px] text-muted-foreground uppercase">
+      <div
+        className="font-label text-[10px] tracking-[1.7px] text-muted-foreground uppercase"
+        data-testid={testId ? `${testId}-label` : undefined}
+      >
         {label}
       </div>
-      <div className="mt-1 font-mono text-2xl font-bold tabular-nums" style={{ color: tone }}>
+      <div
+        className="mt-1 font-mono text-2xl font-bold tabular-nums"
+        style={{ color: tone }}
+        data-testid={testId ? `${testId}-value` : undefined}
+      >
         ${value}
       </div>
     </div>

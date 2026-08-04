@@ -7,6 +7,7 @@ import {
 } from '@/lib/draftMutation';
 import { createBidAuditEvent, toBidSnapshot, type AuditableBid } from '@/lib/bidAudit';
 import { countsTowardRoster } from '@/lib/rosterPolicy';
+import { getTradeBudgetDeltaByTeamId } from '@/lib/tradeBudget';
 
 interface CreateBidRecordInput {
   userId: string;
@@ -93,12 +94,55 @@ async function getTransactionTimestamp(tx: Prisma.TransactionClient): Promise<Da
   return clock[0].now;
 }
 
+async function assertNoLaterTradeDependsOnBid(
+  tx: Prisma.TransactionClient,
+  draftId: number,
+  bid: { id: number; teamId: number; playerId: number; position: string; createdAt: Date },
+): Promise<void> {
+  if (bid.position !== 'PKG' && bid.position !== 'PICK') return;
+
+  const playerRow = await tx.player.findFirst({
+    where: { id: bid.playerId, draftId },
+    select: { futurePickOriginHandle: true, futurePickYear: true, futurePickRound: true },
+  });
+  if (!playerRow?.futurePickOriginHandle || playerRow.futurePickYear === null) return;
+
+  const origin = await tx.team.findFirst({
+    where: { draftId, handle: playerRow.futurePickOriginHandle },
+    select: { id: true },
+  });
+  if (!origin) return;
+
+  const rounds =
+    bid.position === 'PKG'
+      ? [1, 2, 3]
+      : playerRow.futurePickRound !== null
+        ? [playerRow.futurePickRound]
+        : [];
+  if (rounds.length === 0) return;
+
+  const laterTrade = await tx.tradePickAsset.findFirst({
+    where: {
+      draftId,
+      originTeamId: origin.id,
+      futurePickYear: playerRow.futurePickYear,
+      futurePickRound: { in: rounds },
+      // Trade IDs and auction-result IDs come from different sequences, so an equal timestamp
+      // must be treated as dependent rather than attempting an invalid cross-table ID tie-break.
+      trade: { deletedAt: null, createdAt: { gte: bid.createdAt } },
+    },
+    select: { id: true },
+  });
+  if (laterTrade) throw new DraftMutationFailure('PICK_HAS_ACTIVE_TRADES');
+}
+
 export async function assertBidLegalInTransaction(
   tx: Prisma.TransactionClient,
   draft: Draft,
   input: BidLegalityInput,
+  prefetchedBudgetDeltaByTeamId?: ReadonlyMap<number, number>,
 ): Promise<LegalBidState> {
-  const [team, existingResults] = await Promise.all([
+  const [team, existingResults, budgetDeltaByTeamId] = await Promise.all([
     tx.team.findFirst({
       where: { id: input.teamId, draftId: draft.id },
       select: { id: true, budget: true },
@@ -112,6 +156,9 @@ export async function assertBidLegalInTransaction(
       },
       select: { id: true, price: true, position: true },
     }),
+    prefetchedBudgetDeltaByTeamId
+      ? Promise.resolve(prefetchedBudgetDeltaByTeamId)
+      : getTradeBudgetDeltaByTeamId(tx, draft.id),
   ]);
   if (!team) throw new DraftMutationFailure('TEAM_NOT_FOUND');
 
@@ -126,8 +173,9 @@ export async function assertBidLegalInTransaction(
   }
 
   const resultingSpend = currentSpend + input.price;
+  const netBudgetDelta = budgetDeltaByTeamId.get(team.id) ?? 0;
   const requiredRosterDollars = Math.max(0, draft.rosterSize - resultingRosterCount);
-  if (team.budget - resultingSpend < requiredRosterDollars) {
+  if (team.budget + netBudgetDelta - resultingSpend < requiredRosterDollars) {
     throw new DraftMutationFailure('BID_EXCEEDS_MAX');
   }
 
@@ -138,12 +186,14 @@ export async function createBidInTransaction(
   tx: Prisma.TransactionClient,
   draft: Draft,
   input: CreateBidInTransactionInput,
+  prefetchedBudgetDeltaByTeamId?: ReadonlyMap<number, number>,
 ): Promise<{ bidId: number }> {
-  await assertBidLegalInTransaction(tx, draft, {
-    teamId: input.teamId,
-    position: input.player.pos,
-    price: input.price,
-  });
+  await assertBidLegalInTransaction(
+    tx,
+    draft,
+    { teamId: input.teamId, position: input.player.pos, price: input.price },
+    prefetchedBudgetDeltaByTeamId,
+  );
 
   const deletedClaims = await tx.auctionResult.findMany({
     where: {
@@ -208,6 +258,7 @@ export async function createBidInTransaction(
 
 export async function createBidRecord(
   input: CreateBidRecordInput,
+  prefetchedBudgetDeltaByTeamId?: ReadonlyMap<number, number>,
 ): Promise<DraftMutationResult<{ bidId: number }>> {
   if (!hasValidCreateInput(input)) return { ok: false, code: 'INVALID_INPUT' };
 
@@ -225,12 +276,12 @@ export async function createBidRecord(
     if (!player) throw new DraftMutationFailure('PLAYER_NOT_FOUND');
     if (existingResult) throw new DraftMutationFailure('PLAYER_ALREADY_CLAIMED');
 
-    return createBidInTransaction(tx, draft, {
-      player,
-      teamId: input.teamId,
-      price: input.price,
-      actorId: input.userId,
-    });
+    return createBidInTransaction(
+      tx,
+      draft,
+      { player, teamId: input.teamId, price: input.price, actorId: input.userId },
+      prefetchedBudgetDeltaByTeamId,
+    );
   });
 }
 
@@ -244,6 +295,10 @@ export async function updateBidRecord(
       where: { id: input.bidId, draftId: draft.id, deletedAt: null },
     });
     if (!existingBid) throw new DraftMutationFailure('BID_NOT_FOUND');
+
+    if (existingBid.teamId !== input.teamId) {
+      await assertNoLaterTradeDependsOnBid(tx, draft.id, existingBid);
+    }
 
     await assertBidLegalInTransaction(tx, draft, {
       teamId: input.teamId,
@@ -280,6 +335,8 @@ export async function deleteBidRecord(
       where: { id: input.bidId, draftId: draft.id, deletedAt: null },
     });
     if (!existingBid) throw new DraftMutationFailure('BID_NOT_FOUND');
+
+    await assertNoLaterTradeDependsOnBid(tx, draft.id, existingBid);
 
     const transactionTimestamp = await getTransactionTimestamp(tx);
     const deleted = await tx.auctionResult.update({

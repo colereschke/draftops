@@ -75,6 +75,7 @@ const team = (over: Partial<TeamWithRoster> = {}): TeamWithRoster => ({
   rosterRemaining: 24,
   buyingPower: 366,
   pkgCount: 0,
+  netBudgetDelta: 0,
   avgAge: null,
   results: [],
   ...over,
@@ -91,6 +92,7 @@ describe('DossierCard', () => {
         isOwner={false}
         isExpanded={false}
         onToggle={noop}
+        onLogTrade={noop}
       />,
     );
     expect(screen.getByTestId('dossier-lean-1')).toHaveTextContent('WR');
@@ -156,6 +158,7 @@ describe('DossierCard', () => {
         isOwner={false}
         isExpanded={false}
         onToggle={noop}
+        onLogTrade={noop}
       />,
     );
     expect(screen.queryByTestId('dossier-habit-1')).not.toBeInTheDocument();
@@ -169,6 +172,7 @@ describe('DossierCard', () => {
         isOwner={false}
         isExpanded={false}
         onToggle={noop}
+        onLogTrade={noop}
       />,
     );
     expect(screen.queryByText(/\$366/)).not.toBeInTheDocument();
@@ -184,6 +188,7 @@ describe('DossierCard', () => {
         isOwner={false}
         isExpanded={false}
         onToggle={onToggle}
+        onLogTrade={noop}
       />,
     );
     await userEvent.click(screen.getByTestId('dossier-expand-1'));
@@ -199,6 +204,7 @@ describe('DossierCard', () => {
         isOwner={false}
         isExpanded={false}
         onToggle={onToggle}
+        onLogTrade={noop}
       />,
     );
     screen.getByTestId('dossier-expand-1').focus();
@@ -209,11 +215,30 @@ describe('DossierCard', () => {
   it('shows a pick-package badge on the face when the team holds packages', () => {
     render(
       <DossierCard
-        team={team({ pkgCount: 2 })}
+        team={team({ pkgCount: 0 })}
         tendency={tendency()}
         isOwner={false}
         isExpanded={false}
         onToggle={noop}
+        onLogTrade={noop}
+        pickHoldings={[
+          {
+            originTeamId: 1,
+            originHandle: 'team-a',
+            futurePickYear: 2027,
+            holderTeamId: 1,
+            isIntactPackage: true,
+            rounds: [1, 2, 3],
+          },
+          {
+            originTeamId: 2,
+            originHandle: 'team-b',
+            futurePickYear: 2027,
+            holderTeamId: 1,
+            isIntactPackage: true,
+            rounds: [1, 2, 3],
+          },
+        ]}
       />,
     );
     expect(screen.getByTestId('dossier-pkg-1')).toHaveTextContent('2× PKG');
@@ -222,11 +247,12 @@ describe('DossierCard', () => {
   it('omits the package badge when the team holds none', () => {
     render(
       <DossierCard
-        team={team({ pkgCount: 0 })}
+        team={team({ pkgCount: 3 })}
         tendency={tendency()}
         isOwner={false}
         isExpanded={false}
         onToggle={noop}
+        onLogTrade={noop}
       />,
     );
     expect(screen.queryByTestId('dossier-pkg-1')).not.toBeInTheDocument();
@@ -240,6 +266,7 @@ describe('DossierCard', () => {
         isOwner={false}
         isExpanded={false}
         onToggle={noop}
+        onLogTrade={noop}
       />,
     );
     const avgAge = screen.getByTestId('dossier-avg-age-1');
@@ -255,6 +282,7 @@ describe('DossierCard', () => {
         isOwner={false}
         isExpanded={false}
         onToggle={noop}
+        onLogTrade={noop}
       />,
     );
     expect(screen.getByTestId('dossier-avg-age-1')).toHaveTextContent('Avg age: —');
@@ -269,6 +297,7 @@ describe('DossierCard', () => {
         isExpanded={false}
         isSelected={true}
         onToggle={noop}
+        onLogTrade={noop}
       />,
     );
     expect(screen.getByTestId('dossier-card-1')).toHaveClass('bg-accent');
@@ -282,6 +311,7 @@ describe('DossierCard', () => {
         isOwner={false}
         isExpanded={false}
         onToggle={noop}
+        onLogTrade={noop}
       />,
     );
     expect(screen.getByTestId('dossier-card-1')).not.toHaveClass('bg-accent');
@@ -295,6 +325,7 @@ describe('DossierCard', () => {
         isOwner={false}
         isExpanded={false}
         onToggle={noop}
+        onLogTrade={noop}
       />,
     );
     const control = screen.getByTestId('dossier-expand-1');
@@ -313,11 +344,76 @@ describe('DossierCard', () => {
         isSelected={true}
         mode="select"
         onToggle={noop}
+        onLogTrade={noop}
       />,
     );
     const control = screen.getByTestId('dossier-expand-1');
     expect(control).not.toHaveAttribute('aria-expanded');
     expect(control).toHaveAttribute('aria-pressed', 'true');
     expect(control).toHaveAttribute('aria-label', 'Show roster for rival_a');
+  });
+
+  it('shows the trade budget delta when nonzero', () => {
+    render(
+      <DossierCard
+        team={team({ netBudgetDelta: -80 })}
+        tendency={tendency()}
+        isOwner={false}
+        isExpanded={false}
+        onToggle={noop}
+        onLogTrade={noop}
+      />,
+    );
+    expect(screen.getByTestId('dossier-trade-delta-1')).toHaveTextContent('-80 trades');
+  });
+
+  it('omits the trade delta badge when zero', () => {
+    render(
+      <DossierCard
+        team={team({ netBudgetDelta: 0 })}
+        tendency={tendency()}
+        isOwner={false}
+        isExpanded={false}
+        onToggle={noop}
+        onLogTrade={noop}
+      />,
+    );
+    expect(screen.queryByTestId('dossier-trade-delta-1')).not.toBeInTheDocument();
+  });
+
+  it('opens the trade modal via a Log Trade control that is a sibling of the card face', async () => {
+    const onLogTrade = jest.fn();
+    const onToggle = jest.fn();
+    render(
+      <DossierCard
+        team={team()}
+        tendency={tendency()}
+        isOwner={false}
+        isExpanded={false}
+        onToggle={onToggle}
+        onLogTrade={onLogTrade}
+      />,
+    );
+    const logTradeButton = screen.getByTestId('dossier-log-trade-1');
+    // Must not live inside the role="button" card face — nested interactive controls.
+    expect(screen.getByTestId('dossier-expand-1')).not.toContainElement(logTradeButton);
+    await userEvent.click(logTradeButton);
+    expect(onLogTrade).toHaveBeenCalledWith(1);
+    expect(onToggle).not.toHaveBeenCalled();
+  });
+
+  it('hides the Log Trade control when isReadOnly is true', () => {
+    render(
+      <DossierCard
+        team={team()}
+        tendency={tendency()}
+        isOwner={false}
+        isExpanded={false}
+        onToggle={noop}
+        onLogTrade={noop}
+        isReadOnly
+      />,
+    );
+    expect(screen.queryByTestId('dossier-log-trade-1')).not.toBeInTheDocument();
   });
 });

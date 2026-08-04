@@ -13,6 +13,7 @@ const mockGetDraft = jest.fn();
 const mockTeamFindMany = jest.fn();
 const mockWatchlistFindMany = jest.fn();
 const mockNominatedFindMany = jest.fn();
+const mockTradeFindMany = jest.fn();
 const mockGetActiveDraftPlayers = jest.fn();
 
 jest.mock('@/auth', () => ({
@@ -32,6 +33,7 @@ jest.mock('@/lib/db', () => ({
     team: { findMany: (...args: unknown[]) => mockTeamFindMany(...args) },
     playerWatchlist: { findMany: (...args: unknown[]) => mockWatchlistFindMany(...args) },
     nominatedPlayer: { findMany: (...args: unknown[]) => mockNominatedFindMany(...args) },
+    trade: { findMany: (...args: unknown[]) => mockTradeFindMany(...args) },
   }),
 }));
 
@@ -56,6 +58,7 @@ beforeEach(() => {
   mockTeamFindMany.mockResolvedValue([]);
   mockWatchlistFindMany.mockResolvedValue([]);
   mockNominatedFindMany.mockResolvedValue([]);
+  mockTradeFindMany.mockResolvedValue([]);
   mockGetActiveDraftPlayers.mockResolvedValue([]);
 });
 

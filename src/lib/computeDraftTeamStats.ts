@@ -38,7 +38,8 @@ export function computeDraftTeamStats({
   );
   return teams.map((team) => {
     const spent = team.results.reduce((sum, result) => sum + result.price, 0);
-    const remaining = team.budget + (budgetDeltaByTeamId?.get(team.id) ?? 0) - spent;
+    const netBudgetDelta = budgetDeltaByTeamId?.get(team.id) ?? 0;
+    const remaining = team.budget + netBudgetDelta - spent;
     const rosterCount = team.results.filter((result) => countsTowardRoster(result.position)).length;
     const rosterRemaining = rosterSize - rosterCount;
     const results: RosterEntry[] = [];
@@ -69,6 +70,7 @@ export function computeDraftTeamStats({
       rosterRemaining,
       buyingPower: remaining - rosterRemaining,
       pkgCount: team.results.filter((result) => result.position === 'PKG').length,
+      netBudgetDelta,
       avgAge:
         knownAges.length === 0
           ? null

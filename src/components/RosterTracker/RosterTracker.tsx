@@ -3,9 +3,12 @@
 import { useState, useMemo, useCallback } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { ArrowUp, ArrowDown, ArrowUpDown } from 'lucide-react';
-import type { TeamWithRoster, StartingSlot } from '@/types';
+import type { TeamWithRoster, StartingSlot, LeagueTeam } from '@/types';
 import { DEFAULT_STARTING_LINEUP } from '@/types';
 import type { AppetitePos, ManagerTendency } from '@/lib/tendencies';
+import type { KnownPickOption } from '@/lib/tradePicker';
+import type { CurrentPickHolding } from '@/lib/pickOwnership';
+import TradeModal from '@/components/TradeModal';
 import { APPETITE_POSITIONS } from '@/lib/tendencies.constants';
 import { POS_COLORS } from '@/lib/posColors';
 import { useMediaQuery } from '@/lib/useMediaQuery';
@@ -24,6 +27,14 @@ interface RosterTrackerProps {
   tendencies: ManagerTendency[];
   ownerHandle: string | null;
   startingLineup?: StartingSlot[];
+  draftId: number;
+  // Named `tradeTeams` rather than `teams` — `teams` above is already the
+  // TeamWithRoster[] the dossier board renders.
+  tradeTeams: LeagueTeam[];
+  generatedPickYear: number | null;
+  tradeablePicksByTeamId: Record<number, KnownPickOption[]>;
+  pickHoldingsByTeamId?: Record<number, CurrentPickHolding[]>;
+  isReadOnly?: boolean;
 }
 
 type SortKey = RosterTrackerSortKey;
@@ -117,11 +128,18 @@ export default function RosterTracker({
   tendencies,
   ownerHandle,
   startingLineup = DEFAULT_STARTING_LINEUP,
+  draftId,
+  tradeTeams,
+  generatedPickYear,
+  tradeablePicksByTeamId,
+  pickHoldingsByTeamId = {},
+  isReadOnly = false,
 }: RosterTrackerProps) {
   const searchParams = useSearchParams();
   const initialUrlState = parseRosterTrackerSearchParams(searchParams);
 
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
+  const [openTradeTeamId, setOpenTradeTeamId] = useState<number | null>(null);
   const [sortBy, setSortBy] = useState<SortKey>(initialUrlState.sortBy);
   const [sortDir, setSortDir] = useState<SortDir>(initialUrlState.sortDir);
   const isDesktop = useMediaQuery('(min-width: 1024px)');
@@ -176,7 +194,9 @@ export default function RosterTracker({
 
   const totalTeams = teams.length;
   const activeManagers = tendencies.filter((t) => t.buys > 0).length;
-  const packagesHeld = teams.reduce((sum, t) => sum + t.pkgCount, 0);
+  const packagesHeld = Object.values(pickHoldingsByTeamId)
+    .flat()
+    .filter((holding) => holding.isIntactPackage).length;
 
   return (
     <main
@@ -201,7 +221,7 @@ export default function RosterTracker({
               <h1 className="font-label m-0 text-2xl leading-none font-bold tracking-tight text-foreground">
                 Team Rosters
               </h1>
-              <div className="mt-1.5 text-[11px] text-secondary-fg">
+              <div data-testid="roster-summary" className="mt-1.5 text-[11px] text-secondary-fg">
                 How each manager buys — lean, appetite, and discipline. {activeManagers} active
                 {packagesHeld > 0 &&
                   ` · ${packagesHeld} pick package${packagesHeld > 1 ? 's' : ''} held`}
@@ -251,6 +271,9 @@ export default function RosterTracker({
                 isSelected={team.id === selectedTeamId}
                 mode="select"
                 onToggle={setSelectedTeamId}
+                onLogTrade={setOpenTradeTeamId}
+                pickHoldings={pickHoldingsByTeamId[team.id] ?? []}
+                isReadOnly={isReadOnly}
               />
             ))}
           </div>
@@ -260,6 +283,7 @@ export default function RosterTracker({
                 team={selected.team}
                 tendency={selected.tendency}
                 isOwner={ownerHandle !== null && selected.team.handle === ownerHandle}
+                pickHoldings={pickHoldingsByTeamId[selected.team.id] ?? []}
               />
             )}
           </div>
@@ -274,9 +298,24 @@ export default function RosterTracker({
               isOwner={ownerHandle !== null && team.handle === ownerHandle}
               isExpanded={expanded.has(team.id)}
               onToggle={toggle}
+              onLogTrade={setOpenTradeTeamId}
+              pickHoldings={pickHoldingsByTeamId[team.id] ?? []}
+              isReadOnly={isReadOnly}
             />
           ))}
         </div>
+      )}
+
+      {openTradeTeamId !== null && (
+        <TradeModal
+          draftId={draftId}
+          teams={tradeTeams}
+          initialTeamId={openTradeTeamId}
+          generatedPickYear={generatedPickYear}
+          tradeablePicksByTeamId={tradeablePicksByTeamId}
+          isOpen
+          onClose={() => setOpenTradeTeamId(null)}
+        />
       )}
     </main>
   );

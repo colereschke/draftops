@@ -11,6 +11,7 @@ interface ApplyDynamicPickValuesInput {
   players: Player[];
   bids: BidInput[];
   startingLineup: StartingSlot[];
+  futureCapitalByHandle: ReadonlyMap<string, number>;
 }
 
 interface OriginSignals {
@@ -26,7 +27,6 @@ interface OriginSignals {
 
 interface OriginRoster {
   playerRoster: Player[];
-  futureCapital: number;
   spend: number;
 }
 
@@ -42,8 +42,14 @@ export function applyDynamicPickValues({
   players,
   bids,
   startingLineup,
+  futureCapitalByHandle,
 }: ApplyDynamicPickValuesInput): Player[] {
-  const signalsByOrigin = computeOriginSignals(players, bids, startingLineup);
+  const signalsByOrigin = computeOriginSignals(
+    players,
+    bids,
+    startingLineup,
+    futureCapitalByHandle,
+  );
   const marketSurplusBaseline = computeMarketSurplusBaseline(signalsByOrigin);
 
   return players.map((player) => {
@@ -76,6 +82,7 @@ function computeOriginSignals(
   players: Player[],
   bids: BidInput[],
   startingLineup: StartingSlot[],
+  futureCapitalByHandle: ReadonlyMap<string, number>,
 ): Map<string, OriginSignals> {
   const playerByName = new Map(players.map((player) => [player.player, player]));
   const rosterByOrigin = new Map<string, OriginRoster>();
@@ -88,7 +95,6 @@ function computeOriginSignals(
     roster.spend += bid.price;
 
     if (isFuturePickAsset(player)) {
-      roster.futureCapital += player.baseBudget ?? player.budget;
       continue;
     }
 
@@ -115,7 +121,7 @@ function computeOriginSignals(
       lineupPoints,
       vor,
       avgAge,
-      futureCapital: roster.futureCapital,
+      futureCapital: futureCapitalByHandle.get(origin) ?? 0,
     });
   }
 
@@ -150,7 +156,6 @@ function getOrCreateRoster(
 
   const roster: OriginRoster = {
     playerRoster: [],
-    futureCapital: 0,
     spend: 0,
   };
   rosterByOrigin.set(origin, roster);

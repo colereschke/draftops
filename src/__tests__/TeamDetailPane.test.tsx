@@ -14,6 +14,7 @@ const team: TeamWithRoster = {
   rosterRemaining: 28,
   buyingPower: 660,
   pkgCount: 1,
+  netBudgetDelta: 0,
   avgAge: 26.4,
   results: [
     {

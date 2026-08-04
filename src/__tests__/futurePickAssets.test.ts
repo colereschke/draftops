@@ -1,5 +1,7 @@
 import {
   FUTURE_PICK_AUCTION_MODES,
+  PACKAGE_BASELINE,
+  ROUND_BASELINES,
   excludeStaticFuturePickRows,
   filterFuturePickAssetsForMode,
   fromPrismaFuturePickMode,
@@ -13,6 +15,15 @@ const teams = [
   { handle: 'coreschke', displayName: 'Cole' },
   { handle: 'chappy72', displayName: 'Chappy' },
 ];
+
+describe('exported baselines', () => {
+  it('exposes the package baseline and all three round baselines', () => {
+    expect(PACKAGE_BASELINE.budget).toBe(109);
+    expect(ROUND_BASELINES[1].budget).toBe(75);
+    expect(ROUND_BASELINES[2].budget).toBe(15);
+    expect(ROUND_BASELINES[3].budget).toBe(5);
+  });
+});
 
 describe('future pick auction mode helpers', () => {
   it('accepts only supported future pick auction modes', () => {

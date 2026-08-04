@@ -7,8 +7,11 @@ import {
 
 export const FUTURE_PICK_AUCTION_MODES = ['packages', 'individual', 'none'] as const;
 
-const PACKAGE_BASELINE = { budget: 109, ceiling: 131, floor: 75 };
-const ROUND_BASELINES: Record<1 | 2 | 3, { budget: number; ceiling: number; floor: number }> = {
+export const PACKAGE_BASELINE = { budget: 109, ceiling: 131, floor: 75 };
+export const ROUND_BASELINES: Record<
+  1 | 2 | 3,
+  { budget: number; ceiling: number; floor: number }
+> = {
   1: { budget: 75, ceiling: 90, floor: 52 },
   2: { budget: 15, ceiling: 18, floor: 10 },
   3: { budget: 5, ceiling: 6, floor: 5 },

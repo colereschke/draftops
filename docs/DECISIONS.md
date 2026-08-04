@@ -928,30 +928,50 @@ directly in production, so the dependency only matters locally.
 
 **Status:** Active.
 
+## Active Product Decisions
+
+### Budget-for-picks trading uses a durable, audited ledger and read-time ownership (#10, 2026-08-04)
+
+**Decision:** Shipped budget-for-picks trading as `Trade`, `TradePickAsset`, and
+`TradeAuditEvent` records rather than an `AuctionResult` or a general tradeable-asset system.
+`budgetTeamId` sends budget and becomes the new pick holder; `pickTeamId` sends the pick and
+receives the budget. `resolvePickHolder`/`resolveAllPickHolders` determine each current holder at
+read time from the most recent active trade, falling back to an active auction win and then the
+origin team. This handles multi-hop re-trades without storing a mutable current-owner field.
+
+`getTradeBudgetDeltaByTeamId` is the sole accounting seam: every remaining-budget, buying-power,
+and bid-legality path consumes its active-trade deltas. The same holder-resolved picks feed
+`pickCapital.ts`, so a team gaining or divesting capital changes dynamic pick valuation in the
+correct direction. UI roster and trade-picker displays therefore show current holders, including
+trade-acquired picks, not just origin-team assets.
+
+Trade mutations are active-draft, owner-authorized transactions with ordered `CREATE`, `UPDATE`,
+`DELETE`, and `RESTORE` audit snapshots. A delete is soft and can be restored for 30 minutes using
+the database transaction clock, provided it does not conflict with a later re-trade, current pick
+ownership, or budget legality. The JSON export includes active trades and the ordered trade audit
+history. Completion snapshots are schema version 2 and atomically capture the draft, active auction
+results, and active trades before the draft becomes `COMPLETE`. The live JSON recovery archive
+retains every active and soft-deleted trade with its round-level assets, while preserving a derived
+`activeTrades` compatibility view; ownership ordering uses `(createdAt, id)` so equal database
+timestamps remain deterministic.
+
+**Why:** The existing budget-delta seam made a narrow ledger the lowest-risk way to make trade
+budget effects binding everywhere rather than only in a presentation view. Read-time resolution
+keeps the present holder derived from the same durable trade history used for recovery and makes
+chain corrections auditable. Round-level assets preserve enough identity for multi-hop trading,
+while grouped resolved rounds retain intact-package valuation when the same acquisition event holds
+all three rounds.
+
+**Alternatives considered:** A mutable current-owner field on `Player` or a separate ownership
+table — rejected because corrections, deletes, and restores could drift from the transaction
+record. A general first-class asset/transfer system — rejected because player-for-player and other
+asset classes are outside this auction workflow; it would add broad lifecycle rules without making
+budget-for-picks safer.
+
+**Status:** Active. Recovery, audit boundaries, and PITR validation are documented in
+`docs/operations/bid-recovery.md`.
+
 ## Roadmap / Deferred Decisions
-
-### Budget-for-picks trading: ledger design chosen, not yet implemented (#10, spec 2026-07-28)
-
-**Decision:** A spend ledger (`Trade`/`TradePickAsset`/`TradeAuditEvent` tables recording who traded
-what to whom) rather than a first-class tradeable-asset system. Pick ownership resolves at read
-time via a pure `resolvePickHolder` function — most recent non-deleted trade naming that pick, else
-the `AuctionResult` that won it, else the origin team — rather than being stored as a mutable
-current-owner field anywhere. Trading is budget-for-picks only (no player-for-pick or bundled
-packages); the design explicitly rejected building a general first-class "assets" system with
-transfer history beyond what trading requires.
-
-**Why:** HARD-004 had already reserved an unused `budgetDeltaByTeamId` seam in
-`computeDraftTeamStats` specifically so this feature could plug in later without redesigning team
-statistics, and the dynamic-pick-valuation spec had explicitly ruled out a full trade ledger for its
-own iteration — this spec is that deferred ledger, now scoped narrowly to what trading actually
-requires rather than a general asset-transfer system.
-
-**Alternatives considered:** Storing current ownership as a mutable field (e.g. on the pick's
-`Player` row or a dedicated ownership table) — rejected in favor of resolving it at read time from
-the trade/audit log, so ownership can never drift out of sync with the record of how it changed.
-
-**Status:** Deferred — design finalized, implementation not started (`model Trade` does not yet
-exist in `prisma/schema.prisma`).
 
 ### Threat-board position-override resync behavior (2026-07-08)
 

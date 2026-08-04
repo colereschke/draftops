@@ -26,13 +26,31 @@ export async function GET(
   const draft = await getDraft(session.user.id, draftId);
   if (!draft) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
-  const [bids, auditEvents, completionSnapshot] = await Promise.all([
+  const [bids, auditEvents, trades, tradeAuditEvents, completionSnapshot] = await Promise.all([
     getPrisma().auctionResult.findMany({
       where: { draftId, deletedAt: null },
       include: { team: { select: { id: true, handle: true, displayName: true } } },
       orderBy: { id: 'asc' },
     }),
     getPrisma().bidAuditEvent.findMany({
+      where: { draftId },
+      orderBy: [{ occurredAt: 'asc' }, { id: 'asc' }],
+    }),
+    getPrisma().trade.findMany({
+      where: { draftId },
+      include: {
+        pickAssets: {
+          orderBy: [
+            { originTeamId: 'asc' },
+            { futurePickYear: 'asc' },
+            { futurePickRound: 'asc' },
+            { id: 'asc' },
+          ],
+        },
+      },
+      orderBy: { id: 'asc' },
+    }),
+    getPrisma().tradeAuditEvent.findMany({
       where: { draftId },
       orderBy: [{ occurredAt: 'asc' }, { id: 'asc' }],
     }),
@@ -58,6 +76,8 @@ export async function GET(
       },
       bids,
       auditEvents,
+      trades,
+      tradeAuditEvents,
       completionSnapshot,
     }),
   );

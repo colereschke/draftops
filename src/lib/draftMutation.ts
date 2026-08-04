@@ -17,7 +17,13 @@ export type DraftMutationCode =
   | 'ROSTER_FULL'
   | 'BID_EXCEEDS_MAX'
   | 'NO_RANKING_SET'
-  | 'DUPLICATE_TEAM';
+  | 'DUPLICATE_TEAM'
+  | 'TRADE_NOT_FOUND'
+  | 'TRADE_NOT_DELETED'
+  | 'TRADE_EXCEEDS_BUDGET'
+  | 'PICK_NOT_HELD'
+  | 'PICK_ALREADY_RETRADED'
+  | 'PICK_HAS_ACTIVE_TRADES';
 
 export type DraftMutationResult<T> = { ok: true; data: T } | { ok: false; code: DraftMutationCode };
 
@@ -70,17 +76,24 @@ export async function completeOwnedDraft(
       if (!draft) throw new DraftMutationFailure('NOT_FOUND');
 
       if (draft.status === 'ACTIVE') {
-        const auctionResults = await tx.auctionResult.findMany({
-          where: { draftId: draft.id, deletedAt: null },
-          orderBy: { id: 'asc' },
-        });
+        const [auctionResults, trades] = await Promise.all([
+          tx.auctionResult.findMany({
+            where: { draftId: draft.id, deletedAt: null },
+            orderBy: { id: 'asc' },
+          }),
+          tx.trade.findMany({
+            where: { draftId: draft.id, deletedAt: null },
+            include: { pickAssets: true },
+            orderBy: { id: 'asc' },
+          }),
+        ]);
         const payload = JSON.parse(
-          JSON.stringify({ draft, auctionResults }),
+          JSON.stringify({ draft, auctionResults, trades }),
         ) as Prisma.InputJsonValue;
         await tx.draftCompletionSnapshot.create({
           data: {
             draftId: draft.id,
-            schemaVersion: 1,
+            schemaVersion: 2,
             payload,
           },
         });

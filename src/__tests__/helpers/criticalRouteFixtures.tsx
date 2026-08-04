@@ -7,6 +7,7 @@ import {
   DEFAULT_STARTING_LINEUP,
 } from '@/types';
 import type { ManagerTendency, Appetite, AppetitePos } from '@/lib/tendencies';
+import type { KnownPickOption } from '@/lib/tradePicker';
 
 export const FIXTURE_PLAYERS: Player[] = [
   {
@@ -69,6 +70,7 @@ export function auctionSheetProps() {
     draftId: 1,
     ownerHandle: 'coreschke',
     ownerBudget: 1000,
+    ownerBudgetDelta: 0,
     scoringSettings: { ...DEFAULT_SCORING_SETTINGS },
     teamCount: DEFAULT_TEAM_COUNT,
     budget: DEFAULT_BUDGET,
@@ -90,6 +92,7 @@ export function budgetPressureViewProps() {
       rosterRemaining: 20,
       buyingPower: 660,
       pkgCount: 0,
+      netBudgetDelta: 0,
       avgAge: null,
     },
   ];
@@ -114,6 +117,7 @@ export function rosterTrackerProps() {
     rosterRemaining: 29,
     buyingPower: 860,
     pkgCount: 0,
+    netBudgetDelta: 0,
     avgAge: null,
     results: [
       {
@@ -134,6 +138,10 @@ export function rosterTrackerProps() {
     teams: [team],
     tendencies: [fixtureManagerTendency(1, 'coreschke')],
     ownerHandle: 'coreschke',
+    draftId: 1,
+    tradeTeams: FIXTURE_TEAMS,
+    generatedPickYear: null,
+    tradeablePicksByTeamId: {} as Record<number, KnownPickOption[]>,
   };
 }
 

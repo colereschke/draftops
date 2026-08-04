@@ -1,23 +1,35 @@
 import type { RosterEntry, Position } from '@/types';
+import type { CurrentPickHolding } from '@/lib/pickOwnership';
 import { POS_COLORS } from '@/lib/posColors';
 import { APPETITE_POSITIONS } from '@/lib/tendencies.constants';
 
 interface TeamRosterDetailProps {
   results: RosterEntry[];
+  pickHoldings?: CurrentPickHolding[];
 }
 
-// Appetite positions first (shared order with the dossier chips and threat board),
-// then the non-appetite draft-capital buckets.
-const GROUP_ORDER: Position[] = [...APPETITE_POSITIONS, 'PICK', 'PKG'];
+const GROUP_ORDER: Position[] = [...APPETITE_POSITIONS];
 
-export default function TeamRosterDetail({ results }: TeamRosterDetailProps) {
-  if (results.length === 0) {
-    return <div className="text-xs text-muted-foreground italic">No players won yet.</div>;
+function formatRound(round: 1 | 2 | 3): string {
+  return `${round}${round === 1 ? 'st' : round === 2 ? 'nd' : 'rd'}`;
+}
+
+export default function TeamRosterDetail({ results, pickHoldings = [] }: TeamRosterDetailProps) {
+  const playerResults = results.filter(
+    (result) => result.position !== 'PICK' && result.position !== 'PKG',
+  );
+
+  if (playerResults.length === 0 && pickHoldings.length === 0) {
+    return (
+      <div data-testid="roster-empty" className="text-xs text-muted-foreground italic">
+        No players won yet.
+      </div>
+    );
   }
 
   const groups = GROUP_ORDER.map((pos) => ({
     pos,
-    entries: results.filter((r) => (r.position as Position) === pos),
+    entries: playerResults.filter((result) => (result.position as Position) === pos),
   })).filter((g) => g.entries.length > 0);
 
   return (
@@ -51,6 +63,7 @@ export default function TeamRosterDetail({ results }: TeamRosterDetailProps) {
                 return (
                   <div
                     key={result.id}
+                    data-testid={`roster-entry-${result.id}`}
                     className="flex items-center gap-2.5 rounded-r border border-l-0 border-border-subtle bg-card px-2 py-[5px]"
                     style={{ borderLeft: `3px solid ${c.accent}` }}
                   >
@@ -90,6 +103,31 @@ export default function TeamRosterDetail({ results }: TeamRosterDetailProps) {
           </div>
         );
       })}
+      {pickHoldings.length > 0 ? (
+        <section data-testid="draft-capital" className="border-t border-border-subtle pt-2.5">
+          <h3 className="font-label text-[10px] font-bold tracking-[1.5px] text-muted-foreground uppercase">
+            Draft Capital
+          </h3>
+          <div className="mt-1.5 flex flex-col gap-1">
+            {pickHoldings.map((holding) => {
+              const roundsKey = holding.rounds.join('-');
+              const label = holding.isIntactPackage
+                ? 'package'
+                : holding.rounds.map(formatRound).join(' + ');
+              return (
+                <div
+                  key={`${holding.originTeamId}:${holding.futurePickYear}:${roundsKey}`}
+                  data-testid={`draft-capital-${holding.originTeamId}-${holding.futurePickYear}-${roundsKey}`}
+                  className="rounded-r border border-l-0 border-border-subtle bg-card px-2 py-[5px] text-[13px] font-semibold text-foreground"
+                  style={{ borderLeft: `3px solid ${POS_COLORS.PICK.accent}` }}
+                >
+                  {holding.futurePickYear} {holding.originHandle} {label}
+                </div>
+              );
+            })}
+          </div>
+        </section>
+      ) : null}
     </div>
   );
 }

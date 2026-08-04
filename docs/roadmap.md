@@ -4,7 +4,7 @@
 > cross-project timeline and ticket tracker. This document contains only future work, active
 > initiatives, and unresolved product direction.
 
-Last reconciled: 2026-08-03
+Last reconciled: 2026-08-04
 
 ## Product goal
 
@@ -27,32 +27,9 @@ own picks. It is not a multi-manager auction coordinator or collaborative editin
 
 ## Active initiatives
 
-### `FEAT-010` — Budget-for-picks trading
-
-**Status:** In progress.
-
-Record trades that exchange auction budget for future picks while keeping buying power, pick
-ownership, valuation, and audit history explainable. The single operator logs trades for every
-team, just as they log auction wins.
-
-Current work has established trade, pick-asset, and trade-audit models plus budget-delta and pick-
-holder seams. Remaining work is the complete mutation and UI flow, including validation, edits,
-deletion, restoration, dependent-pick protection, and real-PostgreSQL verification.
-
-Non-negotiable boundaries:
-
-- A trade is not an `AuctionResult` and must not consume roster slots.
-- Budget-transfer effects follow the current team holding the budget.
-- Pick ownership follows the trade history/current holder.
-- Pick valuation remains anchored to the pick's origin team.
-- The owner remains the only user who mutates a draft.
-
-See the active design and implementation plan in `docs/superpowers/` and update
-`docs/DECISIONS.md` when the feature is complete.
-
 ### `FEAT-006` — UI polish follow-up
 
-**Status:** Planned after the active trading work and a round of real user feedback.
+**Status:** Planned after the shipped trading work receives a round of real user feedback.
 
 Refine DraftOps' existing dark command-center identity without replacing the application shell or
 design-token system.
@@ -111,6 +88,20 @@ If permission is obtained, scope a separate design around import cadence, immuta
 snapshots, staleness and coverage validation, provenance in the UI, failure/fallback behavior, and
 whether source selection belongs at the draft or user level.
 
+### `FEAT-012` — Sleeper-assisted trade prefill
+
+**Status:** Planned; depends on the shipped Sleeper roster mapping and budget-for-picks ledger.
+
+Use Sleeper's transaction history to detect `draft_picks` changing rosters and pre-fill a DraftOps
+trade with the mapped teams plus each pick's origin, season, and round. Detection is advisory: it
+must open an operator-reviewable draft in the existing trade flow and must never create or mutate a
+DraftOps trade in the background.
+
+Sleeper does not carry DraftOps auction-budget consideration, so the operator must enter a positive
+budget amount and confirm the complete trade before it is persisted. A focused design should define
+transaction polling, deduplication, unsupported transaction handling, and how already-recorded or
+partially matched transfers are presented without interrupting the existing catch-up workflow.
+
 ### Dynamic pick valuation follow-up
 
 **Status:** Partial baseline shipped; richer signals deferred.
@@ -122,7 +113,7 @@ conservative caps so pick values do not destabilize nomination scoring.
 
 ## Deferred product ideas
 
-These are not scheduled until the active trading and feedback work provide stronger product signals:
+These are not scheduled until trading and feedback provide stronger product signals:
 
 - Existing-draft custom-ranking replacement.
 - Multiple named custom-ranking sets with explicit versioning.
@@ -140,14 +131,16 @@ These are not scheduled until the active trading and feedback work provide stron
 ## Dependency view
 
 ```text
-FEAT-010 budget-for-picks trading ──┐
-                                    ├── next active product work
-FEAT-006 UI polish ─────────────────┘
+FEAT-006 UI polish ── next planned product work
+
+FEAT-009 Sleeper roster mapping ──┐
+                                  ├── FEAT-012 Sleeper-assisted trade prefill
+FEAT-010 budget-for-picks trading ┘
 
 OPS-002 monitoring and feedback can proceed independently once production traffic is available.
 
-Projection strategy lens and richer dynamic pick valuation should wait until the trading model and
-real-user feedback establish whether they solve a real operator need.
+Projection strategy lens and richer dynamic pick valuation should wait until the shipped trading
+model and real-user feedback establish whether they solve a real operator need.
 ```
 
 ## Completion handoff

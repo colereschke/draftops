@@ -70,7 +70,9 @@ src/
 │   ├── RankingsUpload/               # CSV upload and unmatched Sleeper-player resolution
 │   ├── RosterTracker/                # Manager dossiers and expandable grouped rosters
 │   ├── SignIn/                       # Branded sign-in screen and decorative value ticker
-│   └── SleeperRosterSync/            # Sleeper mapping and catch-up batch dialog
+│   ├── SleeperRosterSync/            # Sleeper mapping and catch-up batch dialog
+│   ├── TradeHistory/                 # /teams ledger: inline edit/remove/restore for logged trades
+│   └── TradeModal/                   # Log Trade entry dialog: direction control, known + off-book pick entry
 ├── data/
 │   └── players.ts                    # ~267 ETR dynasty players — server-only seed source (NOT imported by client components)
 ├── lib/
@@ -80,10 +82,16 @@ src/
 │   ├── db.ts                         # Prisma singleton using PrismaPg adapter (pg Pool)
 │   ├── draft.ts                      # getDraft(userId, draftId) — auth-gated draft lookup
 │   ├── nominationScoring.ts          # computeNominationScores(..., targetRoster) — core nomination logic
+│   ├── pickCapital.ts                # Trade-aware future draft capital snapshot for dynamic pick valuation
+│   ├── pickOwnership.ts              # resolvePickHolder/resolveAllPickHolders — pick holder through origin → auction win → latest active trade
 │   ├── posColors.ts                  # POS_COLORS map (bg, accent, badge, badgeText per position)
 │   ├── projectionApplication.ts      # Stage, validate, and atomically activate projection value sets
 │   ├── tendencies.ts                 # Shared manager behavior engine for /teams and /budget
 │   ├── threat.ts                     # Position-specific budget threat ranking
+│   ├── tradeAudit.ts                 # Builds TradeAuditEvent snapshots (CREATE/UPDATE/DELETE/RESTORE), mirroring bid audit
+│   ├── tradeBudget.ts                # getTradeBudgetDeltaByTeamId — the sole seam wired into budget legality and display
+│   ├── tradeMutation.ts              # Auth-gated trade create/update/delete/restore CRUD with pick-holder and budget guards
+│   ├── tradePicker.ts                # getTradeablePicksForTeam/getTradeablePicksForAllTeams — current-year picks offerable per team
 │   ├── useUrlQuerySync.ts            # Mirrors a query string into the URL via history.replaceState (never pushState) — see What's Built (HARD-018)
 │   ├── valueAdjustment.ts            # Draft-settings fallback-value adjustment
 │   ├── valueSpread.ts                # Advisory dynasty-versus-projection spread tags
@@ -344,6 +352,7 @@ OWNER_DISCORD_ID=      # Your Discord user ID — seeds ownerId on the default d
 - **Nomination helper** — ranks available players by rival demand, with persisted watchlist and live-nomination controls.
 - **Brand** — gavel `LogoMark`/`LogoLockup`, static favicon, and responsive sign-in `ValueTicker`.
 - **URL-synced view state (HARD-018)** — the value sheet, teams page, and nominate page mirror filter/search/sort/selection state into the URL via `history.replaceState` (never `pushState`, so in-page clicks don't pollute back-button history) through a shared `useUrlQuerySync` hook and one allowlist-validated `urlState.ts` parse/serialize module per component. Every `/draft/[draftId]/*` route segment has a tailored `loading.tsx`/`error.tsx`; the shared `not-found.tsx` lives one level up at `src/app/draft/`, not inside `[draftId]/`, since only a parent segment's `not-found.tsx` can catch a `notFound()` thrown by `[draftId]/layout.tsx` itself.
+- **Budget-for-picks trading (#10)** — new `Trade`/`TradePickAsset`/`TradeAuditEvent` tables record a budget-for-picks trade as its own domain concept, not an `AuctionResult`. `pickOwnership.ts`'s `resolvePickHolder`/`resolveAllPickHolders` resolve any pick's current holder through a fallback chain — origin team by default, then the most recent won auction package/pick, then the most recent active trade (`Trade.budgetTeamId` is always the new holder, `pickTeamId` the seller) — supporting multi-hop re-trades and grouping same-acquisition-event round sets back into intact packages. `tradeMutation.ts` is the auth-gated create/update/delete/restore CRUD, mirroring the bid audit pattern (soft-delete, 30-minute restore window, `tradeAudit.ts` event trail) with dedicated guards (`PICK_NOT_HELD`, `PICK_ALREADY_RETRADED`, `TRADE_EXCEEDS_BUDGET`, `PICK_HAS_ACTIVE_TRADES`). `tradeBudget.ts`'s `getTradeBudgetDeltaByTeamId` is the sole seam wired into every budget legality and display path — `computeDraftTeamStats`, live bid legality (`bidMutation.ts`), the value sheet's owner buying power, `/budget`, nomination data, and Sleeper roster sync — and `pickCapital.ts` (built on `resolveAllPickHolders`/`groupResolvedPicks`) replaces raw accumulation with a package/round-grouped, holder-resolved snapshot so trade-acquired and trade-divested picks feed the dynamic-pick-valuation rebuild signal in both directions. `tradePicker.ts`'s `getTradeablePicksForTeam`/`getTradeablePicksForAllTeams` resolve which currently-generated-year picks each team can offer, batched across all teams to power the trade UI. Entry point: a "Log Trade" button on each `/teams` dossier card opens `TradeModal` (direction toggle, known-pick checkboxes, off-book manual pick entry); `TradeHistoryList` renders the `/teams` ledger with inline edit/remove/restore. See `docs/DECISIONS.md` and `docs/operations/bid-recovery.md` for the durable design and recovery record.
 
 ## Player Data
 
@@ -361,6 +370,7 @@ Source: ETR dynasty rankings CSV (~267 players), normalized ×5 to a $1,000 sour
 - #5c Sleeper league import — auto-populate draft settings from a Sleeper league ID
 - #6 UI redesign (Linear/Vercel aesthetic, shadcn/ui shortlisted) — after deploy milestone
 - #7 Custom rankings upload CSV — done. Deferred: existing-draft replacement, multiple named sets, flexible column mapping, and kicker/PKG assignment UX.
+- #10 Budget-for-picks trading — done (see "What's Built" above). The durable decision records why this uses a first-class `Trade` ledger rather than mutable ownership or a general asset system, with pick-holder resolution wired into budget legality and pick valuation.
 
 ## Global Rules
 

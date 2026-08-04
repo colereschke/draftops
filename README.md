@@ -72,7 +72,7 @@ database at `data/raw/sleeper_players.json`, then generate the projection and ET
 make projections-setup
 make projections-generate
 uv run python -m draftops_projections.match_etr_values \
-  --etr-csv existing_project_docs/auction-tool/src/Dynasty_Rankings.csv \
+  --etr-csv data/source/etr-dynasty-rankings.csv \
   --sleeper-json data/raw/sleeper_players.json \
   --output-csv data/generated/etr_sleeper_matches.csv
 pnpm tsx prisma/sync-sleeper-players.ts
@@ -246,7 +246,7 @@ prisma.config.ts                # Prisma 7 connection configuration
 
 ## Roadmap
 
-DraftOps is being generalized from a single hardcoded league into a tool anyone can deploy and use for their own draft. See [`ROADMAP.md`](./ROADMAP.md) for the full plan (Postgres migration → auth → multi-draft → configurable settings → custom rankings upload).
+DraftOps is being generalized from a single hardcoded league into a tool anyone can deploy and use for their own draft. See [`docs/project-timeline.md`](./docs/project-timeline.md) for the current tracker and [`docs/roadmap.md`](./docs/roadmap.md) for the detailed product roadmap.
 
 **Future ideas (not yet scheduled):**
 

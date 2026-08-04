@@ -2,11 +2,14 @@
 
 Audit date: 2026-07-16
 
-Status reconciliation: 2026-07-21, through merged PR #79.
+Status reconciliation: 2026-08-03, through merged PRs #97, #98, and #103.
 
-This is the authoritative engineering-hardening backlog for DraftOps. It replaces the
-2026-07-14 Workstreams A-H audit while preserving a mapping to that work and recording the
-disposition of the existing A/B worktrees.
+This is the detailed engineering-hardening backlog for DraftOps. It replaces the 2026-07-14
+Workstreams A-H audit and records the disposition of the existing A/B worktrees.
+
+The cross-project tracker is now [`docs/project-timeline.md`](project-timeline.md). This document
+retains the detailed engineering-hardening context and verification evidence for `HARD-001` through
+`HARD-022`.
 
 The repository was healthy at the time of this audit:
 
@@ -409,8 +412,7 @@ values that cannot be active.
 
 ### HARD-007 - Validate draft creation and shorten its transaction
 
-- **Status:** READY FOR INTEGRATION - implemented and verified on
-  `worktree-hard-007-validate-draft-creation`
+- **Status:** COMPLETE - merged in PR #71 (`2de95fe`)
 - **Effort:** Large
 
 #### Implementation checkpoint (2026-07-19)
@@ -426,6 +428,9 @@ inline draft form while reporting them.
 Verification: TypeScript, ESLint, Prettier, and 90 Jest suites / 799 tests pass. A dedicated
 real-PostgreSQL latency test covers the full transaction stage sequence and a two-second injected
 player-insert delay.
+
+The implementation is now on `main`; the deferred read-back optimization remains a focused
+performance follow-up rather than an integration blocker.
 
 #### Deferred follow-up after integration
 
@@ -475,6 +480,16 @@ projection work inside one long interactive transaction, which is risky under Ne
 - **Status:** COMPLETE - merged in PR #74 (`d9f26a4`)
 - **Effort:** Medium
 
+#### Implementation checkpoint (2026-07-21)
+
+PR #74 replaced line-based CSV handling with full-document parsing, added bounded input and
+validation, and hardened manual Sleeper matching against unauthorized, incompatible, duplicate,
+and nonexistent assignments. The import path now rejects malformed or oversized input before
+database writes.
+
+Verification is included in the PR's rankings import, manual-resolution, and validation test
+coverage; the repository quality gate passed on the completed branch.
+
 #### Problem
 
 The CSV parser splits the document into lines before parsing fields, breaking valid quoted
@@ -508,6 +523,16 @@ within the ranking set.
 
 - **Status:** COMPLETE - merged in PR #73 (`cea8f17`)
 - **Effort:** Medium
+
+#### Implementation checkpoint (2026-07-21)
+
+PR #73 authenticated Sleeper import and roster-sync actions, added bounded network requests and
+runtime payload validation, translated failures into actionable outcomes, and rejected unsupported
+league settings instead of silently dropping them. The completed implementation also documents
+the roster-size treatment for supported auction settings.
+
+Verification is included in the Sleeper action, network, malformed-payload, and settings
+translation tests; the repository quality gate passed on the completed branch.
 
 #### Problem
 
@@ -589,6 +614,15 @@ is immediate, and the modal is not a semantic form.
 
 - **Status:** COMPLETE - merged in PR #75 (`d921d56`)
 - **Effort:** Medium to large
+
+#### Implementation checkpoint (2026-07-21)
+
+PR #75 added append-only bid audit events with actor and before/after state, owner-authorized JSON
+and CSV draft exports, and recovery controls for accidental bid changes. The implementation keeps
+completed-draft history independently exportable and documents the operational recovery boundary.
+
+Verification is included in the bid-audit, export, authorization, and recovery test coverage; the
+repository quality gate passed on the completed branch.
 
 #### Problem
 
@@ -716,6 +750,16 @@ dependency despite being development tooling.
 - **Status:** COMPLETE - merged in PR #78 (`e4c9c04`)
 - **Effort:** Medium
 
+#### Implementation checkpoint (2026-07-21)
+
+PR #78 replaced raw provider/database messages in error boundaries with safe incident identifiers,
+bounded actual request-body handling, privacy-safe client-error reporting, and structured
+correlation fields for server-side failures. The client reporting route now rejects oversized and
+unauthorized submissions without exposing internal details.
+
+Verification is included in the error-boundary, request-limit, sanitization, and reporting tests;
+the repository quality gate passed on the completed branch.
+
 #### Problem
 
 Error boundaries display raw `error.message`. `/api/log-error` is unauthenticated/rate-unlimited,
@@ -749,6 +793,16 @@ Logging lacks consistent request, deployment, user, and draft correlation.
 
 - **Status:** COMPLETE - merged in PR #77 (`360d3cf`)
 - **Effort:** Medium to large
+
+#### Implementation checkpoint (2026-07-21)
+
+PR #77 added the shared skip-link/main-landmark pattern, semantic labels and interaction targets,
+live-region coverage, corrected contrast tokens, reduced-motion handling, and accessibility
+regression tests for the critical workflows. HARD-010's mutation announcements now build on the
+same accessible status model.
+
+Verification is included in the critical-route landmark, keyboard, contrast, and automated
+accessibility coverage; the repository quality gate passed on the completed branch.
 
 #### Problem
 
@@ -824,6 +878,16 @@ Superflex tool.
 - **Status:** COMPLETE - merged in PR #79 (`96bd16c`)
 - **Effort:** Medium
 
+#### Implementation checkpoint (2026-07-21)
+
+PR #79 bounded rankings resolution searches, replaced repeated linear joins with maps, and made
+background refresh work abortable, non-overlapping, and visibility-aware. The value sheet and
+roster views were measured and decomposed enough to keep the representative interaction path
+within the intended client-work budget.
+
+Verification is included in the payload, search, polling, visibility, and join-lookup tests; the
+repository quality gate passed on the completed branch.
+
 #### Problem
 
 The value sheet renders the full dense player table, rankings resolution serializes all Sleeper
@@ -856,14 +920,26 @@ perform repeated linear scans.
 
 #### Residual follow-up
 
-The only remaining work is to create an uptime monitor for
-`https://<your-production-domain>/api/health` and alert whenever it returns anything other than
-HTTP 200, once production traffic is flowing through the app.
+An uptime monitor for `https://<your-production-domain>/api/health` remains an operational
+follow-up once the production domain and traffic are established; it is not an unmerged code item
+from this audit.
 
 ### HARD-018 - Preserve working context in URLs and add route loading states
 
-- **Status:** READY
+- **Status:** COMPLETE - merged in PR #97 (`056641a`)
 - **Effort:** Medium
+
+#### Implementation checkpoint (2026-07-28)
+
+PR #97 moved value-sheet filters/search/sort, roster selection, and nomination position into
+allowlist-validated URL state synchronized with `replaceState`, and added shared loading, error,
+and not-found states for the draft route segments. The implementation preserves in-page browser
+history while restoring meaningful state through refresh, sharing, and navigation.
+
+Verification included URL parse/serialize and hook tests, route-boundary tests, critical-route
+accessibility coverage, and the repository quality gate. The parent-level `draft/not-found.tsx`
+placement is intentional because the draft layout can throw `notFound()` before the dynamic
+segment's own boundary can catch it.
 
 #### Problem
 
@@ -894,8 +970,18 @@ lack loading/not-found states.
 
 ### HARD-019 - Add platform security headers and adopt the Next.js 16 proxy convention
 
-- **Status:** READY
+- **Status:** COMPLETE - merged in PR #80 (`2b2a60b`)
 - **Effort:** Medium
+
+#### Implementation checkpoint (2026-07-28)
+
+PR #80 added baseline security headers, a report-only CSP contract with browser violation
+coverage, and moved the Auth.js request boundary from `middleware.ts` to `src/proxy.ts`. Route and
+server-action authorization remains independent of proxy behavior. CSP enforcement remains a
+deliberately separate follow-up after reviewing report-only violations.
+
+Verification: focused security-header/proxy tests and the Playwright CSP/auth coverage passed as
+part of the merged change.
 
 #### Problem
 
@@ -920,13 +1006,24 @@ authorization inside actions/routes.
 #### Acceptance criteria
 
 - Security headers are present on application responses.
-- Enforced CSP does not break OAuth, dialogs, or styling.
+- Report-only CSP coverage exercises OAuth, dialogs, and styling without introducing browser
+  violations that block the application.
 - Direct API/action calls remain authorized independently.
 
 ### HARD-020 - Harden database and build-time initialization
 
-- **Status:** READY
+- **Status:** COMPLETE - merged in PR #81 (`1dd0340`)
 - **Effort:** Medium
+
+#### Implementation checkpoint (2026-07-28)
+
+PR #81 made Prisma initialization lazy, centralized pooled runtime connection configuration with
+bounded pool size and timeouts, documented pooled `DATABASE_URL` versus direct `DIRECT_URL`
+migration roles, and replaced Google-hosted fonts with checked-in local WOFF2 assets. It also added
+real-PostgreSQL pool-bound coverage and build/import tests.
+
+Verification: the merged change includes unit, integration, and local-font contract coverage;
+production deployment still requires the documented Vercel/Neon region check.
 
 #### Problem
 
@@ -959,8 +1056,17 @@ three Google Font families.
 
 ### HARD-021 - Repair setup and documentation drift
 
-- **Status:** READY
+- **Status:** COMPLETE - merged in PR #93 (`2953ded`)
 - **Effort:** Small
+
+#### Implementation checkpoint (2026-07-28)
+
+PR #93 aligned README, environment, agent, setup, and projection-import documentation with the
+PostgreSQL/Neon application; added the missing environment placeholders; made default seeding
+atomic and failure-signaling; and added a guarded clean-database setup smoke check.
+
+Verification included the setup documentation contract tests, clean local setup smoke coverage,
+and the repository quality gate.
 
 #### Problem
 
@@ -991,9 +1097,20 @@ appear successful after a failed seed.
 
 ### HARD-022 - Decompose oversized modules after behavior is characterized
 
-- **Status:** READY
+- **Status:** COMPLETE - merged in PRs #98 (`793de0a`) and #103 (`a21e0c8`)
 - **Effort:** Medium
 - **Sequence:** After P0 behavior changes in the affected files
+
+#### Implementation checkpoint (2026-08-03)
+
+PR #98 completed the behavior-preserving decomposition of the draft form, auction workspace, and
+Sleeper roster-sync dialog, with characterization and boundary tests retained around each extracted
+area. PR #103 completed the projection-application decomposition, separating preparation,
+calculation, persistence, and activation concerns behind the existing transactional contract.
+
+The formerly oversized entry points now delegate to focused modules, while domain behavior remains
+covered by the existing unit and real-PostgreSQL integration suites. The decomposition plans and
+design notes remain useful as historical rationale, but no HARD-022 implementation work remains.
 
 #### Problem
 
@@ -1030,19 +1147,19 @@ behavior is still moving would increase conflict and regression risk.
 
 Do not assign overlapping items to concurrent sessions without explicit coordination.
 
-Completed on `main`: HARD-001 through HARD-006, HARD-008, HARD-009, HARD-010, HARD-011,
-HARD-012, HARD-013, HARD-014, HARD-015, HARD-016, and HARD-017.
+Completed on `main`: HARD-001 through HARD-022.
 
-1. **Integrate current draft/input work:** ~~HARD-007~~
+1. **Draft/input work:** ~~HARD-007~~
 2. **Input/service boundaries:** ~~HARD-008~~ and ~~HARD-009~~ may then run independently
 3. **Mutation recovery:** ~~HARD-011~~
 4. **Settings truthfulness:** ~~HARD-016~~
-5. **Production operations:** ~~HARD-014~~, HARD-019, HARD-020
-6. **UX/performance:** ~~HARD-015~~, ~~HARD-017~~, HARD-018
-7. **Cleanup:** HARD-021 -> HARD-022
+5. **Production operations:** ~~HARD-014~~, ~~HARD-019~~, ~~HARD-020~~
+6. **UX/performance:** ~~HARD-015~~, ~~HARD-017~~, ~~HARD-018~~
+7. **Cleanup:** ~~HARD-021~~ -> ~~HARD-022~~
 
-The original P0 gate, HARD-001 through HARD-004, is complete on `main`. The next integration target
-is HARD-007; its deferred player read-back optimization is not a correctness blocker.
+The original P0 gate, HARD-001 through HARD-004, and every subsequent audit workstream are
+complete on `main`. The audit has no remaining implementation ticket; the residual notes above are
+operational or intentionally deferred follow-ups rather than incomplete HARD items.
 
 ## Model assignment guidance
 
@@ -1071,9 +1188,9 @@ available model before merge:
 - ~~HARD-011~~ - bid audit, export, and recovery design
 - ~~HARD-014~~ - error ingestion and observability
 - ~~HARD-017~~ - performance changes after measurement
-- HARD-019 - CSP, security headers, and proxy migration
-- HARD-020 - Prisma initialization and serverless pooling
-- HARD-022 - behavior-preserving component decomposition
+- ~~HARD-019~~ - CSP, security headers, and proxy migration
+- ~~HARD-020~~ - Prisma initialization and serverless pooling
+- ~~HARD-022~~ - behavior-preserving component decomposition (complete in PRs #98 and #103)
 
 ### Default model can own end-to-end
 
@@ -1084,8 +1201,8 @@ a mandatory strongest-model review beyond the repository's normal PR process:
 - ~~HARD-015~~ - accessibility and contrast
 - ~~HARD-016~~ - truthful settings labels
 - ~~HARD-017~~ - performance changes after measurement
-- HARD-018 - URL state and route loading states
-- HARD-021 - setup and documentation repair
+- ~~HARD-018~~ - URL state and route loading states
+- ~~HARD-021~~ - setup and documentation repair
 
 Regardless of the primary implementer, require strongest-model review for any PR that materially
 changes P0 behavior, production schema/migrations, concurrency/locking, valuation mathematics, or
@@ -1181,18 +1298,6 @@ the remaining browser smoke coverage. No Workstream C follow-up remains.
 
 ---
 
-## Legacy A-H mapping
-
-| Prior workstream                             | Current disposition                                                   | Replacement items                      |
-| -------------------------------------------- | --------------------------------------------------------------------- | -------------------------------------- |
-| A - Auction Data Integrity                   | Superseded; replacement work complete on `main`                       | HARD-002, HARD-005                     |
-| B - Draft Lifecycle Enforcement              | Superseded; replacement work complete on `main`                       | HARD-001                               |
-| C - Trustworthy Quality Gate                 | Complete, including broader CI and browser coverage                   | HARD-012                               |
-| D - Mutation Failure & Concurrency UX        | Mutation UX and bid recovery complete                                 | HARD-010, ~~HARD-011~~                 |
-| E - Settings Truthfulness & Navigation State | Valuation and settings truthfulness complete; navigation work remains | HARD-003, ~~HARD-016~~, HARD-018       |
-| F - Accessibility & Responsive Performance   | Accessibility complete; responsive performance remains                | ~~HARD-015~~, ~~HARD-017~~             |
-| G - Error, API & External-Service Hardening  | Service hardening partly complete; security headers remain            | ~~HARD-009~~, ~~HARD-014~~, HARD-019   |
-| H - Codebase Simplification                  | Canonical stats complete; HARD-007 ready; other work remains          | HARD-004, HARD-007, HARD-020, HARD-022 |
-
-New findings without a direct prior-workstream equivalent are HARD-006 (complete), HARD-013
-(complete), and HARD-021 (ready).
+The former A–H mapping was removed after the audit closed. It was useful during the initial
+triage, but the stable `HARD-###` IDs and PR history provide sufficient traceability without
+maintaining a second classification system.

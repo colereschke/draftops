@@ -2,6 +2,7 @@
 
 import { ChevronRight } from 'lucide-react';
 import type { TeamWithRoster } from '@/types';
+import type { CurrentPickHolding } from '@/lib/pickOwnership';
 import type { ManagerTendency } from '@/lib/tendencies';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -21,6 +22,7 @@ export interface DossierCardProps {
   mode?: 'expand' | 'select';
   onToggle: (id: number) => void;
   onLogTrade: (teamId: number) => void;
+  pickHoldings?: CurrentPickHolding[];
   isReadOnly?: boolean;
 }
 
@@ -33,6 +35,7 @@ export default function DossierCard({
   mode = 'expand',
   onToggle,
   onLogTrade,
+  pickHoldings = [],
   isReadOnly = false,
 }: DossierCardProps) {
   return (
@@ -101,7 +104,7 @@ export default function DossierCard({
 
       {isExpanded && (
         <div className="border-t border-border-subtle border-l-[3px] border-l-primary bg-background px-4 pt-2.5 pb-3.5">
-          <TeamRosterDetail results={team.results} />
+          <TeamRosterDetail results={team.results} pickHoldings={pickHoldings} />
         </div>
       )}
     </div>

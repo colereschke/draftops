@@ -7,6 +7,7 @@ import type { TeamWithRoster, StartingSlot, LeagueTeam } from '@/types';
 import { DEFAULT_STARTING_LINEUP } from '@/types';
 import type { AppetitePos, ManagerTendency } from '@/lib/tendencies';
 import type { KnownPickOption } from '@/lib/tradePicker';
+import type { CurrentPickHolding } from '@/lib/pickOwnership';
 import TradeModal from '@/components/TradeModal';
 import { APPETITE_POSITIONS } from '@/lib/tendencies.constants';
 import { POS_COLORS } from '@/lib/posColors';
@@ -32,6 +33,7 @@ interface RosterTrackerProps {
   tradeTeams: LeagueTeam[];
   generatedPickYear: number | null;
   tradeablePicksByTeamId: Record<number, KnownPickOption[]>;
+  pickHoldingsByTeamId?: Record<number, CurrentPickHolding[]>;
   isReadOnly?: boolean;
 }
 
@@ -130,6 +132,7 @@ export default function RosterTracker({
   tradeTeams,
   generatedPickYear,
   tradeablePicksByTeamId,
+  pickHoldingsByTeamId = {},
   isReadOnly = false,
 }: RosterTrackerProps) {
   const searchParams = useSearchParams();
@@ -267,6 +270,7 @@ export default function RosterTracker({
                 mode="select"
                 onToggle={setSelectedTeamId}
                 onLogTrade={setOpenTradeTeamId}
+                pickHoldings={pickHoldingsByTeamId[team.id] ?? []}
                 isReadOnly={isReadOnly}
               />
             ))}
@@ -277,6 +281,7 @@ export default function RosterTracker({
                 team={selected.team}
                 tendency={selected.tendency}
                 isOwner={ownerHandle !== null && selected.team.handle === ownerHandle}
+                pickHoldings={pickHoldingsByTeamId[selected.team.id] ?? []}
               />
             )}
           </div>
@@ -292,6 +297,7 @@ export default function RosterTracker({
               isExpanded={expanded.has(team.id)}
               onToggle={toggle}
               onLogTrade={setOpenTradeTeamId}
+              pickHoldings={pickHoldingsByTeamId[team.id] ?? []}
               isReadOnly={isReadOnly}
             />
           ))}

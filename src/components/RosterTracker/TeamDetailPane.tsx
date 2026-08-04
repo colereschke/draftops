@@ -1,5 +1,6 @@
 import type { TeamWithRoster } from '@/types';
 import type { ManagerTendency } from '@/lib/tendencies';
+import type { CurrentPickHolding } from '@/lib/pickOwnership';
 import DossierFace from './DossierFace';
 import TeamRosterDetail from './TeamRosterDetail';
 
@@ -7,9 +8,15 @@ export interface TeamDetailPaneProps {
   team: TeamWithRoster;
   tendency: ManagerTendency;
   isOwner: boolean;
+  pickHoldings?: CurrentPickHolding[];
 }
 
-export default function TeamDetailPane({ team, tendency, isOwner }: TeamDetailPaneProps) {
+export default function TeamDetailPane({
+  team,
+  tendency,
+  isOwner,
+  pickHoldings = [],
+}: TeamDetailPaneProps) {
   return (
     <div
       data-testid="team-detail-pane"
@@ -17,7 +24,7 @@ export default function TeamDetailPane({ team, tendency, isOwner }: TeamDetailPa
     >
       <DossierFace team={team} tendency={tendency} isOwner={isOwner} testIdSuffix="-detail" />
       <div className="mt-3 border-t border-border-subtle pt-2.5">
-        <TeamRosterDetail results={team.results} />
+        <TeamRosterDetail results={team.results} pickHoldings={pickHoldings} />
       </div>
     </div>
   );

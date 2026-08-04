@@ -201,6 +201,15 @@ export interface PickGroup {
   rounds: ResolvedPick[];
 }
 
+export interface CurrentPickHolding {
+  originTeamId: number;
+  originHandle: string;
+  futurePickYear: number;
+  holderTeamId: number;
+  isIntactPackage: boolean;
+  rounds: Array<1 | 2 | 3>;
+}
+
 export function groupResolvedPicks(picks: ResolvedPick[]): PickGroup[] {
   const byOriginYear = new Map<string, ResolvedPick[]>();
   for (const pick of picks) {
@@ -240,4 +249,59 @@ export function groupResolvedPicks(picks: ResolvedPick[]): PickGroup[] {
     }
   }
   return groups;
+}
+
+export function buildCurrentPickHoldings(
+  teams: TeamIdentity[],
+  generatedPickYear: number | null,
+  resolvedPicks: ResolvedPick[],
+): CurrentPickHolding[] {
+  const picksByKey = new Map<string, ResolvedPick>();
+  if (generatedPickYear !== null) {
+    for (const team of teams) {
+      for (const round of [1, 2, 3] as const) {
+        const key = `${team.id}:${generatedPickYear}:${round}`;
+        picksByKey.set(key, {
+          originTeamId: team.id,
+          futurePickYear: generatedPickYear,
+          futurePickRound: round,
+          holderTeamId: team.id,
+          eventKind: 'default',
+          eventId: null,
+        });
+      }
+    }
+  }
+
+  for (const pick of resolvedPicks) {
+    const key = `${pick.originTeamId}:${pick.futurePickYear}:${pick.futurePickRound}`;
+    picksByKey.set(key, pick);
+  }
+
+  const handleByTeamId = new Map(teams.map((team) => [team.id, team.handle]));
+  const groups = groupResolvedPicks(
+    [...picksByKey.values()].toSorted(
+      (a, b) =>
+        a.futurePickYear - b.futurePickYear ||
+        a.originTeamId - b.originTeamId ||
+        a.futurePickRound - b.futurePickRound,
+    ),
+  );
+
+  return groups
+    .map((group) => ({
+      originTeamId: group.originTeamId,
+      originHandle: handleByTeamId.get(group.originTeamId) ?? '',
+      futurePickYear: group.futurePickYear,
+      holderTeamId: group.holderTeamId,
+      isIntactPackage: group.isIntactPackage,
+      rounds: group.rounds.map((round) => round.futurePickRound).toSorted((a, b) => a - b),
+    }))
+    .toSorted(
+      (a, b) =>
+        a.holderTeamId - b.holderTeamId ||
+        a.futurePickYear - b.futurePickYear ||
+        a.originTeamId - b.originTeamId ||
+        a.rounds[0] - b.rounds[0],
+    );
 }

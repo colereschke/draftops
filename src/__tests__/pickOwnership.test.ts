@@ -1,6 +1,7 @@
 import { getPrisma } from '@/lib/db';
 import { DraftMutationFailure } from '@/lib/draftMutation';
 import {
+  buildCurrentPickHoldings,
   getGeneratedPickYear,
   groupResolvedPicks,
   resolveAllPickHolders,
@@ -195,5 +196,99 @@ describe('groupResolvedPicks', () => {
     const groups = groupResolvedPicks(picks);
     expect(groups.every((g) => !g.isIntactPackage)).toBe(true);
     expect(groups).toHaveLength(3);
+  });
+});
+
+describe('buildCurrentPickHoldings', () => {
+  const teams = [
+    { id: 1, handle: 'alpha' },
+    { id: 2, handle: 'beta' },
+  ];
+
+  it('groups untouched generated-year rounds into their origin team packages', () => {
+    const holdings = buildCurrentPickHoldings(teams, 2027, []);
+
+    expect(holdings).toEqual([
+      {
+        originTeamId: 1,
+        originHandle: 'alpha',
+        futurePickYear: 2027,
+        holderTeamId: 1,
+        isIntactPackage: true,
+        rounds: [1, 2, 3],
+      },
+      {
+        originTeamId: 2,
+        originHandle: 'beta',
+        futurePickYear: 2027,
+        holderTeamId: 2,
+        isIntactPackage: true,
+        rounds: [1, 2, 3],
+      },
+    ]);
+  });
+
+  it('moves a traded round to its current holder while retaining other rounds at the origin', () => {
+    const holdings = buildCurrentPickHoldings(teams, 2027, [
+      {
+        originTeamId: 1,
+        futurePickYear: 2027,
+        futurePickRound: 1,
+        holderTeamId: 2,
+        eventKind: 'trade',
+        eventId: 42,
+      },
+    ]);
+
+    expect(holdings.filter((holding) => holding.originTeamId === 1)).toEqual([
+      {
+        originTeamId: 1,
+        originHandle: 'alpha',
+        futurePickYear: 2027,
+        holderTeamId: 1,
+        isIntactPackage: false,
+        rounds: [2],
+      },
+      {
+        originTeamId: 1,
+        originHandle: 'alpha',
+        futurePickYear: 2027,
+        holderTeamId: 1,
+        isIntactPackage: false,
+        rounds: [3],
+      },
+      {
+        originTeamId: 1,
+        originHandle: 'alpha',
+        futurePickYear: 2027,
+        holderTeamId: 2,
+        isIntactPackage: false,
+        rounds: [1],
+      },
+    ]);
+  });
+
+  it('includes touched off-book picks without inventing the other off-book rounds', () => {
+    const holdings = buildCurrentPickHoldings(teams, 2027, [
+      {
+        originTeamId: 1,
+        futurePickYear: 2028,
+        futurePickRound: 2,
+        holderTeamId: 2,
+        eventKind: 'trade',
+        eventId: 44,
+      },
+    ]);
+
+    expect(holdings.filter((holding) => holding.futurePickYear === 2028)).toEqual([
+      {
+        originTeamId: 1,
+        originHandle: 'alpha',
+        futurePickYear: 2028,
+        holderTeamId: 2,
+        isIntactPackage: false,
+        rounds: [2],
+      },
+    ]);
   });
 });

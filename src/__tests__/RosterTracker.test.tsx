@@ -1,6 +1,7 @@
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import RosterTracker from '@/components/RosterTracker/RosterTracker';
+import type { CurrentPickHolding } from '@/lib/pickOwnership';
 import type { TeamWithRoster } from '@/types';
 import type { ManagerTendency } from '@/lib/tendencies';
 
@@ -22,6 +23,7 @@ const TRADE_PROPS = {
   tradeTeams: [],
   generatedPickYear: null,
   tradeablePicksByTeamId: {},
+  pickHoldingsByTeamId: {},
 };
 
 const makeTeam = (over: Partial<TeamWithRoster> = {}): TeamWithRoster => ({
@@ -170,6 +172,43 @@ describe('RosterTracker', () => {
     );
     await userEvent.click(screen.getByTestId('dossier-expand-1'));
     expect(screen.getByTestId('roster-group-QB')).toBeInTheDocument();
+  });
+
+  it('shows draft capital only on the team that currently holds a traded pick', async () => {
+    const pickHoldings: CurrentPickHolding[] = [
+      {
+        originTeamId: 1,
+        originHandle: 'coreschke',
+        futurePickYear: 2027,
+        holderTeamId: 2,
+        isIntactPackage: false,
+        rounds: [1],
+      },
+    ];
+    const teams = [
+      makeTeam({ id: 1, handle: 'coreschke', results: [] }),
+      makeTeam({ id: 2, handle: 'rival_b', displayName: 'B', results: [] }),
+    ];
+    const tendencies = [
+      makeTendency({ teamId: 1, handle: 'coreschke' }),
+      makeTendency({ teamId: 2, handle: 'rival_b' }),
+    ];
+
+    render(
+      <RosterTracker
+        teams={teams}
+        tendencies={tendencies}
+        ownerHandle="coreschke"
+        {...TRADE_PROPS}
+        pickHoldingsByTeamId={{ 2: pickHoldings }}
+      />,
+    );
+
+    await userEvent.click(screen.getByTestId('dossier-expand-1'));
+    expect(screen.queryByTestId('draft-capital-1-2027-1')).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByTestId('dossier-expand-2'));
+    expect(screen.getByTestId('draft-capital-1-2027-1')).toHaveTextContent('2027 coreschke 1st');
   });
 
   it('reflects the lineup format truthfully instead of a hardcoded Superflex label', () => {

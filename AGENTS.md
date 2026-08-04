@@ -101,7 +101,7 @@ prisma/
 ├── backfill-budget-scaled-values.ts  # Dry-run/apply fallback-value backfill for existing drafts
 └── migrations/                       # Postgres migration history
 prisma.config.ts                      # Prisma v7 config — DATABASE_URL from env
-existing_project_docs/                # Original reference files — do not delete
+data/source/                          # Tracked source inputs for projection/ranking tooling
 ```
 
 ## Pages & Routes
@@ -355,7 +355,7 @@ Source: ETR dynasty rankings CSV (~267 players), normalized ×5 to a $1,000 sour
 
 **Deploy Milestone** (Vercel + Neon) — done. `prisma migrate deploy` is wired into the Vercel build command using `DIRECT_URL`; runtime uses pooled `DATABASE_URL`. Build imports must not require a live database. Generated `data/generated/*` files are local/CLI inputs only; deployed runtime code must use persisted `SleeperPlayer` identity data. Fonts are self-hosted local WOFF2 files.
 
-**Longer term** (see `ROADMAP.md`):
+**Longer term** (see `docs/project-timeline.md` and `docs/roadmap.md`):
 
 - #5b Value adjustment algorithm — Phase 1 is done (settings→fallback scaling plus scoring/scarcity/concentration). Phase 2 is a projection/VOR refinement.
 - #5c Sleeper league import — auto-populate draft settings from a Sleeper league ID

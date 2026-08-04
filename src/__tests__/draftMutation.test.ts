@@ -3,6 +3,33 @@ import {
   completeOwnedDraft,
   withActiveOwnedDraftMutation,
 } from '@/lib/draftMutation';
+import type { AuctionResult, Draft, Trade, TradePickAsset } from '@prisma/client';
+
+interface TradeWithPickAssets extends Trade {
+  pickAssets: TradePickAsset[];
+}
+
+type SerializedDraft = Omit<Draft, 'createdAt'> & { createdAt: string };
+type SerializedAuctionResult = Omit<
+  AuctionResult,
+  'createdAt' | 'updatedAt' | 'deletedAt' | 'supersededAt'
+> & {
+  createdAt: string;
+  updatedAt: string;
+  deletedAt: string | null;
+  supersededAt: string | null;
+};
+type SerializedTrade = Omit<TradeWithPickAssets, 'createdAt' | 'updatedAt' | 'deletedAt'> & {
+  createdAt: string;
+  updatedAt: string;
+  deletedAt: string | null;
+};
+
+interface CompletionSnapshotV2Payload {
+  draft: SerializedDraft;
+  auctionResults: SerializedAuctionResult[];
+  trades: SerializedTrade[];
+}
 
 const mockTransaction = jest.fn();
 const mockExecuteRaw = jest.fn();
@@ -35,7 +62,7 @@ jest.mock('@/lib/db', () => ({
   }),
 }));
 
-const ACTIVE_DRAFT = {
+const ACTIVE_DRAFT: Draft = {
   id: 4,
   name: 'Integrity Draft',
   ownerId: 'owner-1',
@@ -45,11 +72,13 @@ const ACTIVE_DRAFT = {
   teamCount: 12,
   rosterSize: 30,
   budget: 1000,
+  playerValueSourceBudget: 1000,
   startingLineup: null,
   scoringSettings: null,
   targetRoster: null,
   futurePickAuctionMode: 'PACKAGES',
   sleeperLeagueId: 'league-1',
+  activeProjectionValueSetId: null,
 };
 
 beforeEach(() => {
@@ -143,8 +172,8 @@ describe('withActiveOwnedDraftMutation', () => {
 });
 
 describe('completeOwnedDraft', () => {
-  it('captures active bids in a versioned snapshot before completing the draft', async () => {
-    const activeBid = {
+  it('captures a complete version 2 recovery payload before completing the draft', async () => {
+    const activeBid: AuctionResult = {
       id: 12,
       draftId: 4,
       player: 'Josh Allen',
@@ -152,42 +181,15 @@ describe('completeOwnedDraft', () => {
       position: 'QB',
       nflTeam: 'BUF',
       price: 120,
+      sfRank: null,
+      notes: null,
       teamId: 7,
       createdAt: new Date('2026-07-16T01:00:00.000Z'),
       updatedAt: new Date('2026-07-16T01:00:00.000Z'),
       deletedAt: null,
       supersededAt: null,
     };
-    mockAuctionResultFindMany.mockResolvedValue([activeBid]);
-
-    await expect(completeOwnedDraft('owner-1', 4)).resolves.toEqual({ ok: true, data: null });
-
-    expect(mockAuctionResultFindMany).toHaveBeenCalledWith({
-      where: { draftId: 4, deletedAt: null },
-      orderBy: { id: 'asc' },
-    });
-    expect(mockSnapshotCreate).toHaveBeenCalledWith({
-      data: expect.objectContaining({
-        draftId: 4,
-        schemaVersion: 2,
-        payload: expect.objectContaining({
-          draft: expect.objectContaining({ id: ACTIVE_DRAFT.id, status: 'ACTIVE' }),
-          auctionResults: [
-            expect.objectContaining({
-              id: activeBid.id,
-              createdAt: activeBid.createdAt.toISOString(),
-            }),
-          ],
-        }),
-      }),
-    });
-    expect(mockSnapshotCreate.mock.invocationCallOrder[0]).toBeLessThan(
-      mockDraftUpdate.mock.invocationCallOrder[0],
-    );
-  });
-
-  it('captures active trades with pick assets in the version 2 completion snapshot', async () => {
-    const activeTrade = {
+    const activeTrade: TradeWithPickAssets = {
       id: 21,
       draftId: 4,
       budgetTeamId: 7,
@@ -208,37 +210,50 @@ describe('completeOwnedDraft', () => {
         },
       ],
     };
+    const payload: CompletionSnapshotV2Payload = {
+      draft: { ...ACTIVE_DRAFT, createdAt: ACTIVE_DRAFT.createdAt.toISOString() },
+      auctionResults: [
+        {
+          ...activeBid,
+          createdAt: activeBid.createdAt.toISOString(),
+          updatedAt: activeBid.updatedAt.toISOString(),
+          deletedAt: null,
+          supersededAt: null,
+        },
+      ],
+      trades: [
+        {
+          ...activeTrade,
+          createdAt: activeTrade.createdAt.toISOString(),
+          updatedAt: activeTrade.updatedAt.toISOString(),
+          deletedAt: null,
+        },
+      ],
+    };
+    mockAuctionResultFindMany.mockResolvedValue([activeBid]);
     mockTradeFindMany.mockResolvedValue([activeTrade]);
 
     await expect(completeOwnedDraft('owner-1', 4)).resolves.toEqual({ ok: true, data: null });
 
+    expect(mockAuctionResultFindMany).toHaveBeenCalledWith({
+      where: { draftId: 4, deletedAt: null },
+      orderBy: { id: 'asc' },
+    });
     expect(mockTradeFindMany).toHaveBeenCalledWith({
       where: { draftId: 4, deletedAt: null },
       include: { pickAssets: true },
       orderBy: { id: 'asc' },
     });
     expect(mockSnapshotCreate).toHaveBeenCalledWith({
-      data: expect.objectContaining({
+      data: {
         draftId: 4,
         schemaVersion: 2,
-        payload: expect.objectContaining({
-          auctionResults: [],
-          trades: [
-            expect.objectContaining({
-              id: activeTrade.id,
-              createdAt: activeTrade.createdAt.toISOString(),
-              pickAssets: [
-                expect.objectContaining({
-                  originTeamId: 9,
-                  futurePickYear: 2028,
-                  futurePickRound: 1,
-                }),
-              ],
-            }),
-          ],
-        }),
-      }),
+        payload,
+      },
     });
+    expect(mockSnapshotCreate.mock.invocationCallOrder[0]).toBeLessThan(
+      mockDraftUpdate.mock.invocationCallOrder[0],
+    );
   });
 
   it('rolls back completion when snapshot creation fails', async () => {

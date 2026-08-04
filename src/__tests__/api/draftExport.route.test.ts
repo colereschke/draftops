@@ -3,6 +3,13 @@
  */
 import { GET as jsonGet } from '@/app/api/draft/[draftId]/export/json/route';
 import { GET as csvGet } from '@/app/api/draft/[draftId]/export/csv/route';
+import type {
+  DraftExport,
+  ExportableBid,
+  ExportableDraft,
+  ExportableTrade,
+  ExportableTradeAuditEvent,
+} from '@/lib/draftExport';
 import { NextRequest } from 'next/server';
 
 const mockAuth = jest.fn();
@@ -29,7 +36,23 @@ jest.mock('@/lib/db', () => ({
 
 const PARAMS = { params: Promise.resolve({ draftId: '4' }) };
 const REQUEST = new NextRequest('http://localhost/api/draft/4/export/json');
-const BID = {
+const DRAFT: ExportableDraft = {
+  id: 4,
+  name: 'Startup',
+  status: 'ACTIVE',
+  budget: 1000,
+  teamCount: 12,
+  rosterSize: 30,
+  playerValueSourceBudget: 1000,
+  startingLineup: { QB: 1, RB: 2 },
+  scoringSettings: { ppr: 1 },
+  targetRoster: { QB: 3, RB: 8 },
+  futurePickAuctionMode: 'PACKAGES',
+  sleeperLeagueId: 'sleeper-league',
+  activeProjectionValueSetId: 5,
+};
+
+const BID: ExportableBid = {
   id: 12,
   draftId: 4,
   playerId: 10,
@@ -47,7 +70,7 @@ const BID = {
   team: { id: 7, handle: 'coreschke', displayName: 'Cole' },
 };
 
-const ACTIVE_TRADE = {
+const ACTIVE_TRADE: ExportableTrade = {
   id: 21,
   draftId: 4,
   budgetTeamId: 7,
@@ -69,49 +92,70 @@ const ACTIVE_TRADE = {
   ],
 };
 
+const TRADE_AUDIT_EVENTS: ExportableTradeAuditEvent[] = [
+  {
+    id: 8,
+    draftId: 4,
+    tradeId: 21,
+    actorId: 'owner-1',
+    type: 'UPDATE',
+    before: null,
+    after: { budgetAmount: 75 },
+    occurredAt: new Date('2026-07-23T15:00:00.000Z'),
+  },
+  {
+    id: 3,
+    draftId: 4,
+    tradeId: 21,
+    actorId: 'owner-1',
+    type: 'CREATE',
+    before: null,
+    after: { budgetAmount: 50 },
+    occurredAt: new Date('2026-07-23T15:00:00.000Z'),
+  },
+];
+
+const EXPECTED_JSON_EXPORT: DraftExport = {
+  draft: DRAFT,
+  activeBids: [
+    {
+      ...BID,
+      createdAt: '2026-07-21T12:00:00.000Z',
+      updatedAt: '2026-07-21T13:00:00.000Z',
+      deletedAt: null,
+      supersededAt: null,
+    },
+  ],
+  auditEvents: [],
+  activeTrades: [
+    {
+      ...ACTIVE_TRADE,
+      createdAt: '2026-07-23T12:00:00.000Z',
+      updatedAt: '2026-07-23T13:00:00.000Z',
+      deletedAt: null,
+    },
+  ],
+  tradeAuditEvents: [
+    {
+      ...TRADE_AUDIT_EVENTS[1],
+      occurredAt: '2026-07-23T15:00:00.000Z',
+    },
+    {
+      ...TRADE_AUDIT_EVENTS[0],
+      occurredAt: '2026-07-23T15:00:00.000Z',
+    },
+  ],
+  completionSnapshot: null,
+};
+
 beforeEach(() => {
   jest.clearAllMocks();
   mockAuth.mockResolvedValue({ user: { id: 'owner-1' } });
-  mockGetDraft.mockResolvedValue({
-    id: 4,
-    name: 'Startup',
-    status: 'ACTIVE',
-    budget: 1000,
-    teamCount: 12,
-    rosterSize: 30,
-    playerValueSourceBudget: 1000,
-    startingLineup: { QB: 1, RB: 2 },
-    scoringSettings: { ppr: 1 },
-    targetRoster: { QB: 3, RB: 8 },
-    futurePickAuctionMode: 'PACKAGES',
-    sleeperLeagueId: 'sleeper-league',
-    activeProjectionValueSetId: 5,
-  });
+  mockGetDraft.mockResolvedValue(DRAFT);
   mockAuctionFindMany.mockResolvedValue([BID]);
   mockAuditFindMany.mockResolvedValue([]);
   mockTradeFindMany.mockResolvedValue([ACTIVE_TRADE]);
-  mockTradeAuditFindMany.mockResolvedValue([
-    {
-      id: 8,
-      draftId: 4,
-      tradeId: 21,
-      actorId: 'owner-1',
-      type: 'UPDATE',
-      before: null,
-      after: { budgetAmount: 75 },
-      occurredAt: new Date('2026-07-23T15:00:00.000Z'),
-    },
-    {
-      id: 3,
-      draftId: 4,
-      tradeId: 21,
-      actorId: 'owner-1',
-      type: 'CREATE',
-      before: null,
-      after: { budgetAmount: 50 },
-      occurredAt: new Date('2026-07-23T15:00:00.000Z'),
-    },
-  ]);
+  mockTradeAuditFindMany.mockResolvedValue(TRADE_AUDIT_EVENTS);
   mockSnapshotFindUnique.mockResolvedValue(null);
 });
 
@@ -155,30 +199,7 @@ describe('draft export routes', () => {
       where: { draftId: 4 },
       orderBy: [{ occurredAt: 'asc' }, { id: 'asc' }],
     });
-    await expect(response.json()).resolves.toMatchObject({
-      draft: {
-        teamCount: 12,
-        rosterSize: 30,
-        playerValueSourceBudget: 1000,
-        startingLineup: { QB: 1, RB: 2 },
-        scoringSettings: { ppr: 1 },
-        targetRoster: { QB: 3, RB: 8 },
-        futurePickAuctionMode: 'PACKAGES',
-        sleeperLeagueId: 'sleeper-league',
-        activeProjectionValueSetId: 5,
-      },
-      activeTrades: [
-        expect.objectContaining({
-          id: 21,
-          createdAt: '2026-07-23T12:00:00.000Z',
-          pickAssets: [expect.objectContaining({ futurePickYear: 2028, futurePickRound: 1 })],
-        }),
-      ],
-      tradeAuditEvents: [
-        expect.objectContaining({ id: 3, occurredAt: '2026-07-23T15:00:00.000Z' }),
-        expect.objectContaining({ id: 8, occurredAt: '2026-07-23T15:00:00.000Z' }),
-      ],
-    });
+    await expect(response.json()).resolves.toEqual(EXPECTED_JSON_EXPORT);
   });
 
   it('exports active bids as a no-store CSV attachment', async () => {

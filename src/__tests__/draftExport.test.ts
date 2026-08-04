@@ -1,9 +1,16 @@
-import { serializeDraftCsv, serializeDraftExport } from '@/lib/draftExport';
+import {
+  serializeDraftCsv,
+  serializeDraftExport,
+  type DraftExportInput,
+  type ExportableBid,
+  type ExportableTrade,
+  type ExportableTradeAuditEvent,
+} from '@/lib/draftExport';
 
 const CREATED_AT = new Date('2026-07-21T12:00:00.000Z');
 const UPDATED_AT = new Date('2026-07-21T13:00:00.000Z');
 
-const BID = {
+const BID: ExportableBid = {
   id: 12,
   draftId: 4,
   playerId: 10,
@@ -19,6 +26,74 @@ const BID = {
   deletedAt: null,
   supersededAt: null,
   team: { id: 7, handle: 'coreschke', displayName: 'Cole' },
+};
+
+const ACTIVE_TRADE: ExportableTrade = {
+  id: 21,
+  draftId: 4,
+  budgetTeamId: 7,
+  pickTeamId: 9,
+  budgetAmount: 75,
+  notes: '2028 capital',
+  createdAt: new Date('2026-07-23T12:00:00.000Z'),
+  updatedAt: new Date('2026-07-23T13:00:00.000Z'),
+  deletedAt: null,
+  pickAssets: [
+    {
+      id: 31,
+      tradeId: 21,
+      draftId: 4,
+      originTeamId: 9,
+      futurePickYear: 2028,
+      futurePickRound: 1,
+    },
+  ],
+};
+
+const TRADE_AUDIT_EVENTS: ExportableTradeAuditEvent[] = [
+  {
+    id: 8,
+    draftId: 4,
+    tradeId: 21,
+    actorId: 'owner',
+    type: 'UPDATE',
+    before: null,
+    after: { budgetAmount: 75 },
+    occurredAt: new Date('2026-07-23T15:00:00.000Z'),
+  },
+  {
+    id: 3,
+    draftId: 4,
+    tradeId: 21,
+    actorId: 'owner',
+    type: 'CREATE',
+    before: null,
+    after: { budgetAmount: 50 },
+    occurredAt: new Date('2026-07-23T15:00:00.000Z'),
+  },
+];
+
+const TRADE_EXPORT_INPUT: DraftExportInput = {
+  draft: {
+    id: 4,
+    name: 'Startup',
+    status: 'ACTIVE',
+    budget: 1000,
+    teamCount: 12,
+    rosterSize: 30,
+    playerValueSourceBudget: 1000,
+    startingLineup: null,
+    scoringSettings: null,
+    targetRoster: null,
+    futurePickAuctionMode: 'PACKAGES',
+    sleeperLeagueId: null,
+    activeProjectionValueSetId: null,
+  },
+  bids: [],
+  auditEvents: [],
+  activeTrades: [ACTIVE_TRADE],
+  tradeAuditEvents: TRADE_AUDIT_EVENTS,
+  completionSnapshot: null,
 };
 
 describe('serializeDraftExport', () => {
@@ -98,71 +173,7 @@ describe('serializeDraftExport', () => {
   });
 
   it('exports active trades with pick assets and deterministically ordered trade audit history', () => {
-    const exported = serializeDraftExport({
-      draft: {
-        id: 4,
-        name: 'Startup',
-        status: 'ACTIVE',
-        budget: 1000,
-        teamCount: 12,
-        rosterSize: 30,
-        playerValueSourceBudget: 1000,
-        startingLineup: null,
-        scoringSettings: null,
-        targetRoster: null,
-        futurePickAuctionMode: 'PACKAGES',
-        sleeperLeagueId: null,
-        activeProjectionValueSetId: null,
-      },
-      bids: [],
-      auditEvents: [],
-      activeTrades: [
-        {
-          id: 21,
-          draftId: 4,
-          budgetTeamId: 7,
-          pickTeamId: 9,
-          budgetAmount: 75,
-          notes: '2028 capital',
-          createdAt: new Date('2026-07-23T12:00:00.000Z'),
-          updatedAt: new Date('2026-07-23T13:00:00.000Z'),
-          deletedAt: null,
-          pickAssets: [
-            {
-              id: 31,
-              tradeId: 21,
-              draftId: 4,
-              originTeamId: 9,
-              futurePickYear: 2028,
-              futurePickRound: 1,
-            },
-          ],
-        },
-      ],
-      tradeAuditEvents: [
-        {
-          id: 8,
-          draftId: 4,
-          tradeId: 21,
-          actorId: 'owner',
-          type: 'UPDATE',
-          before: null,
-          after: { budgetAmount: 75 },
-          occurredAt: new Date('2026-07-23T15:00:00.000Z'),
-        },
-        {
-          id: 3,
-          draftId: 4,
-          tradeId: 21,
-          actorId: 'owner',
-          type: 'CREATE',
-          before: null,
-          after: { budgetAmount: 50 },
-          occurredAt: new Date('2026-07-23T15:00:00.000Z'),
-        },
-      ],
-      completionSnapshot: null,
-    });
+    const exported = serializeDraftExport(TRADE_EXPORT_INPUT);
 
     expect(exported.activeTrades).toEqual([
       {

@@ -6,5 +6,4 @@ coverage
 pnpm-lock.yaml
 *.db
 prisma/migrations
-existing_project_docs
 .superpowers

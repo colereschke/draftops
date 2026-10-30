@@ -78,8 +78,10 @@ src/
 ├── lib/
 │   ├── actions.ts                    # Auth-gated draft lifecycle and bid mutations; createDraft returns DraftMutationResult
 │   ├── activeDraftPlayers.ts         # Canonical loader that overlays only the active projection value set
+│   ├── authObservability.ts          # Auth.js logger.error hook — reports caught sign-in failures to Sentry + scrubbed log
 │   ├── computeDraftTeamStats.ts      # Per-draft team stats for all draft views
 │   ├── db.ts                         # Prisma singleton using PrismaPg adapter (pg Pool)
+│   ├── discordOAuth.ts               # Discord provider (explicit RFC 9207 issuer) + drift check vs Discord's published metadata
 │   ├── draft.ts                      # getDraft(userId, draftId) — auth-gated draft lookup
 │   ├── nominationScoring.ts          # computeNominationScores(..., targetRoster) — core nomination logic
 │   ├── pickCapital.ts                # Trade-aware future draft capital snapshot for dynamic pick valuation
@@ -340,6 +342,7 @@ OWNER_DISCORD_ID=      # Your Discord user ID — seeds ownerId on the default d
 ## What's Built
 
 - **Auth** — Discord OAuth via Auth.js v5; JWT sessions; `src/proxy.ts` protects all routes; `/sign-in` page
+- **Auth failure alerting** — Auth.js handles its own errors and redirects, so `logger.error` routes them to Sentry via `authObservability.ts`. The scheduled `Auth Provider Contract` workflow (`pnpm auth:check-discord`, Mondays) fails if Discord's published issuer or endpoints drift from `discordOAuth.ts`; the next-auth v5 beta's built-in providers are not kept current upstream.
 - **Draft lifecycle and onboarding** — root routing selects the active draft; `/drafts` manages active/completed drafts; the validated `/drafts/new` form shares `draftInputSchema` with `createDraft`; a first-draft welcome and feature tour persist through `OnboardingProgress`.
 - **Draft integrity** — player-facing records use non-null composite same-draft foreign keys; a player cannot be claimed, watched, nominated, or valued through another draft. Completed drafts render read-only controls.
 - **PostgreSQL** — migrated from SQLite; Neon in prod, local WSL2 Postgres in dev; `@prisma/adapter-pg`

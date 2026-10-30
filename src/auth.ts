@@ -13,7 +13,9 @@ declare module 'next-auth' {
 }
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
-  providers: [Discord],
+  // Discord now returns an RFC 9207 `iss` callback parameter. The built-in provider has no
+  // issuer, so Auth.js compares against its https://authjs.dev placeholder and rejects it.
+  providers: [Discord({ issuer: 'https://discord.com' })],
   session: { strategy: 'jwt' },
   callbacks: {
     jwt({ token, account }) {

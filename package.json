@@ -20,7 +20,8 @@
     "prepare": "husky",
     "postinstall": "prisma generate",
     "db:seed": "tsx prisma/seed.ts",
-    "db:backfill-budget-values": "tsx prisma/backfill-budget-scaled-values.ts"
+    "db:backfill-budget-values": "tsx prisma/backfill-budget-scaled-values.ts",
+    "auth:check-discord": "tsx scripts/checkDiscordOAuth.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

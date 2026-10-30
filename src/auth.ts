@@ -1,5 +1,7 @@
 import NextAuth from 'next-auth';
-import Discord from 'next-auth/providers/discord';
+
+import { reportAuthError } from '@/lib/authObservability';
+import { discordProvider } from '@/lib/discordOAuth';
 
 declare module 'next-auth' {
   interface Session {
@@ -13,9 +15,7 @@ declare module 'next-auth' {
 }
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
-  // Discord now returns an RFC 9207 `iss` callback parameter. The built-in provider has no
-  // issuer, so Auth.js compares against its https://authjs.dev placeholder and rejects it.
-  providers: [Discord({ issuer: 'https://discord.com' })],
+  providers: [discordProvider()],
   session: { strategy: 'jwt' },
   callbacks: {
     jwt({ token, account }) {
@@ -30,4 +30,6 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   pages: {
     signIn: '/sign-in',
   },
+  // Auth.js catches its own failures and redirects, so they never reach Sentry on their own.
+  logger: { error: reportAuthError },
 });
